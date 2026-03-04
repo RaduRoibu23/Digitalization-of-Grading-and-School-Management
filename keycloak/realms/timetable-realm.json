@@ -1,0 +1,188 @@
+{
+  "realm": "timetable-realm",
+  "enabled": true,
+  "sslRequired": "external",
+  "roles": {
+    "realm": [
+      {
+        "name": "admin"
+      },
+      {
+        "name": "professor"
+      },
+      {
+        "name": "secretariat"
+      },
+      {
+        "name": "student"
+      },
+      {
+        "name": "scheduler"
+      },
+      {
+        "name": "sysadmin"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "timetable-backend",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "rootUrl": "http://localhost:8000",
+      "baseUrl": "http://localhost:8000",
+      "redirectUris": [
+        "http://localhost:8000/*",
+        "http://localhost:8000/docs/oauth2-redirect"
+      ],
+      "webOrigins": [
+        "http://localhost:8000",
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:8000/*"
+      }
+    },
+    {
+      "clientId": "timetable-frontend",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "rootUrl": "http://localhost:3000",
+      "baseUrl": "http://localhost:3000",
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "http://localhost:3001/*"
+      ],
+      "webOrigins": [
+        "http://localhost:3000",
+        "http://localhost:3001"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:3000/*"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "admin01",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Radu",
+      "lastName": "Roibu",
+      "email": "admin01@timetable.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin01",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "admin"
+      ]
+    },
+    {
+      "username": "professor01",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Bogdan",
+      "lastName": "Mocanu",
+      "email": "professor01@timetable.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "professor01",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "professor"
+      ]
+    },
+    {
+      "username": "secretariat01",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Alexandra",
+      "lastName": "Corcodel",
+      "email": "secretariat01@timetable.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "secretariat01",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "secretariat"
+      ]
+    },
+    {
+      "username": "scheduler01",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Scheduler",
+      "lastName": "User",
+      "email": "scheduler01@timetable.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "scheduler01",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "scheduler"
+      ]
+    },
+    {
+      "username": "sysadmin01",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Sysadmin",
+      "lastName": "User",
+      "email": "sysadmin01@timetable.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "sysadmin01",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "sysadmin"
+      ]
+    },
+    {
+      "username": "student01",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Andrei",
+      "lastName": "Voicu",
+      "email": "student01@timetable.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "student01",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "student"
+      ]
+    }
+  ]
+}

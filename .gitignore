@@ -1,0 +1,18 @@
+# Token files (temporary)
+token-*.json
+*_response.json
+
+
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+ISSUES.md
+demos/
+scripts/
