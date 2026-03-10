@@ -1,5 +1,7 @@
 package ro.timetable.web;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
@@ -25,7 +28,11 @@ import java.util.stream.Collectors;
 @RequestMapping("/api")
 public class AuthController {
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
+
+    public AuthController(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
 
     @Value("${keycloak.token-url}")
     private String keycloakTokenUrl;
@@ -52,12 +59,16 @@ public class AuthController {
         );
     }
 
-    public record LoginRequest(String username, String password) {}
+    public record LoginRequest(
+            @NotBlank(message = "username is required") String username,
+            @NotBlank(message = "password is required") String password
+    ) {}
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
 
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("grant_type", "password");
@@ -69,6 +80,13 @@ public class AuthController {
 
         try {
             ResponseEntity<Map> response = restTemplate.postForEntity(keycloakTokenUrl, entity, Map.class);
+            if (response.getBody() == null || response.getBody().isEmpty()) {
+                return ResponseEntity.internalServerError().body(Map.of(
+                        "error", "login_failed",
+                        "message", "Keycloak returned an empty response body"
+                ));
+            }
+
             return ResponseEntity.status(response.getStatusCode()).body(response.getBody());
         } catch (HttpStatusCodeException ex) {
             Map<String, Object> body = Map.of(
@@ -77,7 +95,17 @@ public class AuthController {
                     "message", ex.getResponseBodyAsString()
             );
             return ResponseEntity.status(ex.getStatusCode()).body(body);
+        } catch (ResourceAccessException ex) {
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "error", "keycloak_unreachable",
+                    "message", "Backend could not reach Keycloak",
+                    "details", ex.getMostSpecificCause().getMessage()
+            ));
+        } catch (Exception ex) {
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "error", "login_failed",
+                    "message", ex.getMessage()
+            ));
         }
     }
 }
-

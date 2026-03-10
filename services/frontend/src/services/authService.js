@@ -2,6 +2,9 @@ import { CONFIG } from '../config';
 
 const STORAGE_KEY = CONFIG.auth.storageKey;
 const API_BASE = CONFIG.api.baseUrl;
+const KEYCLOAK_URL = CONFIG.keycloak.url;
+const REALM = CONFIG.keycloak.realm;
+const CLIENT_ID = CONFIG.keycloak.clientId;
 
 export function decodeJwt(token) {
   try {
@@ -31,6 +34,7 @@ export function clearSession() {
 export function loadSession() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return null;
+
   try {
     const data = JSON.parse(raw);
     return {
@@ -45,15 +49,17 @@ export function loadSession() {
 
 export function rolesFromToken(accessToken) {
   const tk = accessToken ? decodeJwt(accessToken) : null;
-  const roles = (tk && tk.realm_access && Array.isArray(tk.realm_access.roles))
-    ? tk.realm_access.roles
-    : [];
+  const roles =
+      tk && tk.realm_access && Array.isArray(tk.realm_access.roles)
+          ? tk.realm_access.roles
+          : [];
   return roles;
 }
 
 export function tokenExpiryText(token) {
   const tk = token ? decodeJwt(token) : null;
   if (!tk || !tk.exp) return '—';
+
   const ms = tk.exp * 1000;
   const d = new Date(ms);
   return `${d.toLocaleString()} (exp=${tk.exp})`;
@@ -62,20 +68,24 @@ export function tokenExpiryText(token) {
 export async function login(username, password) {
   const response = await fetch(`${API_BASE}/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ username, password })
   });
 
-  const data = await response.json();
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
 
   if (!response.ok) {
     const message =
-      (data && (data.error_description || data.error || data.message)) ||
-      'Login failed';
+        (data && (data.error_description || data.error || data.message)) ||
+        'Login failed';
     throw new Error(message);
   }
 
   persistSession(data.access_token, data.id_token, data.refresh_token);
+
   return {
     accessToken: data.access_token,
     idToken: data.id_token,
@@ -85,24 +95,32 @@ export async function login(username, password) {
 
 export async function refreshAccessToken(refreshToken) {
   const response = await fetch(
-    `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/token`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        client_id: CLIENT_ID,
-        refresh_token: refreshToken,
-      }),
-    }
+      `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/token`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          client_id: CLIENT_ID,
+          refresh_token: refreshToken
+        })
+      }
   );
 
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+
   if (!response.ok) {
-    throw new Error('Token refresh failed');
+    throw new Error(
+        (data && (data.error_description || data.error || data.message)) ||
+        'Token refresh failed'
+    );
   }
 
-  const data = await response.json();
   persistSession(data.access_token, data.id_token, data.refresh_token);
+
   return {
     accessToken: data.access_token,
     idToken: data.id_token,

@@ -1,0 +1,87 @@
+services:
+  postgres-app:
+    image: postgres:16-alpine
+    container_name: timetable-postgres-app
+    environment:
+      POSTGRES_DB: timetable
+      POSTGRES_USER: timetable
+      POSTGRES_PASSWORD: timetable
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-app-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U timetable -d timetable"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  postgres-keycloak:
+    image: postgres:16-alpine
+    container_name: timetable-postgres-keycloak
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+    volumes:
+      - postgres-keycloak-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.5.5
+    container_name: timetable-keycloak
+    command: ["start-dev", "--import-realm", "--http-port=8080"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL_HOST: postgres-keycloak
+      KC_DB_URL_PORT: 5432
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+    ports:
+      - "8181:8080"
+    volumes:
+      - ./keycloak/realms:/opt/keycloak/data/import
+    depends_on:
+      postgres-keycloak:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ./spring-backend
+      dockerfile: Dockerfile
+    container_name: timetable-backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-app:5432/timetable
+      SPRING_DATASOURCE_USERNAME: timetable
+      SPRING_DATASOURCE_PASSWORD: timetable
+      KEYCLOAK_ISSUER_URI: http://keycloak:8080/realms/timetable-realm
+      KEYCLOAK_TOKEN_URL: http://keycloak:8080/realms/timetable-realm/protocol/openid-connect/token
+      KEYCLOAK_CLIENT_ID: timetable-backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres-app:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./services/frontend
+      dockerfile: Dockerfile
+    container_name: timetable-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres-app-data:
+  postgres-keycloak-data:
