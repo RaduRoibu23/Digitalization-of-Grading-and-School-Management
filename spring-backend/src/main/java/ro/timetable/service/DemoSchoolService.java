@@ -23,6 +23,21 @@ import java.util.stream.Collectors;
 @Service
 public class DemoSchoolService {
 
+    private static final int CLASS_COUNT = 10;
+    private static final int STUDENTS_PER_CLASS = 20;
+    private static final String[] FIRST_NAMES = {
+            "Andrei", "Maria", "Vlad", "Elena", "Alex", "Ioana", "Mihai", "Daria", "Stefan", "Bianca",
+            "David", "Teodora", "Rares", "Ana", "Matei", "Gabriela", "Paul", "Ilinca", "Robert", "Larisa",
+            "Denis", "Patricia", "Sebastian", "Adina", "Cristian", "Miruna", "Eduard", "Sonia", "Tudor", "Mara",
+            "Albert", "Claudia", "Ionut", "Nicoleta", "Victor", "Amalia", "George", "Diana", "Cosmin", "Sabina"
+    };
+    private static final String[] LAST_NAMES = {
+            "Popescu", "Ionescu", "Georgescu", "Stan", "Dumitru", "Marin", "Toma", "Petrescu", "Diaconescu", "Moldovan",
+            "Radu", "Stoica", "Enache", "Nistor", "Voicu", "Sandu", "Munteanu", "Ilie", "Barbu", "Preda",
+            "Constantin", "Lazar", "Nedelcu", "Dragomir", "Serban", "Coman", "Neagu", "Manole", "Ene", "Pavel",
+            "Oprea", "Tudor", "Florea", "Apostol", "Dobre", "Tudose", "Matei", "Mocanu", "Avram", "Rosu"
+    };
+
     private final Map<Long, SchoolClass> classes = new LinkedHashMap<>();
     private final Map<Long, Subject> subjects = new LinkedHashMap<>();
     private final Map<Long, Room> rooms = new LinkedHashMap<>();
@@ -63,7 +78,7 @@ public class DemoSchoolService {
     public List<Map<String, Object>> getProfilesByRole(String role) {
         return profilesByUsername.values().stream()
                 .filter(profile -> role == null || role.isBlank() || role.equalsIgnoreCase(profile.role()))
-                .sorted(Comparator.comparing(UserProfile::lastName).thenComparing(UserProfile::firstName))
+                .sorted(Comparator.comparing(UserProfile::lastName).thenComparing(UserProfile::firstName).thenComparing(UserProfile::username))
                 .map(this::profileResponse)
                 .collect(Collectors.toList());
     }
@@ -170,16 +185,14 @@ public class DemoSchoolService {
     }
 
     private List<TimetableEntry> buildGeneratedTimetable(SchoolClass schoolClass) {
-        List<Long> subjectIds = switch (schoolClass.id().intValue()) {
-            case 1 -> List.of(1L, 2L, 3L, 4L, 5L);
-            case 2 -> List.of(2L, 3L, 4L, 5L, 1L);
-            default -> List.of(3L, 1L, 5L, 2L, 4L);
-        };
-
+        List<Long> subjectIds = new ArrayList<>(subjects.keySet());
         List<TimetableEntry> entries = new ArrayList<>();
+        int offset = Math.floorMod(schoolClass.id().intValue() - 1, subjectIds.size());
+
         for (int day = 0; day < 5; day++) {
-            Subject subject = requireSubject(subjectIds.get(day));
-            Room room = requireRoom((long) ((day % rooms.size()) + 1));
+            Long subjectId = subjectIds.get((day + offset) % subjectIds.size());
+            Subject subject = requireSubject(subjectId);
+            Room room = requireRoom((long) (((day + offset) % rooms.size()) + 1));
             UserProfile teacher = teacherForSubject(subject.id());
             entries.add(new TimetableEntry(
                     entryIds.incrementAndGet(),
@@ -220,9 +233,10 @@ public class DemoSchoolService {
     }
 
     private UserProfile teacherForSubject(Long subjectId) {
+        String subjectName = requireSubject(subjectId).name().toLowerCase();
         return profilesByUsername.values().stream()
                 .filter(profile -> "professor".equals(profile.role()))
-                .filter(profile -> profile.subjectsTaught().stream().map(String::toLowerCase).toList().contains(requireSubject(subjectId).name().toLowerCase()))
+                .filter(profile -> profile.subjectsTaught().stream().map(String::toLowerCase).anyMatch(subjectName::equals))
                 .findFirst()
                 .orElseGet(() -> profilesByUsername.get("professor01"));
     }
@@ -252,9 +266,10 @@ public class DemoSchoolService {
     }
 
     private void seedClasses() {
-        classes.put(1L, new SchoolClass(1L, "Grupa 131"));
-        classes.put(2L, new SchoolClass(2L, "Grupa 132"));
-        classes.put(3L, new SchoolClass(3L, "Grupa 133"));
+        for (int index = 0; index < CLASS_COUNT; index++) {
+            long classId = index + 1L;
+            classes.put(classId, new SchoolClass(classId, "Grupa " + (131 + index)));
+        }
     }
 
     private void seedSubjects() {
@@ -279,14 +294,30 @@ public class DemoSchoolService {
         profilesByUsername.put("secretariat01", new UserProfile(3L, "secretariat01", "secretariat", "Alexandra", "Corcodel", "secretariat01@timetable.local", null, null, List.of()));
         profilesByUsername.put("scheduler01", new UserProfile(4L, "scheduler01", "scheduler", "Scheduler", "User", "scheduler01@timetable.local", null, null, List.of()));
         profilesByUsername.put("professor01", new UserProfile(5L, "professor01", "professor", "Bogdan", "Mocanu", "professor01@timetable.local", null, null, List.of("Programare Java", "Inginerie software")));
-        profilesByUsername.put("student01", new UserProfile(6L, "student01", "student", "Andrei", "Voicu", "student01@timetable.local", 1L, classes.get(1L).name(), List.of()));
-        profilesByUsername.put("student02", new UserProfile(7L, "student02", "student", "Maria", "Ionescu", "student02@timetable.local", 1L, classes.get(1L).name(), List.of()));
-        profilesByUsername.put("student03", new UserProfile(8L, "student03", "student", "Vlad", "Popescu", "student03@timetable.local", 2L, classes.get(2L).name(), List.of()));
-        profilesByUsername.put("student04", new UserProfile(9L, "student04", "student", "Elena", "Dumitru", "student04@timetable.local", 3L, classes.get(3L).name(), List.of()));
+
+        long nextId = 6L;
+        for (int studentIndex = 1; studentIndex <= CLASS_COUNT * STUDENTS_PER_CLASS; studentIndex++) {
+            long classId = ((studentIndex - 1) / STUDENTS_PER_CLASS) + 1L;
+            String username = String.format("student%03d", studentIndex);
+            String firstName = FIRST_NAMES[(studentIndex - 1) % FIRST_NAMES.length];
+            String lastName = LAST_NAMES[((studentIndex - 1) / FIRST_NAMES.length + studentIndex - 1) % LAST_NAMES.length];
+            profilesByUsername.put(username, new UserProfile(
+                    nextId++,
+                    username,
+                    "student",
+                    firstName,
+                    lastName,
+                    username + "@timetable.local",
+                    classId,
+                    classes.get(classId).name(),
+                    List.of()
+            ));
+        }
     }
 
     private void seedTimetables() {
-        timetablesByClassId.put(1L, buildGeneratedTimetable(classes.get(1L)));
-        timetablesByClassId.put(2L, buildGeneratedTimetable(classes.get(2L)));
+        for (SchoolClass schoolClass : classes.values()) {
+            timetablesByClassId.put(schoolClass.id(), buildGeneratedTimetable(schoolClass));
+        }
     }
 }

@@ -18,7 +18,7 @@ export const CONFIG = {
     { label: 'Admin', username: 'admin01', password: 'admin01' },
     { label: 'Secretariat', username: 'secretariat01', password: 'secretariat01' },
     { label: 'Profesor', username: 'professor01', password: 'professor01' },
-    { label: 'Student', username: 'student01', password: 'student01' },
+    { label: 'Student', username: 'student001', password: 'student001' },
     { label: 'Scheduler', username: 'scheduler01', password: 'scheduler01' },
   ]
 };
