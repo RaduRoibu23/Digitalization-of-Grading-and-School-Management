@@ -7,7 +7,6 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -19,19 +18,21 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
+import ro.timetable.service.DemoSchoolService;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api")
 public class AuthController {
 
     private final RestTemplate restTemplate;
+    private final DemoSchoolService demoSchoolService;
 
-    public AuthController(RestTemplate restTemplate) {
+    public AuthController(RestTemplate restTemplate, DemoSchoolService demoSchoolService) {
         this.restTemplate = restTemplate;
+        this.demoSchoolService = demoSchoolService;
     }
 
     @Value("${keycloak.token-url}")
@@ -47,22 +48,24 @@ public class AuthController {
 
     @GetMapping("/me")
     public Map<String, Object> me(JwtAuthenticationToken authentication) {
-        String username = (String) authentication.getToken().getClaims().getOrDefault("preferred_username", authentication.getName());
-        List<String> roles = authentication.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .collect(Collectors.toList());
+        List<String> roles = List.of();
+        Object realmAccess = authentication.getToken().getClaims().get("realm_access");
+        if (realmAccess instanceof Map<?, ?> realmAccessMap) {
+            Object roleValues = realmAccessMap.get("roles");
+            if (roleValues instanceof List<?> roleList) {
+                roles = roleList.stream().map(String::valueOf).toList();
+            }
+        }
 
-        return Map.of(
-                "username", username,
-                "roles", roles,
-                "claims", authentication.getToken().getClaims()
-        );
+        String username = (String) authentication.getToken().getClaims().getOrDefault("preferred_username", authentication.getName());
+        return demoSchoolService.meResponse(username, roles, authentication.getToken().getClaims());
     }
 
     public record LoginRequest(
             @NotBlank(message = "username is required") String username,
             @NotBlank(message = "password is required") String password
-    ) {}
+    ) {
+    }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
@@ -83,7 +86,7 @@ public class AuthController {
             if (response.getBody() == null || response.getBody().isEmpty()) {
                 return ResponseEntity.internalServerError().body(Map.of(
                         "error", "login_failed",
-                        "message", "Keycloak returned an empty response body"
+                        "detail", "Keycloak returned an empty response body"
                 ));
             }
 
@@ -92,19 +95,19 @@ public class AuthController {
             Map<String, Object> body = Map.of(
                     "error", "login_failed",
                     "status", ex.getStatusCode().value(),
-                    "message", ex.getResponseBodyAsString()
+                    "detail", ex.getResponseBodyAsString()
             );
             return ResponseEntity.status(ex.getStatusCode()).body(body);
         } catch (ResourceAccessException ex) {
             return ResponseEntity.internalServerError().body(Map.of(
                     "error", "keycloak_unreachable",
-                    "message", "Backend could not reach Keycloak",
-                    "details", ex.getMostSpecificCause().getMessage()
+                    "detail", "Backend could not reach Keycloak",
+                    "message", ex.getMostSpecificCause().getMessage()
             ));
         } catch (Exception ex) {
             return ResponseEntity.internalServerError().body(Map.of(
                     "error", "login_failed",
-                    "message", ex.getMessage()
+                    "detail", ex.getMessage()
             ));
         }
     }

@@ -8,6 +8,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -26,7 +27,7 @@ public class RestExceptionHandler {
 
         return ResponseEntity.badRequest().body(Map.of(
                 "error", "validation_failed",
-                "message", "Request validation failed",
+                "detail", "Request validation failed",
                 "fieldErrors", fieldErrors
         ));
     }
@@ -35,7 +36,7 @@ public class RestExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleUnreadableBody(HttpMessageNotReadableException ex) {
         return ResponseEntity.badRequest().body(Map.of(
                 "error", "invalid_request",
-                "message", "Request body must be valid JSON"
+                "detail", "Request body must be valid JSON"
         ));
     }
 
@@ -43,7 +44,15 @@ public class RestExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleConstraintViolation(ConstraintViolationException ex) {
         return ResponseEntity.badRequest().body(Map.of(
                 "error", "validation_failed",
-                "message", ex.getMessage()
+                "detail", ex.getMessage()
+        ));
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, Object>> handleResponseStatus(ResponseStatusException ex) {
+        return ResponseEntity.status(ex.getStatusCode()).body(Map.of(
+                "error", "request_failed",
+                "detail", ex.getReason() == null ? "Request failed" : ex.getReason()
         ));
     }
 
@@ -51,7 +60,7 @@ public class RestExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleUnexpected(Exception ex) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
                 "error", "internal_error",
-                "message", ex.getMessage() == null ? "Unexpected server error" : ex.getMessage()
+                "detail", ex.getMessage() == null ? "Unexpected server error" : ex.getMessage()
         ));
     }
 }
