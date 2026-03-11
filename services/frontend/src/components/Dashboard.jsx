@@ -3,22 +3,17 @@ import { rolesFromToken, tokenExpiryText, loadSession, refreshAccessToken } from
 import Sidebar, { NAV_ITEMS } from "./Sidebar";
 import TimetableScreen from "./TimetableScreen";
 import GenerateTimetableScreen from "./GenerateTimetableScreen";
-import ConflictsScreen from "./ConflictsScreen";
-import AuditLogsScreen from "./AuditLogsScreen";
-import StatsScreen from "./StatsScreen";
 import NotificationPopup from "./NotificationPopup";
 import ProfileScreen from "./ProfileScreen";
 import StudentsScreen from "./StudentsScreen";
 
 function hasAnyRole(userRoles, allowedRoles) {
   if (!allowedRoles || allowedRoles.length === 0) return true;
-  return userRoles.some((r) => allowedRoles.includes(r));
+  return userRoles.some((role) => allowedRoles.includes(role));
 }
 
 function defaultActionForRoles(roles) {
-  // Student/professor -> my timetable
   if (roles.includes("student") || roles.includes("professor")) return "my-timetable";
-  // Secretariat/scheduler/admin/sysadmin -> class timetable
   return "class-timetable";
 }
 
@@ -28,16 +23,15 @@ export default function Dashboard({ accessToken, idToken, onRefreshToken, onLogo
 
   const visibleActionIds = useMemo(() => {
     return NAV_ITEMS
-      .filter((i) => hasAnyRole(roles, i.allowedRoles))
-      .map((i) => i.id);
+      .filter((item) => hasAnyRole(roles, item.allowedRoles))
+      .map((item) => item.id);
   }, [roles]);
 
   const [active, setActive] = useState(() => defaultActionForRoles(roles));
 
-  // If roles change (token refresh) or active is no longer allowed, correct it
   useEffect(() => {
-    const def = defaultActionForRoles(roles);
-    if (!visibleActionIds.includes(active)) setActive(def);
+    const nextActive = defaultActionForRoles(roles);
+    if (!visibleActionIds.includes(active)) setActive(nextActive);
   }, [roles, visibleActionIds, active]);
 
   const handleRefreshToken = async () => {
@@ -47,8 +41,8 @@ export default function Dashboard({ accessToken, idToken, onRefreshToken, onLogo
         const tokens = await refreshAccessToken(session.refreshToken);
         onRefreshToken(tokens);
       }
-    } catch (err) {
-      console.error("Token refresh failed:", err);
+    } catch (error) {
+      console.error("Token refresh failed:", error);
     }
   };
 
@@ -79,18 +73,6 @@ export default function Dashboard({ accessToken, idToken, onRefreshToken, onLogo
 
         {active === "generate" && (
           <GenerateTimetableScreen accessToken={accessToken} roles={roles} />
-        )}
-
-        {active === "conflicts" && (
-          <ConflictsScreen accessToken={accessToken} roles={roles} />
-        )}
-
-        {active === "audit" && (
-          <AuditLogsScreen accessToken={accessToken} roles={roles} />
-        )}
-
-        {active === "stats" && (
-          <StatsScreen accessToken={accessToken} roles={roles} />
         )}
 
         {active === "profile" && (

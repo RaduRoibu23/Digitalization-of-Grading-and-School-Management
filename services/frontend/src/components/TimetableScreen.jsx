@@ -36,7 +36,6 @@ function signature(list) {
 }
 
 export default function TimetableScreen({ accessToken, roles, mode }) {
-  // mode: "my" | "class"
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState(null);
 
@@ -62,10 +61,8 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
   const [original, setOriginal] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
 
-  // concurrency UX
   const [needsRefresh, setNeedsRefresh] = useState(false);
 
-  // student notification (poll)
   const [lastSig, setLastSig] = useState("");
 
   const editingAllowed = canEdit(roles);
@@ -108,7 +105,6 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
   async function loadTimetableForClass(classId) {
     const data = await apiGet(`/timetables/classes/${classId}`, accessToken);
     const list = Array.isArray(data) ? data : [];
-    // Filtrează entry-urile invalide (fără id valid)
     const validList = list.filter(e => e && e.id && typeof e.id === 'number' && e.id > 0);
     validList.sort((a, b) => (a.weekday - b.weekday) || (a.index_in_day - b.index_in_day));
     setEntries(validList);
@@ -117,18 +113,15 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
   }
 
   async function loadMyTimetable() {
-    // If user is a professor, use teacher endpoint (no empty slots)
     if (roles.includes("professor")) {
       try {
         const data = await apiGet("/timetables/me/teacher", accessToken);
         const list = Array.isArray(data) ? data : [];
-        // Filter invalid entries (missing valid id)
         const validList = list.filter(e => e && e.id && typeof e.id === 'number' && e.id > 0);
         setEntries(validList);
         setOriginal(JSON.parse(JSON.stringify(validList)));
         setLastSig(signature(validList));
       } catch (e) {
-        // Don't show error if professor has no assigned classes (normal case)
         if (e?.status === 400 && e?.message?.includes("not a teacher")) {
           setEntries([]);
           setOriginal([]);
@@ -143,7 +136,6 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
       return;
     }
 
-    // For students, use regular /me endpoint
     const me = await apiGet("/me", accessToken);
     const classId = me?.class_id ?? me?.classId ?? me?.class?.id;
 
@@ -177,7 +169,6 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
 
   useEffect(() => {
     initialLoad();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
   useEffect(() => {
@@ -193,10 +184,8 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
         setLoading(false);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, selectedClassId]);
 
-  // Polling for students/professors: if timetable changes in backend -> notification + local refresh
   useEffect(() => {
     if (mode !== "my") return;
     if (isEditing) return;
@@ -219,7 +208,6 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
           setBanner({ type: "ok", text: "Orarul a fost actualizat." });
         }
       } catch {
-        // silent
       }
     }, POLL_MS);
 
@@ -235,7 +223,6 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
     const changed = [];
 
     for (const e of entries) {
-      // Validate: entry must have valid id and version
       if (!e.id || typeof e.id !== 'number' || e.id <= 0) {
         console.warn('Entry fara id valid:', e);
         continue;
@@ -265,7 +252,6 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
   }
 
   function beginEdit() {
-    // Validate: check if valid entries exist before allowing edit
     const invalidEntries = entries.filter(e => !e.id || typeof e.id !== 'number' || e.id <= 0);
     if (invalidEntries.length > 0) {
       setBanner({
@@ -305,7 +291,6 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
 
     try {
       for (const ch of changes) {
-        // Final validation: id and version must exist
         if (!ch.id || typeof ch.id !== 'number' || ch.id <= 0) {
           throw new Error(`Invalid entry: id missing or invalid (${ch.id}). Refresh and try again.`);
         }
@@ -319,7 +304,6 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
       setIsEditing(false);
       setNeedsRefresh(false);
 
-      // refetch (global truth)
       if (mode === "class") {
         await loadTimetableForClass(selectedClassId);
         setBanner({
@@ -333,8 +317,6 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
     } catch (e) {
       const msg = String(e.message || e);
       const status = e.status || 500;
-
-      // Entry not found (404) - probabil a fost sters sau regenerat
       if (status === 404) {
         setNeedsRefresh(true);
         setBanner({
@@ -342,7 +324,6 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
           text: "Entry no longer exists (deleted or regenerated). Click Refresh to load current timetable.",
         });
       }
-      // optimistic lock / locking conflicts
       else if (status === 409 || status === 412 || status === 423) {
         setNeedsRefresh(true);
         setBanner({
@@ -482,7 +463,6 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
       ) : entries.length === 0 ? (
         <div className="mutedBlock">Nu există intrări de orar.</div>
       ) : mode === "my" && roles.includes("professor") ? (
-        // Teacher view: compact list without empty slots
         <div className="tableWrap">
           <table className="dataTable">
             <thead>
@@ -625,3 +605,4 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
     </section>
   );
 }
+

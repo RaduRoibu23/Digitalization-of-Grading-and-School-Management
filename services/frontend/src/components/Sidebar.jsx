@@ -1,32 +1,20 @@
 import React from "react";
 
-
 export const NAV_ITEMS = [
-  // Student / Professor: have "my timetable"
   { id: "my-timetable", label: "Orarul meu", allowedRoles: ["student", "professor"] },
-
-  // Secretariat/Scheduler/Admin/Sysadmin: manage timetables by class
-  { id: "class-timetable", label: "Orar pe clasă", allowedRoles: ["secretariat", "scheduler", "admin", "sysadmin"] },
-
-  // Tools for timetable managers
-  { id: "generate", label: "Generează orar", allowedRoles: ["secretariat", "scheduler", "admin", "sysadmin"] },
-  { id: "conflicts", label: "Conflicte job", allowedRoles: ["secretariat", "scheduler", "admin", "sysadmin"] },
-
-  // Strict admin/sysadmin
-  { id: "audit", label: "Audit logs", allowedRoles: ["admin", "sysadmin"] },
-  { id: "stats", label: "Stats", allowedRoles: ["admin", "sysadmin"] },
-
-  { id: "students", label: "Studenți", allowedRoles: ["secretariat", "scheduler", "admin", "sysadmin"] },
+  { id: "class-timetable", label: "Orar pe clasa", allowedRoles: ["secretariat", "scheduler", "admin", "sysadmin"] },
+  { id: "generate", label: "Genereaza orar", allowedRoles: ["secretariat", "scheduler", "admin", "sysadmin"] },
+  { id: "students", label: "Studenti", allowedRoles: ["secretariat", "scheduler", "admin", "sysadmin"] },
   { id: "profile", label: "Date personale", allowedRoles: [] },
 ];
 
 function hasAnyRole(userRoles, allowedRoles) {
   if (!allowedRoles || allowedRoles.length === 0) return true;
-  return userRoles.some((r) => allowedRoles.includes(r));
+  return userRoles.some((role) => allowedRoles.includes(role));
 }
 
 export default function Sidebar({ roles, activeId, onSelect }) {
-  const visible = NAV_ITEMS.filter((i) => hasAnyRole(roles, i.allowedRoles));
+  const visible = NAV_ITEMS.filter((item) => hasAnyRole(roles, item.allowedRoles));
 
   return (
     <aside className="sidebar">
@@ -48,11 +36,11 @@ export default function Sidebar({ roles, activeId, onSelect }) {
         <div className="mutedSmall">Roluri:</div>
         <div className="rolesWrap">
           {roles.length === 0 ? (
-            <span className="pill muted">—</span>
+            <span className="pill muted">-</span>
           ) : (
-            roles.map((r) => (
-              <span key={r} className="pill">
-                {r}
+            roles.map((role) => (
+              <span key={role} className="pill">
+                {role}
               </span>
             ))
           )}
