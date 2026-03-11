@@ -5,6 +5,7 @@ export const NAV_ITEMS = [
   { id: "class-timetable", label: "Orar pe clasa", allowedRoles: ["secretariat", "scheduler", "admin", "sysadmin"] },
   { id: "generate", label: "Genereaza orar", allowedRoles: ["secretariat", "scheduler", "admin", "sysadmin"] },
   { id: "students", label: "Studenti", allowedRoles: ["secretariat", "scheduler", "admin", "sysadmin"] },
+  { id: "catalog", label: "Catalog", allowedRoles: ["student", "professor", "secretariat", "admin", "sysadmin"] },
   { id: "profile", label: "Date personale", allowedRoles: [] },
 ];
 

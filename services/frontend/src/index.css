@@ -939,3 +939,52 @@ code.inline{
 }
 
 
+.catalogStats{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin: 10px 0 14px;
+}
+
+.statPill{
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.05);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.catalogEditor{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+
+.gradeBadge{
+  display:inline-flex;
+  min-width: 34px;
+  justify-content:center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-weight: 800;
+  border: 1px solid transparent;
+}
+
+.gradeBadge.excellent{
+  background: rgba(46,229,157,0.10);
+  border-color: rgba(46,229,157,0.35);
+  color: #b9ffd9;
+}
+
+.gradeBadge.good{
+  background: rgba(84,160,255,0.12);
+  border-color: rgba(84,160,255,0.35);
+  color: #cfe2ff;
+}
+
+.gradeBadge.warn{
+  background: rgba(255,209,102,0.12);
+  border-color: rgba(255,209,102,0.35);
+  color: #ffe6a7;
+}

@@ -6,6 +6,7 @@ import GenerateTimetableScreen from "./GenerateTimetableScreen";
 import NotificationPopup from "./NotificationPopup";
 import ProfileScreen from "./ProfileScreen";
 import StudentsScreen from "./StudentsScreen";
+import CatalogScreen from "./CatalogScreen";
 
 function hasAnyRole(userRoles, allowedRoles) {
   if (!allowedRoles || allowedRoles.length === 0) return true;
@@ -75,12 +76,16 @@ export default function Dashboard({ accessToken, idToken, onRefreshToken, onLogo
           <GenerateTimetableScreen accessToken={accessToken} roles={roles} />
         )}
 
-        {active === "profile" && (
-          <ProfileScreen accessToken={accessToken} roles={roles} />
-        )}
-
         {active === "students" && (
           <StudentsScreen accessToken={accessToken} roles={roles} />
+        )}
+
+        {active === "catalog" && (
+          <CatalogScreen accessToken={accessToken} roles={roles} />
+        )}
+
+        {active === "profile" && (
+          <ProfileScreen accessToken={accessToken} roles={roles} />
         )}
       </main>
     </div>
