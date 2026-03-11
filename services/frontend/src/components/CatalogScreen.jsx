@@ -64,7 +64,11 @@ export default function CatalogScreen({ accessToken, roles }) {
         setSelectedStudent((current) => current || list[0].username);
       }
     } catch (error) {
-      setBanner({ type: "error", text: String(error?.message || error) });
+      if ([409, 412, 423].includes(error?.status)) {
+        setBanner({ type: "error", text: "Nota a fost modificata intre timp. Da Refresh si incearca din nou." });
+      } else {
+        setBanner({ type: "error", text: String(error?.message || error) });
+      }
     } finally {
       setLoading(false);
     }
@@ -77,7 +81,11 @@ export default function CatalogScreen({ accessToken, roles }) {
       const data = await apiGet("/catalog/me", accessToken);
       applyCatalog(data);
     } catch (error) {
-      setBanner({ type: "error", text: String(error?.message || error) });
+      if ([409, 412, 423].includes(error?.status)) {
+        setBanner({ type: "error", text: "Nota a fost modificata intre timp. Da Refresh si incearca din nou." });
+      } else {
+        setBanner({ type: "error", text: String(error?.message || error) });
+      }
     } finally {
       setLoading(false);
     }
@@ -90,7 +98,11 @@ export default function CatalogScreen({ accessToken, roles }) {
       const data = await apiGet(`/catalog/students/${username}`, accessToken);
       applyCatalog(data);
     } catch (error) {
-      setBanner({ type: "error", text: String(error?.message || error) });
+      if ([409, 412, 423].includes(error?.status)) {
+        setBanner({ type: "error", text: "Nota a fost modificata intre timp. Da Refresh si incearca din nou." });
+      } else {
+        setBanner({ type: "error", text: String(error?.message || error) });
+      }
     } finally {
       setLoading(false);
     }
@@ -143,7 +155,11 @@ export default function CatalogScreen({ accessToken, roles }) {
       await reloadCurrentCatalog();
       setBanner({ type: "ok", text: "Nota a fost actualizata." });
     } catch (error) {
-      setBanner({ type: "error", text: String(error?.message || error) });
+      if ([409, 412, 423].includes(error?.status)) {
+        setBanner({ type: "error", text: "Nota a fost modificata intre timp. Da Refresh si incearca din nou." });
+      } else {
+        setBanner({ type: "error", text: String(error?.message || error) });
+      }
     } finally {
       setSavingId(null);
     }
@@ -293,3 +309,4 @@ export default function CatalogScreen({ accessToken, roles }) {
     </section>
   );
 }
+

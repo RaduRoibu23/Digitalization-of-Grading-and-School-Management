@@ -1,3 +1,4 @@
+
 package ro.timetable.service;
 
 import jakarta.annotation.PostConstruct;
@@ -13,10 +14,14 @@ import ro.timetable.model.UserProfile;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -26,8 +31,16 @@ public class SchoolDataService {
     private record TeacherSeed(String username, String firstName, String lastName, String subjectName) {
     }
 
+    private record Slot(int weekday, int indexInDay) {
+    }
+
+    private record SlotAssignment(Slot slot, Long subjectId, String teacherUsername, Long roomId) {
+    }
+
     private static final int CLASS_COUNT = 10;
     private static final int STUDENTS_PER_CLASS = 20;
+    private static final int WEEK_DAYS = 5;
+    private static final int SLOTS_PER_DAY = 7;
     private static final String[] CLASS_NAMES = {
             "IX A", "IX B", "IX C", "X A", "X B",
             "X C", "XI A", "XI B", "XII A", "XII B"
@@ -59,6 +72,7 @@ public class SchoolDataService {
     private final Map<Long, List<TimetableEntry>> timetablesByClassId = new LinkedHashMap<>();
     private final Map<Long, List<String>> teachersBySubjectId = new LinkedHashMap<>();
     private final Map<String, Long> subjectIdsByName = new LinkedHashMap<>();
+    private final Map<Long, Long> homeRoomIdsByClassId = new LinkedHashMap<>();
     private final AtomicLong entryIds = new AtomicLong(1000);
     private final AtomicLong profileIds = new AtomicLong(1);
     private final AtomicLong jobIds = new AtomicLong(5000);
@@ -131,9 +145,8 @@ public class SchoolDataService {
 
     public Map<String, Object> generateTimetable(Long classId) {
         SchoolClass schoolClass = requireClass(classId);
-        List<TimetableEntry> generated = buildGeneratedTimetable(schoolClass);
+        List<TimetableEntry> generated = buildGeneratedTimetable(schoolClass, classId);
         timetablesByClassId.put(classId, generated);
-
         return Map.of(
                 "detail", "Timetable generated",
                 "job_ids", List.of(jobIds.incrementAndGet())
@@ -148,20 +161,23 @@ public class SchoolDataService {
     public TimetableEntry updateEntry(Long entryId, Integer version, Long subjectId, Long roomId) {
         for (Map.Entry<Long, List<TimetableEntry>> bucket : timetablesByClassId.entrySet()) {
             List<TimetableEntry> entries = bucket.getValue();
-            for (int i = 0; i < entries.size(); i++) {
-                TimetableEntry existing = entries.get(i);
+            for (int index = 0; index < entries.size(); index++) {
+                TimetableEntry existing = entries.get(index);
                 if (!Objects.equals(existing.id(), entryId)) {
                     continue;
                 }
                 if (!Objects.equals(existing.version(), version)) {
-                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Timetable entry version is outdated");
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Orarul a fost modificat intre timp. Da refresh si incearca din nou.");
                 }
 
-                Subject subject = subjectId != null ? requireSubject(subjectId) : subjects.get(existing.subjectId());
-                Room room = roomId != null ? requireRoom(roomId) : (existing.roomId() == null ? null : rooms.get(existing.roomId()));
-                Long nextRoomId = room != null ? room.id() : null;
-                String nextRoomName = room != null ? room.name() : null;
-                String teacherUsername = teacherUsernameForSubject(existing.classId(), existing.weekday(), existing.indexInDay(), subject.id());
+                Subject subject = subjectId != null ? requireSubject(subjectId) : requireSubject(existing.subjectId());
+                Room room = roomId != null
+                        ? requireRoom(roomId)
+                        : defaultRoomForSubject(existing.classId(), subject.name(), existing.weekday(), existing.indexInDay(), existing.id());
+                String teacherUsername = Objects.equals(subject.id(), existing.subjectId())
+                        ? validateTeacherAvailability(existing.teacherUsername(), subject.id(), existing.id(), existing.weekday(), existing.indexInDay())
+                        : selectTeacherForSubject(subject.id(), existing.id(), existing.weekday(), existing.indexInDay());
+                validateRoomAvailability(room.id(), existing.id(), existing.weekday(), existing.indexInDay());
                 UserProfile teacher = profilesByUsername.get(teacherUsername);
 
                 TimetableEntry updated = new TimetableEntry(
@@ -170,15 +186,15 @@ public class SchoolDataService {
                         existing.className(),
                         subject.id(),
                         subject.name(),
-                        nextRoomId,
-                        nextRoomName,
+                        room.id(),
+                        room.name(),
                         teacher.username(),
                         teacher.firstName() + " " + teacher.lastName(),
                         existing.weekday(),
                         existing.indexInDay(),
                         existing.version() + 1
                 );
-                entries.set(i, updated);
+                entries.set(index, updated);
                 return updated;
             }
         }
@@ -217,27 +233,23 @@ public class SchoolDataService {
         response.put("email", profile.email());
         response.put("class_id", profile.classId());
         response.put("class_name", profile.className());
-        response.put("class_profile", profile.classId() == null ? null : requireClass(profile.classId()).profile());
         response.put("subjects_taught", profile.subjectsTaught());
+        if (profile.classId() != null) {
+            response.put("class_profile", requireClass(profile.classId()).profile());
+        }
         return response;
     }
 
-    private List<TimetableEntry> buildGeneratedTimetable(SchoolClass schoolClass) {
-        List<Long> subjectSequence = buildSubjectSequence(schoolClass);
-        List<TimetableEntry> entries = new ArrayList<>();
-        int slotsPerDay = 7;
-
-        for (int slot = 0; slot < subjectSequence.size(); slot++) {
-            int weekday = slot / slotsPerDay;
-            int indexInDay = (slot % slotsPerDay) + 1;
-            Long subjectId = subjectSequence.get(slot);
-            Subject subject = requireSubject(subjectId);
-            Room room = roomForSubject(subject.name(), schoolClass.profile(), slot);
-            String teacherUsername = teacherUsernameForSubject(schoolClass.id(), weekday, indexInDay, subjectId);
-            UserProfile teacher = profilesByUsername.get(teacherUsername);
-            entries.add(new TimetableEntry(
+    private List<TimetableEntry> buildGeneratedTimetable(SchoolClass schoolClass, Long classId) {
+        List<SlotAssignment> assignments = buildAssignments(schoolClass, classId);
+        List<TimetableEntry> generated = new ArrayList<>();
+        for (SlotAssignment assignment : assignments) {
+            Subject subject = requireSubject(assignment.subjectId());
+            Room room = requireRoom(assignment.roomId());
+            UserProfile teacher = getProfile(assignment.teacherUsername());
+            generated.add(new TimetableEntry(
                     entryIds.incrementAndGet(),
-                    schoolClass.id(),
+                    classId,
                     schoolClass.name(),
                     subject.id(),
                     subject.name(),
@@ -245,90 +257,300 @@ public class SchoolDataService {
                     room.name(),
                     teacher.username(),
                     teacher.firstName() + " " + teacher.lastName(),
-                    weekday,
-                    indexInDay,
+                    assignment.slot().weekday(),
+                    assignment.slot().indexInDay(),
                     1
             ));
         }
-        return entries;
+        generated.sort(Comparator.comparing(TimetableEntry::weekday).thenComparing(TimetableEntry::indexInDay));
+        return generated;
     }
 
-    private List<Long> buildSubjectSequence(SchoolClass schoolClass) {
-        LinkedHashMap<Long, Integer> plan = curriculumForClass(schoolClass);
-        List<Long> sequence = new ArrayList<>();
-        int remaining = plan.values().stream().mapToInt(Integer::intValue).sum();
-        int pass = 0;
-        while (remaining > 0) {
-            for (Map.Entry<Long, Integer> entry : plan.entrySet()) {
-                if (entry.getValue() <= 0) {
-                    continue;
-                }
-                if ((sequence.size() % 7) >= 5 && isHeavySubject(entry.getKey()) && pass % 2 == 0) {
-                    continue;
-                }
-                sequence.add(entry.getKey());
-                plan.put(entry.getKey(), entry.getValue() - 1);
-                remaining--;
-            }
-            pass++;
-        }
-        return sequence;
-    }
-
-    private LinkedHashMap<Long, Integer> curriculumForClass(SchoolClass schoolClass) {
-        LinkedHashMap<String, Integer> plan = curriculumPlanService.hoursForClass(schoolClass.name(), schoolClass.profile());
-        LinkedHashMap<Long, Integer> mapped = new LinkedHashMap<>();
-        for (Map.Entry<String, Integer> entry : plan.entrySet()) {
-            Long subjectId = subjectIdsByName.get(entry.getKey());
-            if (subjectId != null && entry.getValue() > 0) {
-                mapped.put(subjectId, entry.getValue());
+    private List<SlotAssignment> buildAssignments(SchoolClass schoolClass, Long classId) {
+        LinkedHashMap<String, Integer> plan = curriculumForClass(schoolClass);
+        List<Slot> slots = new ArrayList<>();
+        for (int weekday = 1; weekday <= WEEK_DAYS; weekday++) {
+            for (int indexInDay = 1; indexInDay <= SLOTS_PER_DAY; indexInDay++) {
+                slots.add(new Slot(weekday, indexInDay));
             }
         }
-        return mapped;
+
+        List<String> orderedSubjects = plan.entrySet().stream()
+                .sorted(Comparator.<Map.Entry<String, Integer>>comparingInt(Map.Entry::getValue).reversed()
+                        .thenComparing(entry -> isHeavySubject(entry.getKey()) ? 0 : 1)
+                        .thenComparing(Map.Entry::getKey))
+                .map(Map.Entry::getKey)
+                .toList();
+
+        Map<String, String> occupiedTeachers = occupiedTeachers(classId);
+        Map<String, String> occupiedRooms = occupiedRooms(classId);
+        Map<String, Integer> daySubjectCounts = new LinkedHashMap<>();
+        List<SlotAssignment> assignments = new ArrayList<>();
+        Set<String> usedSlots = new HashSet<>();
+
+        for (String subjectName : orderedSubjects) {
+            Long subjectId = subjectIdsByName.get(subjectName);
+            if (subjectId == null) {
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Missing subject " + subjectName);
+            }
+            int remaining = plan.getOrDefault(subjectName, 0);
+            for (int occurrence = 0; occurrence < remaining; occurrence++) {
+                SlotAssignment best = pickBestAssignment(classId, schoolClass, subjectId, subjectName, slots, assignments, usedSlots, daySubjectCounts, occupiedTeachers, occupiedRooms);
+                if (best == null) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Nu am putut genera un orar valid pentru " + schoolClass.name() + ".");
+                }
+                assignments.add(best);
+                usedSlots.add(slotKey(best.slot().weekday(), best.slot().indexInDay()));
+                occupiedTeachers.put(slotKey(best.slot().weekday(), best.slot().indexInDay(), best.teacherUsername()), schoolClass.name());
+                occupiedRooms.put(slotKey(best.slot().weekday(), best.slot().indexInDay(), best.roomId()), schoolClass.name());
+                daySubjectCounts.merge(daySubjectKey(best.slot().weekday(), subjectName), 1, Integer::sum);
+            }
+        }
+
+        return assignments;
     }
 
-    private boolean isHeavySubject(Long subjectId) {
-        String subject = requireSubject(subjectId).name();
-        return List.of("Matematica", "Informatica", "Informatica intensiv", "Fizica", "Chimie").contains(subject);
+    private SlotAssignment pickBestAssignment(Long classId, SchoolClass schoolClass, Long subjectId, String subjectName, List<Slot> slots,
+                                              List<SlotAssignment> assignments, Set<String> usedSlots, Map<String, Integer> daySubjectCounts,
+                                              Map<String, String> occupiedTeachers, Map<String, String> occupiedRooms) {
+        List<String> candidateTeachers = teachersBySubjectId.getOrDefault(subjectId, List.of());
+        if (candidateTeachers.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "No teachers configured for subject " + subjectName);
+        }
+
+        SlotAssignment best = null;
+        int bestScore = Integer.MIN_VALUE;
+        for (Slot slot : slots) {
+            String slotKey = slotKey(slot.weekday(), slot.indexInDay());
+            if (usedSlots.contains(slotKey)) {
+                continue;
+            }
+
+            int sameDayCount = daySubjectCounts.getOrDefault(daySubjectKey(slot.weekday(), subjectName), 0);
+            if (sameDayCount >= 2) {
+                continue;
+            }
+
+            String teacherUsername = pickTeacherForSlot(slot, assignments, candidateTeachers, occupiedTeachers);
+            if (teacherUsername == null) {
+                continue;
+            }
+            Long roomId = pickRoomForSlot(classId, subjectName, slot, occupiedRooms, assignments);
+            if (roomId == null) {
+                continue;
+            }
+
+            int score = computeAssignmentScore(subjectName, slot, assignments, sameDayCount, teacherUsername, roomId);
+            if (best == null || score > bestScore) {
+                best = new SlotAssignment(slot, subjectId, teacherUsername, roomId);
+                bestScore = score;
+            }
+        }
+        return best;
     }
 
-    private Room roomForSubject(String subjectName, String profile, int slotIndex) {
-        if ("Educatie fizica".equals(subjectName)) {
-            return requireRoom(10L);
+    private int computeAssignmentScore(String subjectName, Slot slot, List<SlotAssignment> assignments, int sameDayCount,
+                                       String teacherUsername, Long roomId) {
+        int score = 100;
+        if (isHeavySubject(subjectName)) {
+            score += Math.max(0, 5 - slot.indexInDay()) * 4;
+        } else {
+            score += slot.indexInDay() * 2;
         }
-        if ("Chimie".equals(subjectName)) {
-            return requireRoom(8L);
-        }
-        if ("Fizica".equals(subjectName)) {
-            return requireRoom(7L);
-        }
-        if ("Biologie".equals(subjectName) || "Stiinte".equals(subjectName)) {
-            return requireRoom(9L);
-        }
-        if (List.of("Informatica", "Informatica intensiv", "TIC").contains(subjectName)) {
-            return "Matematica-Informatica Intensiv".equals(profile) ? requireRoom(5L) : requireRoom(4L);
-        }
-        if (List.of("Limba engleza", "Limba franceza").contains(subjectName)) {
-            return requireRoom(6L);
-        }
-        if (List.of("Limba si literatura romana", "Istorie", "Geografie", "Socio-umane", "Literatura universala", "Religie").contains(subjectName)) {
-            return requireRoom(1L + (slotIndex % 3));
-        }
-        return requireRoom(2L + (slotIndex % 4));
+        score -= sameDayCount * 18;
+        score -= teacherLoad(assignments, teacherUsername) * 6;
+        score -= existingTeacherLoad(teacherUsername) * 2;
+        score -= assignments.stream().mapToInt(entry -> Objects.equals(entry.roomId(), roomId) ? 1 : 0).sum();
+        return score;
     }
 
-    private String teacherUsernameForSubject(Long classId, int weekday, int indexInDay, Long subjectId) {
-        List<String> teacherUsernames = teachersBySubjectId.get(subjectId);
-        if (teacherUsernames == null || teacherUsernames.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "No teacher available for subject " + requireSubject(subjectId).name());
+    private Long pickRoomForSlot(Long classId, String subjectName, Slot slot, Map<String, String> occupiedRooms, List<SlotAssignment> assignments) {
+        for (Long roomId : candidateRoomIds(classId, subjectName)) {
+            if (occupiedRooms.containsKey(slotKey(slot.weekday(), slot.indexInDay(), roomId))) {
+                continue;
+            }
+            boolean usedByThisClass = assignments.stream().anyMatch(entry -> Objects.equals(entry.roomId(), roomId)
+                    && entry.slot().weekday() == slot.weekday()
+                    && entry.slot().indexInDay() == slot.indexInDay());
+            if (!usedByThisClass) {
+                return roomId;
+            }
         }
-        int offset = Math.floorMod(classId.intValue() + weekday + indexInDay - 2, teacherUsernames.size());
-        return teacherUsernames.get(offset);
+        return null;
     }
 
-    private List<TimetableEntry> copyEntries(List<TimetableEntry> source) {
-        return source.stream()
-                .sorted(Comparator.comparing(TimetableEntry::weekday).thenComparing(TimetableEntry::indexInDay))
+    private String pickTeacherForSlot(Slot slot, List<SlotAssignment> assignments,
+                                      List<String> candidateTeachers, Map<String, String> occupiedTeachers) {
+        return candidateTeachers.stream()
+                .filter(username -> !occupiedTeachers.containsKey(slotKey(slot.weekday(), slot.indexInDay(), username)))
+                .filter(username -> assignments.stream().noneMatch(entry -> username.equals(entry.teacherUsername())
+                        && entry.slot().weekday() == slot.weekday()
+                        && entry.slot().indexInDay() == slot.indexInDay()))
+                .min(Comparator.comparingInt((String username) -> teacherLoad(assignments, username))
+                        .thenComparingInt(this::existingTeacherLoad)
+                        .thenComparing(String::compareTo))
+                .orElse(null);
+    }
+
+    private int teacherLoad(List<SlotAssignment> assignments, String username) {
+        return (int) assignments.stream().filter(entry -> username.equals(entry.teacherUsername())).count();
+    }
+
+    private int existingTeacherLoad(String username) {
+        return (int) timetablesByClassId.values().stream()
+                .flatMap(Collection::stream)
+                .filter(entry -> username.equals(entry.teacherUsername()))
+                .count();
+    }
+
+    private String validateTeacherAvailability(String teacherUsername, Long subjectId, Long ignoredEntryId, Integer weekday, Integer indexInDay) {
+        if (teacherUsername == null || teacherUsername.isBlank()) {
+            return selectTeacherForSubject(subjectId, ignoredEntryId, weekday, indexInDay);
+        }
+        if (!teachersBySubjectId.getOrDefault(subjectId, List.of()).contains(teacherUsername)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Profesorul selectat nu poate preda materia aleasa.");
+        }
+        boolean conflict = timetablesByClassId.values().stream()
+                .flatMap(Collection::stream)
+                .filter(entry -> !Objects.equals(entry.id(), ignoredEntryId))
+                .anyMatch(entry -> teacherUsername.equals(entry.teacherUsername())
+                        && Objects.equals(entry.weekday(), weekday)
+                        && Objects.equals(entry.indexInDay(), indexInDay));
+        if (conflict) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Profesorul este deja ocupat in acest interval. Da refresh si alege alta varianta.");
+        }
+        return teacherUsername;
+    }
+
+    private String selectTeacherForSubject(Long subjectId, Long ignoredEntryId, Integer weekday, Integer indexInDay) {
+        return teachersBySubjectId.getOrDefault(subjectId, List.of()).stream()
+                .filter(username -> timetablesByClassId.values().stream()
+                        .flatMap(Collection::stream)
+                        .filter(entry -> !Objects.equals(entry.id(), ignoredEntryId))
+                        .noneMatch(entry -> username.equals(entry.teacherUsername())
+                                && Objects.equals(entry.weekday(), weekday)
+                                && Objects.equals(entry.indexInDay(), indexInDay)))
+                .min(Comparator.comparingInt(this::existingTeacherLoad).thenComparing(String::compareTo))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Nu exista profesor disponibil pentru materia selectata in acest interval."));
+    }
+
+    private void validateRoomAvailability(Long roomId, Long ignoredEntryId, Integer weekday, Integer indexInDay) {
+        boolean conflict = timetablesByClassId.values().stream()
+                .flatMap(Collection::stream)
+                .filter(entry -> !Objects.equals(entry.id(), ignoredEntryId))
+                .anyMatch(entry -> Objects.equals(entry.roomId(), roomId)
+                        && Objects.equals(entry.weekday(), weekday)
+                        && Objects.equals(entry.indexInDay(), indexInDay));
+        if (conflict) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Sala este deja ocupata in acest interval. Da refresh si alege alta sala.");
+        }
+    }
+
+    private Room defaultRoomForSubject(Long classId, String subjectName, Integer weekday, Integer indexInDay, Long ignoredEntryId) {
+        for (Long roomId : candidateRoomIds(classId, subjectName)) {
+            boolean conflict = timetablesByClassId.values().stream()
+                    .flatMap(Collection::stream)
+                    .filter(entry -> !Objects.equals(entry.id(), ignoredEntryId))
+                    .anyMatch(entry -> Objects.equals(entry.roomId(), roomId)
+                            && Objects.equals(entry.weekday(), weekday)
+                            && Objects.equals(entry.indexInDay(), indexInDay));
+            if (!conflict) {
+                return requireRoom(roomId);
+            }
+        }
+        throw new ResponseStatusException(HttpStatus.CONFLICT, "Nu exista sala disponibila pentru materia selectata in acest interval.");
+    }
+
+    private Map<String, String> occupiedTeachers(Long ignoredClassId) {
+        Map<String, String> occupied = new LinkedHashMap<>();
+        for (Map.Entry<Long, List<TimetableEntry>> bucket : timetablesByClassId.entrySet()) {
+            if (Objects.equals(bucket.getKey(), ignoredClassId)) {
+                continue;
+            }
+            for (TimetableEntry entry : bucket.getValue()) {
+                occupied.put(slotKey(entry.weekday(), entry.indexInDay(), entry.teacherUsername()), entry.className());
+            }
+        }
+        return occupied;
+    }
+
+    private Map<String, String> occupiedRooms(Long ignoredClassId) {
+        Map<String, String> occupied = new LinkedHashMap<>();
+        for (Map.Entry<Long, List<TimetableEntry>> bucket : timetablesByClassId.entrySet()) {
+            if (Objects.equals(bucket.getKey(), ignoredClassId)) {
+                continue;
+            }
+            for (TimetableEntry entry : bucket.getValue()) {
+                occupied.put(slotKey(entry.weekday(), entry.indexInDay(), entry.roomId()), entry.className());
+            }
+        }
+        return occupied;
+    }
+
+    private LinkedHashMap<String, Integer> curriculumForClass(SchoolClass schoolClass) {
+        return curriculumPlanService.hoursForClass(schoolClass.name(), schoolClass.profile());
+    }
+
+    private boolean isHeavySubject(String subjectName) {
+        return Set.of("Limba si literatura romana", "Matematica", "Informatica", "Informatica intensiv", "Fizica", "Limba engleza").contains(subjectName);
+    }
+
+    private int specialRoomPriority(String subjectName, Room room) {
+        if (room.name().startsWith("Laborator Informatica") && Set.of("Informatica", "Informatica intensiv", "TIC").contains(subjectName)) {
+            return 0;
+        }
+        if (room.name().startsWith("Laborator Stiinte") && Set.of("Fizica", "Chimie", "Biologie", "Stiinte").contains(subjectName)) {
+            return 0;
+        }
+        if (room.name().startsWith("Sala Sport") && "Educatie fizica".equals(subjectName)) {
+            return 0;
+        }
+        return 1;
+    }
+
+    private List<Long> candidateRoomIds(Long classId, String subjectName) {
+        List<Room> normalRooms = rooms.values().stream()
+                .filter(room -> room.name().matches("\\d{3}"))
+                .sorted(Comparator.comparing(Room::name))
+                .toList();
+        List<Room> specialRooms = rooms.values().stream()
+                .filter(room -> !room.name().matches("\\d{3}"))
+                .sorted(Comparator.comparingInt((Room room) -> specialRoomPriority(subjectName, room)).thenComparing(Room::name))
+                .toList();
+
+        if (Set.of("Informatica", "Informatica intensiv", "TIC").contains(subjectName)
+                || Set.of("Fizica", "Chimie", "Biologie", "Stiinte").contains(subjectName)
+                || "Educatie fizica".equals(subjectName)) {
+            return specialRooms.stream().map(Room::id).toList();
+        }
+
+        List<Long> ordered = new ArrayList<>();
+        Long homeRoomId = homeRoomIdsByClassId.get(classId);
+        if (homeRoomId != null) {
+            ordered.add(homeRoomId);
+        }
+        for (Room room : normalRooms) {
+            if (!Objects.equals(room.id(), homeRoomId)) {
+                ordered.add(room.id());
+            }
+        }
+        return ordered;
+    }
+
+    private String slotKey(Integer weekday, Integer indexInDay) {
+        return weekday + ":" + indexInDay;
+    }
+
+    private String slotKey(Integer weekday, Integer indexInDay, Object resourceId) {
+        return weekday + ":" + indexInDay + ":" + resourceId;
+    }
+
+    private String daySubjectKey(Integer weekday, String subjectName) {
+        return weekday + ":" + subjectName.toLowerCase(Locale.ROOT);
+    }
+
+    private List<TimetableEntry> copyEntries(List<TimetableEntry> entries) {
+        return entries.stream()
                 .map(entry -> new TimetableEntry(
                         entry.id(),
                         entry.classId(),
@@ -343,7 +565,7 @@ public class SchoolDataService {
                         entry.indexInDay(),
                         entry.version()
                 ))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private SchoolClass requireClass(Long classId) {
@@ -371,6 +593,8 @@ public class SchoolDataService {
     }
 
     private void seedClasses() {
+        classes.clear();
+        homeRoomIdsByClassId.clear();
         for (int index = 0; index < CLASS_COUNT; index++) {
             long classId = index + 1L;
             classes.put(classId, new SchoolClass(classId, CLASS_NAMES[index], CLASS_PROFILES[index]));
@@ -378,86 +602,58 @@ public class SchoolDataService {
     }
 
     private void seedSubjects() {
+        subjects.clear();
+        subjectIdsByName.clear();
+        teachersBySubjectId.clear();
         long subjectId = 1L;
         for (String subjectName : curriculumPlanService.allSubjects()) {
-            addSubject(subjectId++, subjectName);
+            subjects.put(subjectId, new Subject(subjectId, subjectName));
+            subjectIdsByName.put(subjectName, subjectId);
+            subjectId++;
         }
-    }
-
-    private void addSubject(Long id, String name) {
-        subjects.put(id, new Subject(id, name));
-        subjectIdsByName.put(name, id);
     }
 
     private void seedRooms() {
-        rooms.put(1L, new Room(1L, "Sala 101", 30));
-        rooms.put(2L, new Room(2L, "Sala 102", 30));
-        rooms.put(3L, new Room(3L, "Sala 103", 30));
-        rooms.put(4L, new Room(4L, "Laborator Info 1", 28));
-        rooms.put(5L, new Room(5L, "Laborator Info 2", 28));
-        rooms.put(6L, new Room(6L, "Cabinet Limbi Moderne", 24));
-        rooms.put(7L, new Room(7L, "Laborator Fizica", 24));
-        rooms.put(8L, new Room(8L, "Laborator Chimie", 24));
-        rooms.put(9L, new Room(9L, "Laborator Biologie", 24));
-        rooms.put(10L, new Room(10L, "Sala de sport", 60));
+        rooms.clear();
+        long roomId = 1L;
+        for (int floor = 1; floor <= 4; floor++) {
+            for (int number = 1; number <= 15; number++) {
+                String roomName = floor + String.format(Locale.ROOT, "%02d", number);
+                rooms.put(roomId, new Room(roomId, roomName, 30));
+                roomId++;
+            }
+        }
+        rooms.put(roomId, new Room(roomId, "Laborator Informatica 1", 28)); roomId++;
+        rooms.put(roomId, new Room(roomId, "Laborator Informatica 2", 28)); roomId++;
+        rooms.put(roomId, new Room(roomId, "Laborator Stiinte 1", 28)); roomId++;
+        rooms.put(roomId, new Room(roomId, "Laborator Stiinte 2", 28)); roomId++;
+        rooms.put(roomId, new Room(roomId, "Sala Sport 1", 35)); roomId++;
+        rooms.put(roomId, new Room(roomId, "Sala Sport 2", 35));
+
+        for (int index = 0; index < CLASS_COUNT; index++) {
+            homeRoomIdsByClassId.put(index + 1L, index + 1L);
+        }
     }
 
     private void seedProfiles() {
-        addStaffProfile("sysadmin01", "sysadmin", "Sysadmin", "User", "sysadmin01@timetable.local");
-        addStaffProfile("admin01", "admin", "Radu", "Roibu", "admin01@timetable.local");
-        addStaffProfile("secretariat01", "secretariat", "Alexandra", "Corcodel", "secretariat01@timetable.local");
-        addStaffProfile("scheduler01", "scheduler", "Scheduler", "User", "scheduler01@timetable.local");
+        profilesByUsername.clear();
+        profileIds.set(1);
 
-        List<TeacherSeed> teacherSeeds = List.of(
-                new TeacherSeed("professor01", "Bogdan", "Mocanu", "Limba si literatura romana"),
-                new TeacherSeed("romana02", "Irina", "Nedelcu", "Limba si literatura romana"),
-                new TeacherSeed("romana03", "Mihaela", "Voicu", "Limba si literatura romana"),
-                new TeacherSeed("mate01", "Marius", "Stoica", "Matematica"),
-                new TeacherSeed("mate02", "Laura", "Preda", "Matematica"),
-                new TeacherSeed("mate03", "Cosmin", "Tudor", "Matematica"),
-                new TeacherSeed("info01", "Roxana", "Ionescu", "Informatica"),
-                new TeacherSeed("info02", "Adrian", "Dobre", "Informatica"),
-                new TeacherSeed("info03", "Silviu", "Marin", "Informatica"),
-                new TeacherSeed("infoint01", "Alexandru", "Balan", "Informatica intensiv"),
-                new TeacherSeed("infoint02", "Diana", "Dragoi", "Informatica intensiv"),
-                new TeacherSeed("engleza01", "Paula", "Dragomir", "Limba engleza"),
-                new TeacherSeed("engleza02", "Mirela", "Stan", "Limba engleza"),
-                new TeacherSeed("engleza03", "Anca", "Lazar", "Limba engleza"),
-                new TeacherSeed("franceza01", "Cecilia", "Petrescu", "Limba franceza"),
-                new TeacherSeed("franceza02", "Daniela", "Apostol", "Limba franceza"),
-                new TeacherSeed("latina01", "Adela", "Toma", "Limba latina"),
-                new TeacherSeed("fizica01", "Dorin", "Coman", "Fizica"),
-                new TeacherSeed("fizica02", "Alexandru", "Neagu", "Fizica"),
-                new TeacherSeed("chimie01", "Camelia", "Popescu", "Chimie"),
-                new TeacherSeed("chimie02", "Simona", "Florea", "Chimie"),
-                new TeacherSeed("biologie01", "Monica", "Avram", "Biologie"),
-                new TeacherSeed("biologie02", "Cristina", "Matei", "Biologie"),
-                new TeacherSeed("istorie01", "Daniel", "Barbu", "Istorie"),
-                new TeacherSeed("istorie02", "Oana", "Munteanu", "Istorie"),
-                new TeacherSeed("geografie01", "Florin", "Serban", "Geografie"),
-                new TeacherSeed("geografie02", "Raluca", "Ene", "Geografie"),
-                new TeacherSeed("socioumane01", "Sabina", "Ilie", "Socio-umane"),
-                new TeacherSeed("socioumane02", "Mircea", "Sandu", "Socio-umane"),
-                new TeacherSeed("religie01", "Gabriel", "Pavel", "Religie"),
-                new TeacherSeed("arte01", "Otilia", "Rusu", "Educatie artistica"),
-                new TeacherSeed("tic01", "Bianca", "Manea", "TIC"),
-                new TeacherSeed("tic02", "Marian", "Ene", "TIC"),
-                new TeacherSeed("antreprenoriala01", "Ioan", "Sava", "Educatie antreprenoriala"),
-                new TeacherSeed("literatura01", "Emilia", "Iordache", "Literatura universala"),
-                new TeacherSeed("stiinte01", "Violeta", "Petcu", "Stiinte"),
-                new TeacherSeed("sport01", "Lucian", "Radu", "Educatie fizica"),
-                new TeacherSeed("sport02", "Carmen", "Pavel", "Educatie fizica")
-        );
+        addStaffProfile("sysadmin01", "sysadmin", "Marius", "Stoica");
+        addStaffProfile("admin01", "admin", "Roxana", "Marin");
+        addStaffProfile("secretariat01", "secretariat", "Daniela", "Popa");
+        addStaffProfile("scheduler01", "scheduler", "Silviu", "Dobre");
 
-        for (TeacherSeed teacherSeed : teacherSeeds) {
-            addTeacherProfile(teacherSeed);
+        for (TeacherSeed teacher : teacherSeeds()) {
+            addTeacherProfile(teacher);
         }
 
-        for (int studentIndex = 1; studentIndex <= CLASS_COUNT * STUDENTS_PER_CLASS; studentIndex++) {
-            long classId = ((studentIndex - 1) / STUDENTS_PER_CLASS) + 1L;
-            String username = String.format("student%03d", studentIndex);
-            String firstName = FIRST_NAMES[(studentIndex - 1) % FIRST_NAMES.length];
-            String lastName = LAST_NAMES[((studentIndex - 1) / FIRST_NAMES.length + studentIndex - 1) % LAST_NAMES.length];
+        for (int index = 1; index <= CLASS_COUNT * STUDENTS_PER_CLASS; index++) {
+            long classId = ((index - 1) / STUDENTS_PER_CLASS) + 1L;
+            SchoolClass schoolClass = requireClass(classId);
+            String username = String.format(Locale.ROOT, "student%03d", index);
+            String firstName = FIRST_NAMES[(index - 1) % FIRST_NAMES.length];
+            String lastName = LAST_NAMES[((index - 1) * 3) % LAST_NAMES.length];
             profilesByUsername.put(username, new UserProfile(
                     profileIds.getAndIncrement(),
                     username,
@@ -466,38 +662,94 @@ public class SchoolDataService {
                     lastName,
                     username + "@timetable.local",
                     classId,
-                    classes.get(classId).name(),
+                    schoolClass.name(),
                     List.of()
             ));
         }
     }
 
-    private void addStaffProfile(String username, String role, String firstName, String lastName, String email) {
-        profilesByUsername.put(username, new UserProfile(profileIds.getAndIncrement(), username, role, firstName, lastName, email, null, null, List.of()));
+    private void addStaffProfile(String username, String role, String firstName, String lastName) {
+        profilesByUsername.put(username, new UserProfile(
+                profileIds.getAndIncrement(),
+                username,
+                role,
+                firstName,
+                lastName,
+                username + "@timetable.local",
+                null,
+                null,
+                List.of()
+        ));
     }
 
-    private void addTeacherProfile(TeacherSeed teacherSeed) {
-        Long subjectId = subjectIdsByName.get(teacherSeed.subjectName());
-        if (subjectId == null) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Missing subject for teacher seed " + teacherSeed.subjectName());
-        }
-        profilesByUsername.put(teacherSeed.username(), new UserProfile(
+    private void addTeacherProfile(TeacherSeed teacher) {
+        profilesByUsername.put(teacher.username(), new UserProfile(
                 profileIds.getAndIncrement(),
-                teacherSeed.username(),
+                teacher.username(),
                 "professor",
-                teacherSeed.firstName(),
-                teacherSeed.lastName(),
-                teacherSeed.username() + "@timetable.local",
+                teacher.firstName(),
+                teacher.lastName(),
+                teacher.username() + "@timetable.local",
                 null,
                 null,
-                List.of(teacherSeed.subjectName())
+                List.of(teacher.subjectName())
         ));
-        teachersBySubjectId.computeIfAbsent(subjectId, ignored -> new ArrayList<>()).add(teacherSeed.username());
+        Long subjectId = subjectIdsByName.get(teacher.subjectName());
+        if (subjectId != null) {
+            teachersBySubjectId.computeIfAbsent(subjectId, ignored -> new ArrayList<>()).add(teacher.username());
+        }
+    }
+
+    private List<TeacherSeed> teacherSeeds() {
+        return List.of(
+                new TeacherSeed("romana01", "Mihaela", "Ionescu", "Limba si literatura romana"),
+                new TeacherSeed("romana02", "Corina", "Pavel", "Limba si literatura romana"),
+                new TeacherSeed("romana03", "Adrian", "Mocanu", "Limba si literatura romana"),
+                new TeacherSeed("mate01", "Cristian", "Serban", "Matematica"),
+                new TeacherSeed("mate02", "Irina", "Voicu", "Matematica"),
+                new TeacherSeed("mate03", "Raluca", "Toma", "Matematica"),
+                new TeacherSeed("sport01", "Dorin", "Avram", "Educatie fizica"),
+                new TeacherSeed("sport02", "Lucian", "Ilie", "Educatie fizica"),
+                new TeacherSeed("chimie01", "Alina", "Marin", "Chimie"),
+                new TeacherSeed("chimie02", "Sorin", "Dumitru", "Chimie"),
+                new TeacherSeed("fizica01", "Mircea", "Petrescu", "Fizica"),
+                new TeacherSeed("fizica02", "Anca", "Stan", "Fizica"),
+                new TeacherSeed("biologie01", "Laura", "Nistor", "Biologie"),
+                new TeacherSeed("biologie02", "Paula", "Tudor", "Biologie"),
+                new TeacherSeed("engleza01", "Simona", "Manole", "Limba engleza"),
+                new TeacherSeed("engleza02", "Monica", "Diaconescu", "Limba engleza"),
+                new TeacherSeed("engleza03", "Radu", "Oprea", "Limba engleza"),
+                new TeacherSeed("franceza01", "Lavinia", "Coman", "Limba franceza"),
+                new TeacherSeed("franceza02", "Mirela", "Ene", "Limba franceza"),
+                new TeacherSeed("latina01", "Carmen", "Preda", "Limba latina"),
+                new TeacherSeed("istorie01", "Dan", "Neagu", "Istorie"),
+                new TeacherSeed("istorie02", "Oana", "Munteanu", "Istorie"),
+                new TeacherSeed("geografie01", "Claudiu", "Barbu", "Geografie"),
+                new TeacherSeed("geografie02", "Florina", "Florea", "Geografie"),
+                new TeacherSeed("socioumane01", "Andrada", "Lazar", "Socio-umane"),
+                new TeacherSeed("socioumane02", "Mihnea", "Dragomir", "Socio-umane"),
+                new TeacherSeed("religie01", "Gabriel", "Constantin", "Religie"),
+                new TeacherSeed("artistica01", "Diana", "Rosu", "Educatie artistica"),
+                new TeacherSeed("tic01", "Bogdan", "Georgescu", "TIC"),
+                new TeacherSeed("tic02", "Camelia", "Apostol", "TIC"),
+                new TeacherSeed("info01", "Marian", "Radu", "Informatica"),
+                new TeacherSeed("info02", "Alexandra", "Stoica", "Informatica"),
+                new TeacherSeed("info03", "Sergiu", "Nedelcu", "Informatica"),
+                new TeacherSeed("infoint01", "Catalin", "Tudose", "Informatica intensiv"),
+                new TeacherSeed("infoint02", "Cezara", "Moldovan", "Informatica intensiv"),
+                new TeacherSeed("antreprenoriala01", "Iulia", "Sandu", "Educatie antreprenoriala"),
+                new TeacherSeed("literatura01", "Sabina", "Matei", "Literatura universala"),
+                new TeacherSeed("stiinte01", "Violeta", "Enache", "Stiinte")
+        );
     }
 
     private void seedTimetables() {
+        timetablesByClassId.clear();
+        entryIds.set(1000);
         for (SchoolClass schoolClass : classes.values()) {
-            timetablesByClassId.put(schoolClass.id(), buildGeneratedTimetable(schoolClass));
+            timetablesByClassId.put(schoolClass.id(), buildGeneratedTimetable(schoolClass, schoolClass.id()));
         }
     }
 }
+
+

@@ -94,7 +94,7 @@ public class CatalogService {
                     continue;
                 }
                 if (!Objects.equals(existing.version(), version)) {
-                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Grade version is outdated");
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Nota a fost modificata intre timp. Da refresh si incearca din nou.");
                 }
                 if (!canEditGrade(requesterUsername, roles, existing)) {
                     throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not allowed to edit this grade");
@@ -346,3 +346,4 @@ public class CatalogService {
                 .collect(Collectors.toCollection(ArrayList::new));
     }
 }
+

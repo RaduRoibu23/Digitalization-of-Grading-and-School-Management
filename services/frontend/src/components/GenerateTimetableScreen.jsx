@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost, apiDelete } from "../services/apiService";
 
 function classLabel(c) {
@@ -13,6 +13,12 @@ export default function GenerateTimetableScreen({ accessToken }) {
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState(null);
   const [jobIds, setJobIds] = useState([]);
+  const [generatedEntries, setGeneratedEntries] = useState([]);
+
+  const selectedClass = useMemo(
+    () => classes.find((item) => String(item.id) === String(classId)) ?? null,
+    [classes, classId]
+  );
 
   useEffect(() => {
     (async () => {
@@ -27,17 +33,34 @@ export default function GenerateTimetableScreen({ accessToken }) {
     })();
   }, [accessToken]);
 
+  useEffect(() => {
+    if (!classId) {
+      setGeneratedEntries([]);
+      return;
+    }
+    loadGeneratedEntries(classId);
+  }, [accessToken, classId]);
+
+  async function loadGeneratedEntries(nextClassId) {
+    try {
+      const data = await apiGet(`/timetables/classes/${nextClassId}`, accessToken);
+      setGeneratedEntries(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setGeneratedEntries([]);
+    }
+  }
+
   async function deleteTimetable() {
     if (!classId) return;
-    const selected = classes.find((c) => String(c.id) === classId);
-    const confirmed = window.confirm(`Esti sigur ca vrei sa stergi orarul pentru clasa selectata? ${classLabel(selected)}`);
+    const confirmed = window.confirm(`Esti sigur ca vrei sa stergi orarul pentru clasa selectata? ${classLabel(selectedClass)}`);
     if (!confirmed) return;
 
     setLoading(true);
     setBanner(null);
     try {
       await apiDelete(`/timetables/classes/${classId}`, accessToken);
-      setBanner({ type: "ok", text: "Orar sters cu succes." });
+      setGeneratedEntries([]);
+      setBanner({ type: "ok", text: "Orarul a fost sters. Clasa nu mai are intrari pana la o noua generare." });
     } catch (e) {
       setBanner({ type: "error", text: String(e.message || e) });
     } finally {
@@ -53,7 +76,8 @@ export default function GenerateTimetableScreen({ accessToken }) {
       const resp = await apiPost("/timetables/generate", { class_id: Number(classId) }, accessToken);
       const ids = resp?.job_ids ?? resp?.jobIds ?? [];
       setJobIds(Array.isArray(ids) ? ids : []);
-      setBanner({ type: "ok", text: "Orarul a fost generat pentru clasa selectata." });
+      await loadGeneratedEntries(classId);
+      setBanner({ type: "ok", text: "Orarul a fost generat si este disponibil mai jos pentru verificare." });
     } catch (e) {
       setBanner({ type: "error", text: String(e.message || e) });
     } finally {
@@ -63,8 +87,7 @@ export default function GenerateTimetableScreen({ accessToken }) {
 
   async function deleteAndRegenerate() {
     if (!classId) return;
-    const selected = classes.find((c) => String(c.id) === classId);
-    const confirmed = window.confirm(`Esti sigur ca vrei sa stergi si sa regenerezi orarul pentru ${classLabel(selected)}?`);
+    const confirmed = window.confirm(`Esti sigur ca vrei sa stergi si sa regenerezi orarul pentru ${classLabel(selectedClass)}?`);
     if (!confirmed) return;
 
     setLoading(true);
@@ -74,7 +97,8 @@ export default function GenerateTimetableScreen({ accessToken }) {
       const resp = await apiPost("/timetables/generate", { class_id: Number(classId) }, accessToken);
       const ids = resp?.job_ids ?? resp?.jobIds ?? [];
       setJobIds(Array.isArray(ids) ? ids : []);
-      setBanner({ type: "ok", text: "Orarul a fost regenerat pentru clasa selectata." });
+      await loadGeneratedEntries(classId);
+      setBanner({ type: "ok", text: "Orarul a fost regenerat si actualizat." });
     } catch (e) {
       setBanner({ type: "error", text: String(e.message || e) });
     } finally {
@@ -87,7 +111,7 @@ export default function GenerateTimetableScreen({ accessToken }) {
       <div className="contentHeader">
         <div>
           <div className="title">Genereaza orar</div>
-          <div className="subtitle">Creeaza orarul unei clase folosind profilul si profesorii disponibili.</div>
+          <div className="subtitle">Creeaza orarul unei clase folosind profilul, profesorii si salile disponibile.</div>
         </div>
         <div className="headerActions">
           <label className="label">Clasa</label>
@@ -121,6 +145,37 @@ export default function GenerateTimetableScreen({ accessToken }) {
               <li key={id}>{id}</li>
             ))}
           </ul>
+        </div>
+      )}
+
+      <div className="mutedBlock" style={{ marginTop: 16 }}>
+        {selectedClass ? `${classLabel(selectedClass)} are acum ${generatedEntries.length} sloturi generate.` : "Selecteaza o clasa."}
+      </div>
+
+      {generatedEntries.length > 0 && (
+        <div className="tableWrap" style={{ marginTop: 16 }}>
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Zi</th>
+                <th>Slot</th>
+                <th>Materie</th>
+                <th>Profesor</th>
+                <th>Sala</th>
+              </tr>
+            </thead>
+            <tbody>
+              {generatedEntries.slice(0, 8).map((entry) => (
+                <tr key={entry.id}>
+                  <td>{entry.weekday}</td>
+                  <td>{entry.index_in_day}</td>
+                  <td>{entry.subject_name}</td>
+                  <td>{entry.teacher_name}</td>
+                  <td>{entry.room_name}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </section>

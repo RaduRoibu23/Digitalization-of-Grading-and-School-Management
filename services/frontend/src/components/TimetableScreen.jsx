@@ -187,13 +187,17 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
   }, [mode, selectedClassId]);
 
   useEffect(() => {
-    if (mode !== "my") return;
     if (isEditing) return;
 
     const t = setInterval(async () => {
       try {
-        const me = await apiGet("/me", accessToken);
-        const classId = me?.class_id ?? me?.classId ?? me?.class?.id;
+        let classId = null;
+        if (mode === "class") {
+          classId = selectedClassId;
+        } else {
+          const me = await apiGet("/me", accessToken);
+          classId = me?.class_id ?? me?.classId ?? me?.class?.id;
+        }
         if (!classId) return;
 
         const data = await apiGet(`/timetables/classes/${classId}`, accessToken);
@@ -201,7 +205,7 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
         list.sort((a, b) => (a.weekday - b.weekday) || (a.index_in_day - b.index_in_day));
 
         const sig = signature(list);
-        if (lastSig && sig !== lastSig) {
+        if (sig !== lastSig) {
           setEntries(list);
           setOriginal(JSON.parse(JSON.stringify(list)));
           setLastSig(sig);
@@ -212,7 +216,7 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
     }, POLL_MS);
 
     return () => clearInterval(t);
-  }, [mode, isEditing, accessToken, lastSig]);
+  }, [mode, isEditing, accessToken, lastSig, selectedClassId]);
 
   function updateEntryLocal(entryId, patch) {
     setEntries((prev) => prev.map((e) => (e.id === entryId ? { ...e, ...patch } : e)));
@@ -605,4 +609,5 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
     </section>
   );
 }
+
 
