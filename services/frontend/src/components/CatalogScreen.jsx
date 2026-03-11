@@ -15,6 +15,11 @@ function formatDate(value) {
   return `${parts[2]}.${parts[1]}.${parts[0]}`;
 }
 
+function formatAverage(value) {
+  if (value === null || value === undefined) return "";
+  return Number(value).toFixed(2);
+}
+
 function gradeTone(value) {
   if (value >= 9) return "gradeBadge excellent";
   if (value >= 7) return "gradeBadge good";
@@ -94,14 +99,19 @@ export default function CatalogScreen({ accessToken, roles }) {
   function applyCatalog(data) {
     const nextCatalog = data && typeof data === "object" ? data : null;
     setCatalog(nextCatalog);
-    const gradeRows = Array.isArray(nextCatalog?.grades) ? nextCatalog.grades : [];
-    setDrafts(Object.fromEntries(
-      gradeRows.map((row) => [row.id, {
-        grade_value: row.grade_value,
-        grade_date: row.grade_date,
-        version: row.version,
-      }])
-    ));
+    const rows = Array.isArray(nextCatalog?.subjects) ? nextCatalog.subjects : [];
+    const nextDrafts = {};
+    rows.forEach((row) => {
+      const grades = Array.isArray(row.grades) ? row.grades : [];
+      grades.forEach((grade) => {
+        nextDrafts[grade.id] = {
+          grade_value: grade.grade_value,
+          grade_date: grade.grade_date,
+          version: grade.version,
+        };
+      });
+    });
+    setDrafts(nextDrafts);
   }
 
   function updateDraft(gradeId, field, value) {
@@ -114,26 +124,23 @@ export default function CatalogScreen({ accessToken, roles }) {
     }));
   }
 
-  async function saveGrade(row) {
-    const draft = drafts[row.id];
+  async function reloadCurrentCatalog() {
+    if (canBrowseStudents) {
+      await loadStudentCatalog(selectedStudent);
+      return;
+    }
+    await loadMyCatalog();
+  }
+
+  async function saveGrade(grade) {
+    const draft = drafts[grade.id];
     if (!draft) return;
 
-    setSavingId(row.id);
+    setSavingId(grade.id);
     setBanner(null);
     try {
-      const updated = await apiPatch(`/catalog/grades/${row.id}`, draft, accessToken);
-      setCatalog((current) => ({
-        ...current,
-        grades: current.grades.map((grade) => (grade.id === row.id ? updated : grade)),
-      }));
-      setDrafts((current) => ({
-        ...current,
-        [row.id]: {
-          grade_value: updated.grade_value,
-          grade_date: updated.grade_date,
-          version: updated.version,
-        },
-      }));
+      await apiPatch(`/catalog/grades/${grade.id}`, draft, accessToken);
+      await reloadCurrentCatalog();
       setBanner({ type: "ok", text: "Nota a fost actualizata." });
     } catch (error) {
       setBanner({ type: "error", text: String(error?.message || error) });
@@ -143,17 +150,14 @@ export default function CatalogScreen({ accessToken, roles }) {
   }
 
   const student = catalog?.student || null;
-  const grades = Array.isArray(catalog?.grades) ? catalog.grades : [];
-  const average = grades.length > 0
-    ? (grades.reduce((sum, row) => sum + Number(row.grade_value || 0), 0) / grades.length).toFixed(2)
-    : null;
+  const subjects = Array.isArray(catalog?.subjects) ? catalog.subjects : [];
 
   return (
     <section className="contentCard">
       <div className="contentHeader">
         <div>
           <div className="title">Catalog</div>
-          <div className="subtitle">Notele elevului selectat, cu editare controlata pe rol si materie.</div>
+          <div className="subtitle">Media se afiseaza doar daca exista minim numarul de note cerut pentru materia respectiva.</div>
         </div>
         <div className="headerActions">
           {canBrowseStudents && (
@@ -175,7 +179,7 @@ export default function CatalogScreen({ accessToken, roles }) {
           )}
           <button
             className="btn"
-            onClick={() => (canBrowseStudents ? loadStudentCatalog(selectedStudent) : loadMyCatalog())}
+            onClick={reloadCurrentCatalog}
             disabled={loading || (canBrowseStudents && !selectedStudent)}
           >
             Refresh
@@ -193,9 +197,6 @@ export default function CatalogScreen({ accessToken, roles }) {
           <div className="statPill">
             <strong>Clasa:</strong> {student.class_name || "-"}
           </div>
-          <div className="statPill">
-            <strong>Medie note:</strong> {average || "-"}
-          </div>
         </div>
       )}
 
@@ -203,66 +204,84 @@ export default function CatalogScreen({ accessToken, roles }) {
         <div className="mutedBlock">Loading...</div>
       ) : !student ? (
         <div className="mutedBlock">Nu exista date pentru catalog.</div>
-      ) : grades.length === 0 ? (
-        <div className="mutedBlock">Nu exista note pentru elevul selectat.</div>
+      ) : subjects.length === 0 ? (
+        <div className="mutedBlock">Nu exista materii pentru elevul selectat.</div>
       ) : (
         <div className="tableWrap">
           <table className="tbl">
             <thead>
               <tr>
                 <th>Materie</th>
-                <th>Nota</th>
-                <th>Data</th>
+                <th>Medie</th>
+                <th>Nota si data</th>
                 <th>Profesor</th>
-                <th>Actiuni</th>
               </tr>
             </thead>
             <tbody>
-              {grades.map((row) => {
-                const draft = drafts[row.id] || {
-                  grade_value: row.grade_value,
-                  grade_date: row.grade_date,
-                  version: row.version,
-                };
-
+              {subjects.map((row) => {
+                const grades = Array.isArray(row.grades) ? row.grades : [];
+                const teachers = Array.isArray(row.teacher_names) ? row.teacher_names : [];
                 return (
-                  <tr key={row.id}>
+                  <tr key={row.subject_name}>
                     <td>
                       <div className="cellTitle">{row.subject_name}</div>
+                      <div className="catalogHint">{row.weekly_hours} ore/saptamana</div>
                     </td>
                     <td>
-                      <span className={gradeTone(Number(row.grade_value || 0))}>{row.grade_value}</span>
+                      <div className="averageCell">{formatAverage(row.average)}</div>
+                      <div className="catalogHint">minim {row.minimum_grades_for_average} note</div>
                     </td>
-                    <td>{formatDate(row.grade_date)}</td>
-                    <td>{row.teacher_name || "-"}</td>
                     <td>
-                      {row.editable ? (
-                        <div className="catalogEditor">
-                          <input
-                            className="input small"
-                            type="number"
-                            min="1"
-                            max="10"
-                            value={draft.grade_value}
-                            onChange={(event) => updateDraft(row.id, "grade_value", event.target.value)}
-                          />
-                          <input
-                            className="input small"
-                            type="date"
-                            value={draft.grade_date}
-                            onChange={(event) => updateDraft(row.id, "grade_date", event.target.value)}
-                          />
-                          <button
-                            className="btn primary"
-                            onClick={() => saveGrade(row)}
-                            disabled={savingId === row.id || !draft.grade_date || !draft.grade_value}
-                          >
-                            Save
-                          </button>
-                        </div>
+                      {grades.length === 0 ? (
+                        <span className="mutedSmall">-</span>
                       ) : (
-                        <span className="mutedSmall">Vizualizare</span>
+                        <div className="catalogGradeList">
+                          {grades.map((grade) => {
+                            const draft = drafts[grade.id] || {
+                              grade_value: grade.grade_value,
+                              grade_date: grade.grade_date,
+                              version: grade.version,
+                            };
+                            return (
+                              <div key={grade.id} className="catalogGradeItem">
+                                {grade.editable ? (
+                                  <div className="catalogEditor">
+                                    <input
+                                      className="input small"
+                                      type="number"
+                                      min="1"
+                                      max="10"
+                                      value={draft.grade_value}
+                                      onChange={(event) => updateDraft(grade.id, "grade_value", event.target.value)}
+                                    />
+                                    <input
+                                      className="input small"
+                                      type="date"
+                                      value={draft.grade_date}
+                                      onChange={(event) => updateDraft(grade.id, "grade_date", event.target.value)}
+                                    />
+                                    <button
+                                      className="btn primary"
+                                      onClick={() => saveGrade(grade)}
+                                      disabled={savingId === grade.id || !draft.grade_date || !draft.grade_value}
+                                    >
+                                      Save
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="catalogPair">
+                                    <span className={gradeTone(Number(grade.grade_value || 0))}>{grade.grade_value}</span>
+                                    <span className="catalogDate">{formatDate(grade.grade_date)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
+                    </td>
+                    <td>
+                      {teachers.length > 0 ? teachers.join(", ") : "-"}
                     </td>
                   </tr>
                 );

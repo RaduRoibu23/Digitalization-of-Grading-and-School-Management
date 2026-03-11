@@ -25,11 +25,13 @@ import java.util.stream.Collectors;
 public class CatalogService {
 
     private final SchoolDataService schoolDataService;
+    private final CurriculumPlanService curriculumPlanService;
     private final Map<String, List<StudentGrade>> gradesByStudentUsername = new LinkedHashMap<>();
     private final AtomicLong gradeIds = new AtomicLong(9000);
 
-    public CatalogService(SchoolDataService schoolDataService) {
+    public CatalogService(SchoolDataService schoolDataService, CurriculumPlanService curriculumPlanService) {
         this.schoolDataService = schoolDataService;
+        this.curriculumPlanService = curriculumPlanService;
     }
 
     @PostConstruct
@@ -121,15 +123,41 @@ public class CatalogService {
     }
 
     private Map<String, Object> buildCatalogResponse(UserProfile student, String requesterUsername, List<String> roles) {
-        List<Map<String, Object>> grades = gradesByStudentUsername.getOrDefault(student.username(), List.of()).stream()
-                .filter(grade -> canViewGrade(requesterUsername, roles, grade))
-                .sorted(Comparator.comparing(StudentGrade::subjectName).thenComparing(StudentGrade::gradeDate, Comparator.reverseOrder()))
-                .map(grade -> gradeResponse(grade, requesterUsername, roles))
-                .toList();
+        SchoolClass schoolClass = schoolDataService.getClassById(student.classId());
+        LinkedHashMap<String, Integer> weeklyHours = curriculumPlanService.hoursForClass(schoolClass.name(), schoolClass.profile());
+        LinkedHashMap<String, List<StudentGrade>> gradesBySubject = new LinkedHashMap<>();
+
+        for (StudentGrade grade : gradesByStudentUsername.getOrDefault(student.username(), List.of())) {
+            if (!canViewGrade(requesterUsername, roles, grade)) {
+                continue;
+            }
+            gradesBySubject.computeIfAbsent(grade.subjectName(), ignored -> new ArrayList<>()).add(grade);
+        }
+
+        List<Map<String, Object>> subjectRows = new ArrayList<>();
+        for (Map.Entry<String, Integer> planEntry : weeklyHours.entrySet()) {
+            String subjectName = planEntry.getKey();
+            List<StudentGrade> subjectGrades = gradesBySubject.getOrDefault(subjectName, List.of()).stream()
+                    .sorted(Comparator.comparing(StudentGrade::gradeDate, Comparator.reverseOrder()).thenComparing(StudentGrade::id, Comparator.reverseOrder()))
+                    .toList();
+            int minimumGrades = planEntry.getValue() + 1;
+            Double average = subjectGrades.size() >= minimumGrades
+                    ? subjectGrades.stream().mapToInt(StudentGrade::gradeValue).average().orElse(0)
+                    : null;
+
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("subject_name", subjectName);
+            row.put("weekly_hours", planEntry.getValue());
+            row.put("minimum_grades_for_average", minimumGrades);
+            row.put("average", average == null ? null : Math.round(average * 100.0) / 100.0);
+            row.put("teacher_names", subjectGrades.stream().map(StudentGrade::teacherName).distinct().toList());
+            row.put("grades", subjectGrades.stream().map(grade -> gradeResponse(grade, requesterUsername, roles)).toList());
+            subjectRows.add(row);
+        }
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("student", profileResponse(student));
-        response.put("grades", grades);
+        response.put("subjects", subjectRows);
         response.put("can_edit", hasRole(roles, "secretariat") || hasRole(roles, "professor"));
         return response;
     }
@@ -270,23 +298,30 @@ public class CatalogService {
     }
 
     private List<StudentGrade> buildGradesForStudent(UserProfile student) {
-        List<TimetableEntry> timetable = schoolDataService.getTimetableForClass(student.classId());
-        LinkedHashMap<Long, TimetableEntry> subjectsForClass = new LinkedHashMap<>();
-        for (TimetableEntry entry : timetable) {
-            subjectsForClass.putIfAbsent(entry.subjectId(), entry);
+        SchoolClass schoolClass = schoolDataService.getClassById(student.classId());
+        LinkedHashMap<String, Integer> weeklyHours = curriculumPlanService.hoursForClass(schoolClass.name(), schoolClass.profile());
+        Map<String, TimetableEntry> firstEntryBySubject = new LinkedHashMap<>();
+        for (TimetableEntry entry : schoolDataService.getTimetableForClass(student.classId())) {
+            firstEntryBySubject.putIfAbsent(entry.subjectName(), entry);
         }
 
         List<StudentGrade> grades = new ArrayList<>();
         int subjectIndex = 0;
-        for (TimetableEntry subjectEntry : subjectsForClass.values()) {
-            int gradeCount = subjectIndex < 4 ? 2 : 1;
-            for (int occurrence = 0; occurrence < gradeCount; occurrence++) {
+        for (Map.Entry<String, Integer> planEntry : weeklyHours.entrySet()) {
+            TimetableEntry subjectEntry = firstEntryBySubject.get(planEntry.getKey());
+            if (subjectEntry == null) {
+                subjectIndex++;
+                continue;
+            }
+            int weekly = planEntry.getValue();
+            int noteCount = Math.max(1, weekly + (subjectIndex % 2 == 0 ? 1 : 0));
+            for (int occurrence = 0; occurrence < noteCount; occurrence++) {
                 int seed = Math.floorMod(Objects.hash(student.username(), subjectEntry.subjectId(), occurrence), 10_000);
                 int gradeValue = 5 + (seed % 6);
                 LocalDate gradeDate = LocalDate.of(2025, 9, 15)
-                        .plusDays(seed % 90L)
-                        .plusDays(subjectIndex * 4L)
-                        .plusDays(occurrence * 11L);
+                        .plusDays(seed % 75L)
+                        .plusDays(subjectIndex * 5L)
+                        .plusDays(occurrence * 13L);
 
                 grades.add(new StudentGrade(
                         gradeIds.incrementAndGet(),

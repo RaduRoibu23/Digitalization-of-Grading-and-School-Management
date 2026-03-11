@@ -51,6 +51,7 @@ public class SchoolDataService {
             "Oprea", "Tudor", "Florea", "Apostol", "Dobre", "Tudose", "Matei", "Mocanu", "Avram", "Rosu"
     };
 
+    private final CurriculumPlanService curriculumPlanService;
     private final Map<Long, SchoolClass> classes = new LinkedHashMap<>();
     private final Map<Long, Subject> subjects = new LinkedHashMap<>();
     private final Map<Long, Room> rooms = new LinkedHashMap<>();
@@ -61,6 +62,10 @@ public class SchoolDataService {
     private final AtomicLong entryIds = new AtomicLong(1000);
     private final AtomicLong profileIds = new AtomicLong(1);
     private final AtomicLong jobIds = new AtomicLong(5000);
+
+    public SchoolDataService(CurriculumPlanService curriculumPlanService) {
+        this.curriculumPlanService = curriculumPlanService;
+    }
 
     @PostConstruct
     void init() {
@@ -89,6 +94,15 @@ public class SchoolDataService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User profile not found");
         }
         return profile;
+    }
+
+    public SchoolClass getClassById(Long classId) {
+        return requireClass(classId);
+    }
+
+    public int weeklyHoursForSubject(Long classId, String subjectName) {
+        SchoolClass schoolClass = requireClass(classId);
+        return curriculumPlanService.weeklyHoursForSubject(schoolClass.name(), schoolClass.profile(), subjectName);
     }
 
     public List<Map<String, Object>> getProfilesByRole(String role) {
@@ -209,7 +223,7 @@ public class SchoolDataService {
     }
 
     private List<TimetableEntry> buildGeneratedTimetable(SchoolClass schoolClass) {
-        List<Long> subjectSequence = buildSubjectSequence(schoolClass.profile());
+        List<Long> subjectSequence = buildSubjectSequence(schoolClass);
         List<TimetableEntry> entries = new ArrayList<>();
         int slotsPerDay = 7;
 
@@ -239,8 +253,8 @@ public class SchoolDataService {
         return entries;
     }
 
-    private List<Long> buildSubjectSequence(String profile) {
-        LinkedHashMap<Long, Integer> plan = curriculumForProfile(profile);
+    private List<Long> buildSubjectSequence(SchoolClass schoolClass) {
+        LinkedHashMap<Long, Integer> plan = curriculumForClass(schoolClass);
         List<Long> sequence = new ArrayList<>();
         int remaining = plan.values().stream().mapToInt(Integer::intValue).sum();
         int pass = 0;
@@ -261,56 +275,21 @@ public class SchoolDataService {
         return sequence;
     }
 
-    private boolean isHeavySubject(Long subjectId) {
-        String subject = requireSubject(subjectId).name();
-        return List.of("Matematica", "Informatica", "Fizica", "Chimie").contains(subject);
+    private LinkedHashMap<Long, Integer> curriculumForClass(SchoolClass schoolClass) {
+        LinkedHashMap<String, Integer> plan = curriculumPlanService.hoursForClass(schoolClass.name(), schoolClass.profile());
+        LinkedHashMap<Long, Integer> mapped = new LinkedHashMap<>();
+        for (Map.Entry<String, Integer> entry : plan.entrySet()) {
+            Long subjectId = subjectIdsByName.get(entry.getKey());
+            if (subjectId != null && entry.getValue() > 0) {
+                mapped.put(subjectId, entry.getValue());
+            }
+        }
+        return mapped;
     }
 
-    private LinkedHashMap<Long, Integer> curriculumForProfile(String profile) {
-        LinkedHashMap<Long, Integer> plan = new LinkedHashMap<>();
-        if ("Filologie".equals(profile)) {
-            plan.put(subjectIdsByName.get("Limba si literatura romana"), 5);
-            plan.put(subjectIdsByName.get("Limba engleza"), 4);
-            plan.put(subjectIdsByName.get("Istorie"), 3);
-            plan.put(subjectIdsByName.get("Geografie"), 3);
-            plan.put(subjectIdsByName.get("Matematica"), 3);
-            plan.put(subjectIdsByName.get("Biologie"), 2);
-            plan.put(subjectIdsByName.get("Chimie"), 2);
-            plan.put(subjectIdsByName.get("Fizica"), 2);
-            plan.put(subjectIdsByName.get("Educatie fizica"), 2);
-            plan.put(subjectIdsByName.get("Limba franceza"), 2);
-            plan.put(subjectIdsByName.get("Limba latina"), 2);
-            plan.put(subjectIdsByName.get("Informatica"), 1);
-            plan.put(subjectIdsByName.get("Logica si argumentare"), 1);
-            return plan;
-        }
-        if ("Matematica-Informatica Intensiv".equals(profile)) {
-            plan.put(subjectIdsByName.get("Matematica"), 5);
-            plan.put(subjectIdsByName.get("Informatica"), 6);
-            plan.put(subjectIdsByName.get("Limba si literatura romana"), 4);
-            plan.put(subjectIdsByName.get("Limba engleza"), 3);
-            plan.put(subjectIdsByName.get("Fizica"), 3);
-            plan.put(subjectIdsByName.get("Chimie"), 2);
-            plan.put(subjectIdsByName.get("Biologie"), 1);
-            plan.put(subjectIdsByName.get("Istorie"), 1);
-            plan.put(subjectIdsByName.get("Geografie"), 1);
-            plan.put(subjectIdsByName.get("Educatie fizica"), 2);
-            plan.put(subjectIdsByName.get("Limba franceza"), 1);
-            return plan;
-        }
-        plan.put(subjectIdsByName.get("Matematica"), 5);
-        plan.put(subjectIdsByName.get("Informatica"), 4);
-        plan.put(subjectIdsByName.get("Limba si literatura romana"), 4);
-        plan.put(subjectIdsByName.get("Limba engleza"), 3);
-        plan.put(subjectIdsByName.get("Fizica"), 3);
-        plan.put(subjectIdsByName.get("Biologie"), 2);
-        plan.put(subjectIdsByName.get("Chimie"), 2);
-        plan.put(subjectIdsByName.get("Istorie"), 1);
-        plan.put(subjectIdsByName.get("Geografie"), 1);
-        plan.put(subjectIdsByName.get("Educatie fizica"), 2);
-        plan.put(subjectIdsByName.get("Limba franceza"), 1);
-        plan.put(subjectIdsByName.get("Logica si argumentare"), 1);
-        return plan;
+    private boolean isHeavySubject(Long subjectId) {
+        String subject = requireSubject(subjectId).name();
+        return List.of("Matematica", "Informatica", "Informatica intensiv", "Fizica", "Chimie").contains(subject);
     }
 
     private Room roomForSubject(String subjectName, String profile, int slotIndex) {
@@ -323,13 +302,16 @@ public class SchoolDataService {
         if ("Fizica".equals(subjectName)) {
             return requireRoom(7L);
         }
-        if ("Biologie".equals(subjectName)) {
+        if ("Biologie".equals(subjectName) || "Stiinte".equals(subjectName)) {
             return requireRoom(9L);
         }
-        if ("Informatica".equals(subjectName)) {
+        if (List.of("Informatica", "Informatica intensiv", "TIC").contains(subjectName)) {
             return "Matematica-Informatica Intensiv".equals(profile) ? requireRoom(5L) : requireRoom(4L);
         }
-        if ("Limba si literatura romana".equals(subjectName) || "Istorie".equals(subjectName) || "Geografie".equals(subjectName)) {
+        if (List.of("Limba engleza", "Limba franceza").contains(subjectName)) {
+            return requireRoom(6L);
+        }
+        if (List.of("Limba si literatura romana", "Istorie", "Geografie", "Socio-umane", "Literatura universala", "Religie").contains(subjectName)) {
             return requireRoom(1L + (slotIndex % 3));
         }
         return requireRoom(2L + (slotIndex % 4));
@@ -396,19 +378,10 @@ public class SchoolDataService {
     }
 
     private void seedSubjects() {
-        addSubject(1L, "Limba si literatura romana");
-        addSubject(2L, "Matematica");
-        addSubject(3L, "Informatica");
-        addSubject(4L, "Limba engleza");
-        addSubject(5L, "Istorie");
-        addSubject(6L, "Geografie");
-        addSubject(7L, "Biologie");
-        addSubject(8L, "Fizica");
-        addSubject(9L, "Chimie");
-        addSubject(10L, "Educatie fizica");
-        addSubject(11L, "Limba franceza");
-        addSubject(12L, "Limba latina");
-        addSubject(13L, "Logica si argumentare");
+        long subjectId = 1L;
+        for (String subjectName : curriculumPlanService.allSubjects()) {
+            addSubject(subjectId++, subjectName);
+        }
     }
 
     private void addSubject(Long id, String name) {
@@ -445,25 +418,35 @@ public class SchoolDataService {
                 new TeacherSeed("info01", "Roxana", "Ionescu", "Informatica"),
                 new TeacherSeed("info02", "Adrian", "Dobre", "Informatica"),
                 new TeacherSeed("info03", "Silviu", "Marin", "Informatica"),
+                new TeacherSeed("infoint01", "Alexandru", "Balan", "Informatica intensiv"),
+                new TeacherSeed("infoint02", "Diana", "Dragoi", "Informatica intensiv"),
                 new TeacherSeed("engleza01", "Paula", "Dragomir", "Limba engleza"),
                 new TeacherSeed("engleza02", "Mirela", "Stan", "Limba engleza"),
                 new TeacherSeed("engleza03", "Anca", "Lazar", "Limba engleza"),
-                new TeacherSeed("istorie01", "Daniel", "Barbu", "Istorie"),
-                new TeacherSeed("istorie02", "Oana", "Munteanu", "Istorie"),
-                new TeacherSeed("geografie01", "Florin", "Serban", "Geografie"),
-                new TeacherSeed("geografie02", "Raluca", "Ene", "Geografie"),
-                new TeacherSeed("biologie01", "Monica", "Avram", "Biologie"),
-                new TeacherSeed("biologie02", "Cristina", "Matei", "Biologie"),
+                new TeacherSeed("franceza01", "Cecilia", "Petrescu", "Limba franceza"),
+                new TeacherSeed("franceza02", "Daniela", "Apostol", "Limba franceza"),
+                new TeacherSeed("latina01", "Adela", "Toma", "Limba latina"),
                 new TeacherSeed("fizica01", "Dorin", "Coman", "Fizica"),
                 new TeacherSeed("fizica02", "Alexandru", "Neagu", "Fizica"),
                 new TeacherSeed("chimie01", "Camelia", "Popescu", "Chimie"),
                 new TeacherSeed("chimie02", "Simona", "Florea", "Chimie"),
+                new TeacherSeed("biologie01", "Monica", "Avram", "Biologie"),
+                new TeacherSeed("biologie02", "Cristina", "Matei", "Biologie"),
+                new TeacherSeed("istorie01", "Daniel", "Barbu", "Istorie"),
+                new TeacherSeed("istorie02", "Oana", "Munteanu", "Istorie"),
+                new TeacherSeed("geografie01", "Florin", "Serban", "Geografie"),
+                new TeacherSeed("geografie02", "Raluca", "Ene", "Geografie"),
+                new TeacherSeed("socioumane01", "Sabina", "Ilie", "Socio-umane"),
+                new TeacherSeed("socioumane02", "Mircea", "Sandu", "Socio-umane"),
+                new TeacherSeed("religie01", "Gabriel", "Pavel", "Religie"),
+                new TeacherSeed("arte01", "Otilia", "Rusu", "Educatie artistica"),
+                new TeacherSeed("tic01", "Bianca", "Manea", "TIC"),
+                new TeacherSeed("tic02", "Marian", "Ene", "TIC"),
+                new TeacherSeed("antreprenoriala01", "Ioan", "Sava", "Educatie antreprenoriala"),
+                new TeacherSeed("literatura01", "Emilia", "Iordache", "Literatura universala"),
+                new TeacherSeed("stiinte01", "Violeta", "Petcu", "Stiinte"),
                 new TeacherSeed("sport01", "Lucian", "Radu", "Educatie fizica"),
-                new TeacherSeed("sport02", "Carmen", "Pavel", "Educatie fizica"),
-                new TeacherSeed("franceza01", "Cecilia", "Petrescu", "Limba franceza"),
-                new TeacherSeed("franceza02", "Daniela", "Apostol", "Limba franceza"),
-                new TeacherSeed("latina01", "Adela", "Toma", "Limba latina"),
-                new TeacherSeed("logica01", "Sorin", "Georgescu", "Logica si argumentare")
+                new TeacherSeed("sport02", "Carmen", "Pavel", "Educatie fizica")
         );
 
         for (TeacherSeed teacherSeed : teacherSeeds) {
