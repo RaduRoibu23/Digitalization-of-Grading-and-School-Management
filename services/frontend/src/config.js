@@ -13,7 +13,7 @@ export const CONFIG = {
     storageKey: 'timetable_auth'
   },
 
-  demoUsers: [
+  quickUsers: [
     { label: 'Sysadmin', username: 'sysadmin01', password: 'sysadmin01' },
     { label: 'Admin', username: 'admin01', password: 'admin01' },
     { label: 'Secretariat', username: 'secretariat01', password: 'secretariat01' },
@@ -22,3 +22,4 @@ export const CONFIG = {
     { label: 'Scheduler', username: 'scheduler01', password: 'scheduler01' },
   ]
 };
+

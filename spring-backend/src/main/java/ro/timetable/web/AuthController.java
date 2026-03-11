@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
-import ro.timetable.service.DemoSchoolService;
+import ro.timetable.service.SchoolDataService;
 
 import java.util.List;
 import java.util.Map;
@@ -27,12 +27,14 @@ import java.util.Map;
 @RequestMapping("/api")
 public class AuthController {
 
-    private final RestTemplate restTemplate;
-    private final DemoSchoolService demoSchoolService;
+    private static final List<String> APP_ROLES = List.of("student", "professor", "secretariat", "scheduler", "admin", "sysadmin");
 
-    public AuthController(RestTemplate restTemplate, DemoSchoolService demoSchoolService) {
+    private final RestTemplate restTemplate;
+    private final SchoolDataService schoolDataService;
+
+    public AuthController(RestTemplate restTemplate, SchoolDataService schoolDataService) {
         this.restTemplate = restTemplate;
-        this.demoSchoolService = demoSchoolService;
+        this.schoolDataService = schoolDataService;
     }
 
     @Value("${keycloak.token-url}")
@@ -53,12 +55,15 @@ public class AuthController {
         if (realmAccess instanceof Map<?, ?> realmAccessMap) {
             Object roleValues = realmAccessMap.get("roles");
             if (roleValues instanceof List<?> roleList) {
-                roles = roleList.stream().map(String::valueOf).toList();
+                roles = roleList.stream()
+                        .map(String::valueOf)
+                        .filter(APP_ROLES::contains)
+                        .toList();
             }
         }
 
         String username = (String) authentication.getToken().getClaims().getOrDefault("preferred_username", authentication.getName());
-        return demoSchoolService.meResponse(username, roles, authentication.getToken().getClaims());
+        return schoolDataService.meResponse(username, roles, authentication.getToken().getClaims());
     }
 
     public record LoginRequest(
@@ -112,3 +117,4 @@ public class AuthController {
         }
     }
 }
+

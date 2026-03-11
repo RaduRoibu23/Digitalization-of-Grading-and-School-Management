@@ -21,10 +21,14 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 @Service
-public class DemoSchoolService {
+public class SchoolDataService {
 
     private static final int CLASS_COUNT = 10;
     private static final int STUDENTS_PER_CLASS = 20;
+    private static final String[] CLASS_NAMES = {
+            "IX A", "IX B", "IX C", "X A", "X B",
+            "X C", "XI A", "XI B", "XII A", "XII B"
+    };
     private static final String[] FIRST_NAMES = {
             "Andrei", "Maria", "Vlad", "Elena", "Alex", "Ioana", "Mihai", "Daria", "Stefan", "Bianca",
             "David", "Teodora", "Rares", "Ana", "Matei", "Gabriela", "Paul", "Ilinca", "Robert", "Larisa",
@@ -78,7 +82,10 @@ public class DemoSchoolService {
     public List<Map<String, Object>> getProfilesByRole(String role) {
         return profilesByUsername.values().stream()
                 .filter(profile -> role == null || role.isBlank() || role.equalsIgnoreCase(profile.role()))
-                .sorted(Comparator.comparing(UserProfile::lastName).thenComparing(UserProfile::firstName).thenComparing(UserProfile::username))
+                .sorted(Comparator.comparing(UserProfile::className, Comparator.nullsLast(String::compareTo))
+                        .thenComparing(UserProfile::lastName)
+                        .thenComparing(UserProfile::firstName)
+                        .thenComparing(UserProfile::username))
                 .map(this::profileResponse)
                 .collect(Collectors.toList());
     }
@@ -268,7 +275,7 @@ public class DemoSchoolService {
     private void seedClasses() {
         for (int index = 0; index < CLASS_COUNT; index++) {
             long classId = index + 1L;
-            classes.put(classId, new SchoolClass(classId, "Grupa " + (131 + index)));
+            classes.put(classId, new SchoolClass(classId, CLASS_NAMES[index]));
         }
     }
 
@@ -321,3 +328,4 @@ public class DemoSchoolService {
         }
     }
 }
+

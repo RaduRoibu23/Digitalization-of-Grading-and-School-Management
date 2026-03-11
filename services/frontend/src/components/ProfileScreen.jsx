@@ -40,7 +40,6 @@ export default function ProfileScreen({ accessToken, roles }) {
     })();
   }, [accessToken]);
 
-  // valori generale (merg pentru oricine)
   const username = pickFirst(
     tokenInfo?.preferred_username,
     tokenInfo?.username,
@@ -65,19 +64,18 @@ export default function ProfileScreen({ accessToken, roles }) {
 
   const email = pickFirst(tokenInfo?.email, me?.email);
 
-  // clasa poate exista doar pentru student/profesor; pentru admin/sysadmin va fi —
   const classId = me?.class_id ?? me?.classId ?? me?.class?.id ?? null;
   const className = me?.class_name ?? me?.className ?? me?.class?.name ?? me?.class?.class_name ?? "";
   const classText = className || (classId ? `Clasa ${classId}` : "—");
 
-  // materii predate (pentru profesori)
   const subjectsTaught = me?.subjects_taught ?? me?.subjectsTaught ?? [];
   const subjectsText = Array.isArray(subjectsTaught) && subjectsTaught.length > 0
     ? subjectsTaught.join(", ")
     : "—";
 
-  // extra demo: sub (id), issuer, etc.
   const subject = pickFirst(tokenInfo?.sub, me?.id, me?.user_id);
+  const displayRoles = Array.isArray(roles) ? roles.filter(Boolean) : [];
+  const roleText = displayRoles.length > 0 ? displayRoles.join(", ") : pickFirst(me?.role, "—");
 
   return (
     <section className="contentCard">
@@ -99,18 +97,13 @@ export default function ProfileScreen({ accessToken, roles }) {
             <div><strong>Nume:</strong> {lastName}</div>
             <div><strong>Prenume:</strong> {firstName}</div>
             <div><strong>Email:</strong> {email}</div>
-
-            <div><strong>Clasă:</strong> {classText}</div>
+            <div><strong>Clasa:</strong> {classText}</div>
 
             {subjectsTaught.length > 0 && (
               <div><strong>Materii predate:</strong> {subjectsText}</div>
             )}
 
-            <div>
-              <strong>Roluri:</strong>{" "}
-              {Array.isArray(roles) && roles.length ? roles.join(", ") : "—"}
-            </div>
-
+            <div><strong>Rol:</strong> {roleText}</div>
             <div><strong>User ID (sub):</strong> {subject}</div>
           </div>
         </div>

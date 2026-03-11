@@ -5,6 +5,7 @@ const API_BASE = CONFIG.api.baseUrl;
 const KEYCLOAK_URL = CONFIG.keycloak.url;
 const REALM = CONFIG.keycloak.realm;
 const CLIENT_ID = CONFIG.keycloak.clientId;
+const APP_ROLES = ['student', 'professor', 'secretariat', 'scheduler', 'admin', 'sysadmin'];
 
 export function decodeJwt(token) {
   try {
@@ -51,7 +52,7 @@ export function rolesFromToken(accessToken) {
   const tk = accessToken ? decodeJwt(accessToken) : null;
   const roles =
       tk && tk.realm_access && Array.isArray(tk.realm_access.roles)
-          ? tk.realm_access.roles
+          ? tk.realm_access.roles.filter((role) => APP_ROLES.includes(role))
           : [];
   return roles;
 }
@@ -79,7 +80,7 @@ export async function login(username, password) {
 
   if (!response.ok) {
     const message =
-        (data && (data.error_description || data.error || data.message)) ||
+        (data && (data.error_description || data.error || data.message || data.detail)) ||
         'Login failed';
     throw new Error(message);
   }
@@ -114,7 +115,7 @@ export async function refreshAccessToken(refreshToken) {
 
   if (!response.ok) {
     throw new Error(
-        (data && (data.error_description || data.error || data.message)) ||
+        (data && (data.error_description || data.error || data.message || data.detail)) ||
         'Token refresh failed'
     );
   }

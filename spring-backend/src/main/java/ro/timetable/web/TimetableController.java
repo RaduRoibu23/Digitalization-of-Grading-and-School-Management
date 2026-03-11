@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import ro.timetable.model.TimetableEntry;
 import ro.timetable.model.TimetableGenerationRequest;
-import ro.timetable.service.DemoSchoolService;
+import ro.timetable.service.SchoolDataService;
 
 import java.util.List;
 import java.util.Map;
@@ -23,10 +23,10 @@ import java.util.Map;
 @RequestMapping("/api/timetables")
 public class TimetableController {
 
-    private final DemoSchoolService demoSchoolService;
+    private final SchoolDataService schoolDataService;
 
-    public TimetableController(DemoSchoolService demoSchoolService) {
-        this.demoSchoolService = demoSchoolService;
+    public TimetableController(SchoolDataService schoolDataService) {
+        this.schoolDataService = schoolDataService;
     }
 
     public record UpdateTimetableEntryRequest(
@@ -38,12 +38,12 @@ public class TimetableController {
 
     @GetMapping("/classes/{classId}")
     public List<TimetableEntry> timetableForClass(@PathVariable Long classId) {
-        return demoSchoolService.getTimetableForClass(classId);
+        return schoolDataService.getTimetableForClass(classId);
     }
 
     @GetMapping("/me/teacher")
     public List<TimetableEntry> timetableForTeacher(org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken authentication) {
-        return demoSchoolService.getTimetableForTeacher(authentication.getName());
+        return schoolDataService.getTimetableForTeacher(authentication.getName());
     }
 
     @PostMapping("/generate")
@@ -51,17 +51,18 @@ public class TimetableController {
         if (request.class_id() == null) {
             throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST, "class_id is required");
         }
-        return demoSchoolService.generateTimetable(request.class_id());
+        return schoolDataService.generateTimetable(request.class_id());
     }
 
     @DeleteMapping("/classes/{classId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long classId) {
-        demoSchoolService.deleteTimetable(classId);
+        schoolDataService.deleteTimetable(classId);
     }
 
     @PatchMapping("/entries/{entryId}")
     public TimetableEntry updateEntry(@PathVariable Long entryId, @Valid @RequestBody UpdateTimetableEntryRequest request) {
-        return demoSchoolService.updateEntry(entryId, request.version(), request.subject_id(), request.room_id());
+        return schoolDataService.updateEntry(entryId, request.version(), request.subject_id(), request.room_id());
     }
 }
+

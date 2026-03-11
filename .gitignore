@@ -2,7 +2,12 @@
 token-*.json
 *_response.json
 
-
+# Local seed / fixture files
+keycloak/realms/
+spring-backend/src/test/
+services/frontend/src/**/*.test.*
+services/frontend/src/**/*.spec.*
+tests/
 
 # IDE
 .vscode/

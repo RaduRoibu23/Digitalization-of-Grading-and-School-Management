@@ -27,7 +27,7 @@ export default function ActionsList({ accessToken, roles, onActionResult }) {
     <div id="role-actions" className="section" style={{ marginTop: '14px' }}>
       <h3>Acțiuni pe rol</h3>
       <p className="hint">
-        Butonelor li se aplică vizibilitate bazată pe rol. Apasă pentru a rula acțiuni demo.
+        Butonelor li se aplică vizibilitate bazată pe rol. Apasă pentru a rula acțiuni disponibile.
       </p>
       <div id="actions-list" style={{ marginTop: '10px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
         {allowedActions.length === 0 ? (
@@ -47,3 +47,4 @@ export default function ActionsList({ accessToken, roles, onActionResult }) {
     </div>
   );
 }
+

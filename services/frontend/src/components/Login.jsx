@@ -26,10 +26,9 @@ export default function Login({ onLogin }) {
     await doLogin(username, password);
   };
 
-  const demoUsers = CONFIG.demoUsers || [];
+  const quickUsers = CONFIG.quickUsers || [];
 
   const loginPreset = async (u) => {
-    // Set username/password in UI to show logged in user
     setUsername(u.username);
     setPassword(u.password);
     await doLogin(u.username, u.password);
@@ -76,7 +75,7 @@ export default function Login({ onLogin }) {
           </button>
 
           <div className="quickLoginGrid">
-            {demoUsers.map((u) => (
+            {quickUsers.map((u) => (
               <button
                 key={u.label}
                 className="btn btnSmall"
@@ -100,3 +99,5 @@ export default function Login({ onLogin }) {
     </div>
   );
 }
+
+
