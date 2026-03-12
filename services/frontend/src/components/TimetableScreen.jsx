@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPatch, apiDelete } from "../services/apiService";
+import ConfirmDialog from "./ConfirmDialog";
 
 const WEEKDAY = ["Luni", "Marti", "Miercuri", "Joi", "Vineri"];
 const TIME_LABELS = {
@@ -59,6 +60,7 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
   const [isEditing, setIsEditing] = useState(false);
   const [needsRefresh, setNeedsRefresh] = useState(false);
   const [lastSig, setLastSig] = useState("");
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   const subjectsById = useMemo(() => {
     const map = new Map();
@@ -366,21 +368,7 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
           {editingAllowed && !isEditing && mode === "class" && selectedClassId && (
             <button
               className="btn danger"
-              onClick={async () => {
-                const confirmed = window.confirm(`Esti sigur ca vrei sa stergi orarul pentru ${selectedClassName || `clasa ${selectedClassId}`}?`);
-                if (!confirmed) return;
-                setLoading(true);
-                setBanner(null);
-                try {
-                  await apiDelete(`/timetables/classes/${selectedClassId}`, accessToken);
-                  await loadTimetableForClass(selectedClassId);
-                  setBanner({ type: "ok", text: "Orarul a fost sters." });
-                } catch (error) {
-                  setBanner({ type: "error", text: String(error?.message || error) });
-                } finally {
-                  setLoading(false);
-                }
-              }}
+              onClick={() => setConfirmDeleteOpen(true)}
               disabled={loading || entries.length === 0}
             >
               Delete Timetable
@@ -512,9 +500,33 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
           </table>
         </div>
       )}
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        title="Sterge orarul"
+        description={`Esti sigur ca vrei sa stergi orarul pentru ${selectedClassName || `clasa ${selectedClassId}`}?`}
+        confirmLabel="Sterge"
+        loading={loading}
+        onCancel={() => setConfirmDeleteOpen(false)}
+        onConfirm={async () => {
+          setLoading(true);
+          setBanner(null);
+          try {
+            await apiDelete(`/timetables/classes/${selectedClassId}`, accessToken);
+            await loadTimetableForClass(selectedClassId);
+            setBanner({ type: "ok", text: "Orarul a fost sters." });
+          } catch (error) {
+            setBanner({ type: "error", text: String(error?.message || error) });
+          } finally {
+            setLoading(false);
+            setConfirmDeleteOpen(false);
+          }
+        }}
+      />
     </section>
   );
 }
+
+
 
 
 

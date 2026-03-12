@@ -177,6 +177,33 @@ public class CatalogService {
         throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Grade not found");
     }
 
+    public Map<String, Object> deleteGrade(String requesterUsername, List<String> roles, Long gradeId) {
+        if (!hasRole(roles, "secretariat") && !hasRole(roles, "professor")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only secretariat and professors can delete grades");
+        }
+
+        for (Map.Entry<String, List<StudentGrade>> bucket : gradesByStudentUsername.entrySet()) {
+            List<StudentGrade> grades = bucket.getValue();
+            for (int index = 0; index < grades.size(); index++) {
+                StudentGrade existing = grades.get(index);
+                if (!Objects.equals(existing.id(), gradeId)) {
+                    continue;
+                }
+                if (!canEditGrade(requesterUsername, roles, existing)) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not allowed to delete this grade");
+                }
+                grades.remove(index);
+                persistentStateService.deleteGrade(gradeId);
+                return Map.of(
+                        "detail", "Grade deleted",
+                        "id", gradeId
+                );
+            }
+        }
+
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Grade not found");
+    }
+
     private Map<String, Object> buildCatalogResponse(UserProfile student, String requesterUsername, List<String> roles) {
         SchoolClass schoolClass = schoolDataService.getClassById(student.classId());
         LinkedHashMap<String, Integer> weeklyHours = curriculumPlanService.hoursForClass(schoolClass.name(), schoolClass.profile());

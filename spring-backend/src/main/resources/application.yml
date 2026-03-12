@@ -15,6 +15,11 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
   security:
     oauth2:
       resourceserver:
@@ -22,8 +27,19 @@ spring:
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8181/realms/timetable-realm}
 
 keycloak:
+  base-url: ${KEYCLOAK_BASE_URL:http://localhost:8181}
+  realm: ${KEYCLOAK_REALM:timetable-realm}
   token-url: ${KEYCLOAK_TOKEN_URL:http://localhost:8181/realms/timetable-realm/protocol/openid-connect/token}
   client-id: ${KEYCLOAK_CLIENT_ID:timetable-backend}
+  admin:
+    username: ${KEYCLOAK_ADMIN_USERNAME:admin}
+    password: ${KEYCLOAK_ADMIN_PASSWORD:admin}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
 
 server:
   port: 8000
@@ -33,5 +49,3 @@ management:
     web:
       exposure:
         include: health,info
-
-

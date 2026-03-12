@@ -988,3 +988,130 @@ code.inline{
   border-color: rgba(255,209,102,0.35);
   color: #ffe6a7;
 }
+.authSwitch{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.linkBtn{
+  color: var(--accent-2);
+  font-weight: 700;
+}
+
+.twoColFields{
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.registerCard{
+  max-width: 520px;
+}
+
+.catalogHint{
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.averageCell{
+  font-weight: 800;
+}
+
+.catalogGradeList{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.catalogGradeItem{
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 8px;
+  background: rgba(255,255,255,0.03);
+}
+
+.catalogPair{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+
+.catalogDate{
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.paginationBar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.paginationActions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
+.modalOverlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 6, 16, 0.72);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding: 20px;
+  z-index: 11000;
+}
+
+.modalCard{
+  width: 100%;
+  max-width: 420px;
+  border: 1px solid var(--border);
+  background: rgba(11,16,32,0.98);
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+.modalTitle{
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.modalText{
+  margin-top: 10px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.modalActions{
+  display:flex;
+  justify-content:flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.navBtn{
+  display:block;
+  text-decoration:none;
+}
+
+@media (max-width: 760px){
+  .twoColFields{
+    grid-template-columns: 1fr;
+  }
+
+  .paginationBar{
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

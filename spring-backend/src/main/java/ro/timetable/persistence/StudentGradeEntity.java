@@ -2,7 +2,10 @@ package ro.timetable.persistence;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 @Entity
@@ -15,17 +18,29 @@ public class StudentGradeEntity {
     @Column(name = "student_username", nullable = false)
     private String studentUsername;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "student_username", referencedColumnName = "username", insertable = false, updatable = false)
+    private UserProfileEntity studentProfile;
+
     @Column(name = "student_name", nullable = false)
     private String studentName;
 
     @Column(name = "class_id", nullable = false)
     private Long classId;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "class_id", insertable = false, updatable = false)
+    private SchoolClassEntity schoolClass;
+
     @Column(name = "class_name", nullable = false)
     private String className;
 
     @Column(name = "subject_id", nullable = false)
     private Long subjectId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "subject_id", insertable = false, updatable = false)
+    private SubjectEntity subject;
 
     @Column(name = "subject_name", nullable = false)
     private String subjectName;
@@ -38,6 +53,10 @@ public class StudentGradeEntity {
 
     @Column(name = "teacher_username", nullable = false)
     private String teacherUsername;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "teacher_username", referencedColumnName = "username", insertable = false, updatable = false)
+    private UserProfileEntity teacherProfile;
 
     @Column(name = "teacher_name", nullable = false)
     private String teacherName;
@@ -61,6 +80,14 @@ public class StudentGradeEntity {
         this.studentUsername = studentUsername;
     }
 
+    public UserProfileEntity getStudentProfile() {
+        return studentProfile;
+    }
+
+    public void setStudentProfile(UserProfileEntity studentProfile) {
+        this.studentProfile = studentProfile;
+    }
+
     public String getStudentName() {
         return studentName;
     }
@@ -77,6 +104,14 @@ public class StudentGradeEntity {
         this.classId = classId;
     }
 
+    public SchoolClassEntity getSchoolClass() {
+        return schoolClass;
+    }
+
+    public void setSchoolClass(SchoolClassEntity schoolClass) {
+        this.schoolClass = schoolClass;
+    }
+
     public String getClassName() {
         return className;
     }
@@ -91,6 +126,14 @@ public class StudentGradeEntity {
 
     public void setSubjectId(Long subjectId) {
         this.subjectId = subjectId;
+    }
+
+    public SubjectEntity getSubject() {
+        return subject;
+    }
+
+    public void setSubject(SubjectEntity subject) {
+        this.subject = subject;
     }
 
     public String getSubjectName() {
@@ -123,6 +166,14 @@ public class StudentGradeEntity {
 
     public void setTeacherUsername(String teacherUsername) {
         this.teacherUsername = teacherUsername;
+    }
+
+    public UserProfileEntity getTeacherProfile() {
+        return teacherProfile;
+    }
+
+    public void setTeacherProfile(UserProfileEntity teacherProfile) {
+        this.teacherProfile = teacherProfile;
     }
 
     public String getTeacherName() {

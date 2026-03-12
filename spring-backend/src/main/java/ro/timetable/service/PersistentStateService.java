@@ -55,6 +55,11 @@ public class PersistentStateService {
         studentGradeRepository.save(toEntity(grade));
     }
 
+    @Transactional
+    public void deleteGrade(Long gradeId) {
+        studentGradeRepository.deleteById(gradeId);
+    }
+
     private TimetableEntry toModel(TimetableEntryEntity entity) {
         return new TimetableEntry(
                 entity.getId(),

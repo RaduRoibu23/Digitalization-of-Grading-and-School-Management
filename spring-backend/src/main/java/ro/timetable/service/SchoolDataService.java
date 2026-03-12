@@ -108,12 +108,40 @@ public class SchoolDataService {
         return new ArrayList<>(rooms.values());
     }
 
+    public List<SchoolClass> getPublicClasses() {
+        return getClasses();
+    }
+
     public UserProfile getProfile(String username) {
         UserProfile profile = profilesByUsername.get(username);
         if (profile == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User profile not found");
         }
         return profile;
+    }
+
+    public boolean hasProfile(String username) {
+        return profilesByUsername.containsKey(username);
+    }
+
+    public Map<String, Object> registerStudentProfile(String username, String firstName, String lastName, String email, Long classId) {
+        if (hasProfile(username)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Username already exists");
+        }
+        SchoolClass schoolClass = requireClass(classId);
+        UserProfile profile = new UserProfile(
+                profileIds.getAndIncrement(),
+                username,
+                "student",
+                firstName,
+                lastName,
+                email,
+                classId,
+                schoolClass.name(),
+                List.of()
+        );
+        profilesByUsername.put(username, profile);
+        return profileResponse(profile);
     }
 
     public SchoolClass getClassById(Long classId) {
@@ -925,6 +953,7 @@ public class SchoolDataService {
         );
     }
 }
+
 
 
 

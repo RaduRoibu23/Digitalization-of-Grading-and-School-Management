@@ -1,38 +1,45 @@
-import { useState } from 'react';
-import { login } from '../services/authService';
-import { CONFIG } from '../config';
+import { useMemo, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import { login } from '../services/authService'
+import { CONFIG } from '../config'
 
 export default function Login({ onLogin }) {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const doLogin = async (u, p) => {
-    setError('');
-    setLoading(true);
-    try {
-      const tokens = await login(u, p);
-      onLogin(tokens);
-    } catch (err) {
-      setError(err.message || 'Login failed');
-    } finally {
-      setLoading(false);
+  const location = useLocation()
+  const successMessage = useMemo(() => {
+    if (!location.state?.registered) {
+      return ''
     }
-  };
+    return location.state.username ? `Contul ${location.state.username} a fost creat. Te poti autentifica acum.` : 'Contul a fost creat. Te poti autentifica acum.'
+  }, [location.state])
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    await doLogin(username, password);
-  };
+  const [username, setUsername] = useState(location.state?.username || '')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const quickUsers = CONFIG.quickUsers || [];
+  const doLogin = async (nextUsername, nextPassword) => {
+    setError('')
+    setLoading(true)
+    try {
+      const tokens = await login(nextUsername, nextPassword)
+      onLogin(tokens)
+    } catch (err) {
+      setError(err.message || 'Login failed')
+    } finally {
+      setLoading(false)
+    }
+  }
 
-  const loginPreset = async (u) => {
-    setUsername(u.username);
-    setPassword(u.password);
-    await doLogin(u.username, u.password);
-  };
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    await doLogin(username, password)
+  }
+
+  const loginPreset = async (user) => {
+    setUsername(user.username)
+    setPassword(user.password)
+    await doLogin(user.username, user.password)
+  }
 
   return (
     <div className="loginPage">
@@ -49,7 +56,7 @@ export default function Login({ onLogin }) {
               name="username"
               autoComplete="off"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(event) => setUsername(event.target.value)}
               placeholder="user"
               required
             />
@@ -64,7 +71,7 @@ export default function Login({ onLogin }) {
               autoComplete="off"
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(event) => setPassword(event.target.value)}
               placeholder="parola"
               required
             />
@@ -75,20 +82,26 @@ export default function Login({ onLogin }) {
           </button>
 
           <div className="quickLoginGrid">
-            {quickUsers.map((u) => (
+            {CONFIG.quickUsers.map((user) => (
               <button
-                key={u.label}
+                key={user.label}
                 className="btn btnSmall"
                 type="button"
-                onClick={() => loginPreset(u)}
+                onClick={() => loginPreset(user)}
                 disabled={loading}
-                title={`Login: ${u.username}`}
+                title={`Login: ${user.username}`}
               >
-                {u.label}
+                {user.label}
               </button>
             ))}
           </div>
 
+          <div className="authSwitch">
+            <span>Nu ai cont?</span>
+            <Link className="linkBtn" to="/register">Creeaza cont</Link>
+          </div>
+
+          {successMessage && <div className="banner ok">{successMessage}</div>}
           {error && <div className="alert">{error}</div>}
         </form>
       </div>
@@ -97,8 +110,5 @@ export default function Login({ onLogin }) {
         {CONFIG.keycloak.url} | {CONFIG.keycloak.realm} | client: timetable-backend
       </div>
     </div>
-  );
+  )
 }
-
-
-

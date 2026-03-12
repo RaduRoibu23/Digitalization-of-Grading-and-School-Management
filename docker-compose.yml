@@ -61,9 +61,13 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-app:5432/timetable
       SPRING_DATASOURCE_USERNAME: timetable
       SPRING_DATASOURCE_PASSWORD: timetable
+      KEYCLOAK_BASE_URL: http://keycloak:8080
+      KEYCLOAK_REALM: timetable-realm
       KEYCLOAK_ISSUER_URI: http://keycloak:8080/realms/timetable-realm
       KEYCLOAK_TOKEN_URL: http://keycloak:8080/realms/timetable-realm/protocol/openid-connect/token
       KEYCLOAK_CLIENT_ID: timetable-backend
+      KEYCLOAK_ADMIN_USERNAME: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
     ports:
       - "8000:8000"
     depends_on:
