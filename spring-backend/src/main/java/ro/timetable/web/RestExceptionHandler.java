@@ -10,24 +10,26 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class RestExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
-        Map<String, String> fieldErrors = ex.getBindingResult().getFieldErrors().stream()
-                .collect(Collectors.toMap(
-                        FieldError::getField,
-                        error -> error.getDefaultMessage() == null ? "invalid value" : error.getDefaultMessage(),
-                        (first, second) -> first
-                ));
+        Map<String, String> fieldErrors = new LinkedHashMap<>();
+        for (FieldError error : ex.getBindingResult().getFieldErrors()) {
+            fieldErrors.putIfAbsent(error.getField(), error.getDefaultMessage() == null ? "invalid value" : error.getDefaultMessage());
+        }
+
+        String detail = fieldErrors.containsValue("Nota invalida")
+                ? "Nota invalida"
+                : "Request validation failed";
 
         return ResponseEntity.badRequest().body(Map.of(
                 "error", "validation_failed",
-                "detail", "Request validation failed",
+                "detail", detail,
                 "fieldErrors", fieldErrors
         ));
     }

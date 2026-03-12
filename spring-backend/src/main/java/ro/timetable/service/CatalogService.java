@@ -19,24 +19,29 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
 @Service
 public class CatalogService {
 
     private final SchoolDataService schoolDataService;
     private final CurriculumPlanService curriculumPlanService;
+    private final PersistentStateService persistentStateService;
     private final Map<String, List<StudentGrade>> gradesByStudentUsername = new LinkedHashMap<>();
     private final AtomicLong gradeIds = new AtomicLong(9000);
 
-    public CatalogService(SchoolDataService schoolDataService, CurriculumPlanService curriculumPlanService) {
+    public CatalogService(
+            SchoolDataService schoolDataService,
+            CurriculumPlanService curriculumPlanService,
+            PersistentStateService persistentStateService
+    ) {
         this.schoolDataService = schoolDataService;
         this.curriculumPlanService = curriculumPlanService;
+        this.persistentStateService = persistentStateService;
     }
 
     @PostConstruct
     void init() {
-        seedGrades();
+        loadPersistedGrades();
     }
 
     public List<Map<String, Object>> getCatalogStudents(String requesterUsername, List<String> roles) {
@@ -79,11 +84,55 @@ public class CatalogService {
         return buildCatalogResponse(student, requesterUsername, roles);
     }
 
+    public Map<String, Object> createGrade(String requesterUsername, List<String> roles, String studentUsername, String subjectName, Integer gradeValue, String gradeDate) {
+        if (!hasRole(roles, "secretariat") && !hasRole(roles, "professor")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only secretariat and professors can add grades");
+        }
+
+        ensureValidGradeValue(gradeValue);
+        LocalDate.parse(gradeDate);
+        UserProfile student = requireStudentProfile(studentUsername);
+        Long subjectId = schoolDataService.subjectIdByName(subjectName);
+        if (schoolDataService.weeklyHoursForSubject(student.classId(), subjectName) <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Materia nu apartine clasei selectate");
+        }
+
+        TimetableEntry teacherAssignment = assignedTeacherForClassSubject(student.classId(), subjectId);
+        if (teacherAssignment == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Genereaza mai intai orarul pentru materia selectata.");
+        }
+        if (!canAddGrade(requesterUsername, roles, student.classId(), subjectId, teacherAssignment)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not allowed to add a grade for this subject");
+        }
+
+        StudentGrade created = new StudentGrade(
+                gradeIds.incrementAndGet(),
+                student.username(),
+                student.firstName() + " " + student.lastName(),
+                student.classId(),
+                student.className(),
+                subjectId,
+                subjectName,
+                gradeValue,
+                gradeDate,
+                teacherAssignment.teacherUsername(),
+                teacherAssignment.teacherName(),
+                1
+        );
+
+        List<StudentGrade> studentGrades = gradesByStudentUsername.computeIfAbsent(student.username(), ignored -> new ArrayList<>());
+        studentGrades.add(created);
+        sortGrades(studentGrades);
+        persistentStateService.saveGrade(created);
+        return gradeResponse(created, requesterUsername, roles);
+    }
+
     public Map<String, Object> updateGrade(String requesterUsername, List<String> roles, Long gradeId, Integer version, Integer gradeValue, String gradeDate) {
         if (!hasRole(roles, "secretariat") && !hasRole(roles, "professor")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only secretariat and professors can update grades");
         }
 
+        ensureValidGradeValue(gradeValue);
         LocalDate.parse(gradeDate);
 
         for (Map.Entry<String, List<StudentGrade>> bucket : gradesByStudentUsername.entrySet()) {
@@ -115,6 +164,8 @@ public class CatalogService {
                         existing.version() + 1
                 );
                 grades.set(index, updated);
+                sortGrades(grades);
+                persistentStateService.saveGrade(updated);
                 return gradeResponse(updated, requesterUsername, roles);
             }
         }
@@ -137,6 +188,8 @@ public class CatalogService {
         List<Map<String, Object>> subjectRows = new ArrayList<>();
         for (Map.Entry<String, Integer> planEntry : weeklyHours.entrySet()) {
             String subjectName = planEntry.getKey();
+            Long subjectId = schoolDataService.subjectIdByName(subjectName);
+            TimetableEntry teacherAssignment = assignedTeacherForClassSubject(student.classId(), subjectId);
             List<StudentGrade> subjectGrades = gradesBySubject.getOrDefault(subjectName, List.of()).stream()
                     .sorted(Comparator.comparing(StudentGrade::gradeDate, Comparator.reverseOrder()).thenComparing(StudentGrade::id, Comparator.reverseOrder()))
                     .toList();
@@ -145,13 +198,20 @@ public class CatalogService {
                     ? subjectGrades.stream().mapToInt(StudentGrade::gradeValue).average().orElse(0)
                     : null;
 
+            List<String> teacherNames = subjectGrades.stream().map(StudentGrade::teacherName).distinct().toList();
+            if (teacherNames.isEmpty() && teacherAssignment != null) {
+                teacherNames = List.of(teacherAssignment.teacherName());
+            }
+
             Map<String, Object> row = new LinkedHashMap<>();
+            row.put("subject_id", subjectId);
             row.put("subject_name", subjectName);
             row.put("weekly_hours", planEntry.getValue());
             row.put("minimum_grades_for_average", minimumGrades);
             row.put("average", average == null ? null : Math.round(average * 100.0) / 100.0);
-            row.put("teacher_names", subjectGrades.stream().map(StudentGrade::teacherName).distinct().toList());
+            row.put("teacher_names", teacherNames);
             row.put("grades", subjectGrades.stream().map(grade -> gradeResponse(grade, requesterUsername, roles)).toList());
+            row.put("can_add", canAddGrade(requesterUsername, roles, student.classId(), subjectId, teacherAssignment));
             subjectRows.add(row);
         }
 
@@ -195,7 +255,7 @@ public class CatalogService {
             return requesterUsername.equals(grade.studentUsername());
         }
         if (hasRole(roles, "professor")) {
-            return professorCanManageGrade(requesterUsername, grade);
+            return professorCanManageGrade(requesterUsername, grade.classId(), grade.subjectId(), grade.teacherUsername());
         }
         return hasRole(roles, "secretariat") || hasRole(roles, "admin") || hasRole(roles, "sysadmin");
     }
@@ -204,14 +264,33 @@ public class CatalogService {
         if (hasRole(roles, "secretariat")) {
             return true;
         }
-        return hasRole(roles, "professor") && professorCanManageGrade(requesterUsername, grade);
+        return hasRole(roles, "professor")
+                && professorCanManageGrade(requesterUsername, grade.classId(), grade.subjectId(), grade.teacherUsername());
     }
 
-    private boolean professorCanManageGrade(String requesterUsername, StudentGrade grade) {
+    private boolean canAddGrade(String requesterUsername, List<String> roles, Long classId, Long subjectId, TimetableEntry teacherAssignment) {
+        if (teacherAssignment == null) {
+            return false;
+        }
+        if (hasRole(roles, "secretariat")) {
+            return true;
+        }
+        return hasRole(roles, "professor")
+                && professorCanManageGrade(requesterUsername, classId, subjectId, teacherAssignment.teacherUsername());
+    }
+
+    private boolean professorCanManageGrade(String requesterUsername, Long classId, Long subjectId, String assignedTeacherUsername) {
         UserProfile professor = schoolDataService.getProfile(requesterUsername);
-        return professor.subjectsTaught().contains(grade.subjectName())
-                && grade.classId() != null
-                && teachesSubjectForClass(requesterUsername, grade.classId(), grade.subjectId());
+        String assignedSubjectName = schoolDataService.getSubjects().stream()
+                .filter(subject -> Objects.equals(subject.id(), subjectId))
+                .map(subject -> subject.name())
+                .findFirst()
+                .orElse(null);
+        return Objects.equals(requesterUsername, assignedTeacherUsername)
+                && assignedSubjectName != null
+                && professor.subjectsTaught().contains(assignedSubjectName)
+                && classId != null
+                && teachesSubjectForClass(requesterUsername, classId, subjectId);
     }
 
     private List<UserProfile> getStudentsForProfessor(String professorUsername) {
@@ -232,6 +311,13 @@ public class CatalogService {
     private boolean teachesSubjectForClass(String professorUsername, Long classId, Long subjectId) {
         return schoolDataService.getTimetableForClass(classId).stream()
                 .anyMatch(entry -> professorUsername.equals(entry.teacherUsername()) && Objects.equals(entry.subjectId(), subjectId));
+    }
+
+    private TimetableEntry assignedTeacherForClassSubject(Long classId, Long subjectId) {
+        return schoolDataService.getTimetableForClass(classId).stream()
+                .filter(entry -> Objects.equals(entry.subjectId(), subjectId))
+                .findFirst()
+                .orElse(null);
     }
 
     private void ensureCatalogVisible(List<String> roles) {
@@ -289,61 +375,25 @@ public class CatalogService {
         return response;
     }
 
-    private void seedGrades() {
+    private void loadPersistedGrades() {
         gradesByStudentUsername.clear();
-        for (Map<String, Object> studentMap : schoolDataService.getProfilesByRole("student")) {
-            UserProfile student = mapToStudentProfile(studentMap);
-            gradesByStudentUsername.put(student.username(), buildGradesForStudent(student));
+        gradeIds.set(9000);
+
+        for (StudentGrade grade : persistentStateService.loadGrades()) {
+            gradesByStudentUsername.computeIfAbsent(grade.studentUsername(), ignored -> new ArrayList<>()).add(grade);
+            gradeIds.set(Math.max(gradeIds.get(), grade.id()));
         }
+
+        gradesByStudentUsername.values().forEach(this::sortGrades);
     }
 
-    private List<StudentGrade> buildGradesForStudent(UserProfile student) {
-        SchoolClass schoolClass = schoolDataService.getClassById(student.classId());
-        LinkedHashMap<String, Integer> weeklyHours = curriculumPlanService.hoursForClass(schoolClass.name(), schoolClass.profile());
-        Map<String, TimetableEntry> firstEntryBySubject = new LinkedHashMap<>();
-        for (TimetableEntry entry : schoolDataService.getTimetableForClass(student.classId())) {
-            firstEntryBySubject.putIfAbsent(entry.subjectName(), entry);
+    private void sortGrades(List<StudentGrade> grades) {
+        grades.sort(Comparator.comparing(StudentGrade::subjectName).thenComparing(StudentGrade::gradeDate, Comparator.reverseOrder()).thenComparing(StudentGrade::id, Comparator.reverseOrder()));
+    }
+
+    private void ensureValidGradeValue(Integer gradeValue) {
+        if (gradeValue == null || gradeValue < 1 || gradeValue > 10) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Nota invalida");
         }
-
-        List<StudentGrade> grades = new ArrayList<>();
-        int subjectIndex = 0;
-        for (Map.Entry<String, Integer> planEntry : weeklyHours.entrySet()) {
-            TimetableEntry subjectEntry = firstEntryBySubject.get(planEntry.getKey());
-            if (subjectEntry == null) {
-                subjectIndex++;
-                continue;
-            }
-            int weekly = planEntry.getValue();
-            int noteCount = Math.max(1, weekly + (subjectIndex % 2 == 0 ? 1 : 0));
-            for (int occurrence = 0; occurrence < noteCount; occurrence++) {
-                int seed = Math.floorMod(Objects.hash(student.username(), subjectEntry.subjectId(), occurrence), 10_000);
-                int gradeValue = 5 + (seed % 6);
-                LocalDate gradeDate = LocalDate.of(2025, 9, 15)
-                        .plusDays(seed % 75L)
-                        .plusDays(subjectIndex * 5L)
-                        .plusDays(occurrence * 13L);
-
-                grades.add(new StudentGrade(
-                        gradeIds.incrementAndGet(),
-                        student.username(),
-                        student.firstName() + " " + student.lastName(),
-                        student.classId(),
-                        student.className(),
-                        subjectEntry.subjectId(),
-                        subjectEntry.subjectName(),
-                        gradeValue,
-                        gradeDate.toString(),
-                        subjectEntry.teacherUsername(),
-                        subjectEntry.teacherName(),
-                        1
-                ));
-            }
-            subjectIndex++;
-        }
-
-        return grades.stream()
-                .sorted(Comparator.comparing(StudentGrade::subjectName).thenComparing(StudentGrade::gradeDate, Comparator.reverseOrder()))
-                .collect(Collectors.toCollection(ArrayList::new));
     }
 }
-

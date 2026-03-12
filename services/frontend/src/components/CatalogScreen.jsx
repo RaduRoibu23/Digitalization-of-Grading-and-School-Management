@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { apiGet, apiPatch } from "../services/apiService";
+import { apiGet, apiPatch, apiPost } from "../services/apiService";
 
 function studentLabel(student) {
   if (!student) return "";
@@ -33,7 +33,9 @@ export default function CatalogScreen({ accessToken, roles }) {
   const [selectedStudent, setSelectedStudent] = useState("");
   const [catalog, setCatalog] = useState(null);
   const [drafts, setDrafts] = useState({});
+  const [newGrades, setNewGrades] = useState({});
   const [savingId, setSavingId] = useState(null);
+  const [addingSubject, setAddingSubject] = useState(null);
 
   const canBrowseStudents = useMemo(
     () => roles.some((role) => ["professor", "secretariat", "admin", "sysadmin"].includes(role)),
@@ -64,11 +66,7 @@ export default function CatalogScreen({ accessToken, roles }) {
         setSelectedStudent((current) => current || list[0].username);
       }
     } catch (error) {
-      if ([409, 412, 423].includes(error?.status)) {
-        setBanner({ type: "error", text: "Nota a fost modificata intre timp. Da Refresh si incearca din nou." });
-      } else {
-        setBanner({ type: "error", text: String(error?.message || error) });
-      }
+      setBanner({ type: "error", text: String(error?.message || error) });
     } finally {
       setLoading(false);
     }
@@ -81,11 +79,7 @@ export default function CatalogScreen({ accessToken, roles }) {
       const data = await apiGet("/catalog/me", accessToken);
       applyCatalog(data);
     } catch (error) {
-      if ([409, 412, 423].includes(error?.status)) {
-        setBanner({ type: "error", text: "Nota a fost modificata intre timp. Da Refresh si incearca din nou." });
-      } else {
-        setBanner({ type: "error", text: String(error?.message || error) });
-      }
+      setBanner({ type: "error", text: String(error?.message || error) });
     } finally {
       setLoading(false);
     }
@@ -98,11 +92,7 @@ export default function CatalogScreen({ accessToken, roles }) {
       const data = await apiGet(`/catalog/students/${username}`, accessToken);
       applyCatalog(data);
     } catch (error) {
-      if ([409, 412, 423].includes(error?.status)) {
-        setBanner({ type: "error", text: "Nota a fost modificata intre timp. Da Refresh si incearca din nou." });
-      } else {
-        setBanner({ type: "error", text: String(error?.message || error) });
-      }
+      setBanner({ type: "error", text: String(error?.message || error) });
     } finally {
       setLoading(false);
     }
@@ -111,8 +101,11 @@ export default function CatalogScreen({ accessToken, roles }) {
   function applyCatalog(data) {
     const nextCatalog = data && typeof data === "object" ? data : null;
     setCatalog(nextCatalog);
+
     const rows = Array.isArray(nextCatalog?.subjects) ? nextCatalog.subjects : [];
     const nextDrafts = {};
+    const nextNewGrades = {};
+
     rows.forEach((row) => {
       const grades = Array.isArray(row.grades) ? row.grades : [];
       grades.forEach((grade) => {
@@ -122,8 +115,14 @@ export default function CatalogScreen({ accessToken, roles }) {
           version: grade.version,
         };
       });
+      nextNewGrades[row.subject_name] = {
+        grade_value: "",
+        grade_date: "",
+      };
     });
+
     setDrafts(nextDrafts);
+    setNewGrades(nextNewGrades);
   }
 
   function updateDraft(gradeId, field, value) {
@@ -132,6 +131,16 @@ export default function CatalogScreen({ accessToken, roles }) {
       [gradeId]: {
         ...current[gradeId],
         [field]: field === "grade_value" ? Number(value) : value,
+      },
+    }));
+  }
+
+  function updateNewGrade(subjectName, field, value) {
+    setNewGrades((current) => ({
+      ...current,
+      [subjectName]: {
+        ...current[subjectName],
+        [field]: field === "grade_value" ? value : value,
       },
     }));
   }
@@ -165,6 +174,33 @@ export default function CatalogScreen({ accessToken, roles }) {
     }
   }
 
+  async function addGrade(row) {
+    const draft = newGrades[row.subject_name];
+    const student = catalog?.student;
+    if (!draft || !student) return;
+
+    setAddingSubject(row.subject_name);
+    setBanner(null);
+    try {
+      await apiPost(
+        "/catalog/grades",
+        {
+          student_username: student.username,
+          subject_name: row.subject_name,
+          grade_value: Number(draft.grade_value),
+          grade_date: draft.grade_date,
+        },
+        accessToken
+      );
+      await reloadCurrentCatalog();
+      setBanner({ type: "ok", text: "Nota a fost adaugata." });
+    } catch (error) {
+      setBanner({ type: "error", text: String(error?.message || error) });
+    } finally {
+      setAddingSubject(null);
+    }
+  }
+
   const student = catalog?.student || null;
   const subjects = Array.isArray(catalog?.subjects) ? catalog.subjects : [];
 
@@ -193,11 +229,7 @@ export default function CatalogScreen({ accessToken, roles }) {
               </select>
             </>
           )}
-          <button
-            className="btn"
-            onClick={reloadCurrentCatalog}
-            disabled={loading || (canBrowseStudents && !selectedStudent)}
-          >
+          <button className="btn" onClick={reloadCurrentCatalog} disabled={loading || (canBrowseStudents && !selectedStudent)}>
             Refresh
           </button>
         </div>
@@ -237,6 +269,8 @@ export default function CatalogScreen({ accessToken, roles }) {
               {subjects.map((row) => {
                 const grades = Array.isArray(row.grades) ? row.grades : [];
                 const teachers = Array.isArray(row.teacher_names) ? row.teacher_names : [];
+                const addDraft = newGrades[row.subject_name] || { grade_value: "", grade_date: "" };
+
                 return (
                   <tr key={row.subject_name}>
                     <td>
@@ -245,10 +279,12 @@ export default function CatalogScreen({ accessToken, roles }) {
                     </td>
                     <td>
                       <div className="averageCell">{formatAverage(row.average)}</div>
-                      <div className="catalogHint">minim {row.minimum_grades_for_average} note</div>
+                      {row.average === null || row.average === undefined ? (
+                        <div className="catalogHint">minim {row.minimum_grades_for_average} note</div>
+                      ) : null}
                     </td>
                     <td>
-                      {grades.length === 0 ? (
+                      {grades.length === 0 && !row.can_add ? (
                         <span className="mutedSmall">-</span>
                       ) : (
                         <div className="catalogGradeList">
@@ -293,12 +329,39 @@ export default function CatalogScreen({ accessToken, roles }) {
                               </div>
                             );
                           })}
+
+                          {row.can_add && (
+                            <div className="catalogGradeItem">
+                              <div className="catalogEditor">
+                                <input
+                                  className="input small"
+                                  type="number"
+                                  min="1"
+                                  max="10"
+                                  value={addDraft.grade_value}
+                                  onChange={(event) => updateNewGrade(row.subject_name, "grade_value", event.target.value)}
+                                  placeholder="Nota"
+                                />
+                                <input
+                                  className="input small"
+                                  type="date"
+                                  value={addDraft.grade_date}
+                                  onChange={(event) => updateNewGrade(row.subject_name, "grade_date", event.target.value)}
+                                />
+                                <button
+                                  className="btn primary"
+                                  onClick={() => addGrade(row)}
+                                  disabled={addingSubject === row.subject_name || !addDraft.grade_date || !addDraft.grade_value}
+                                >
+                                  Add
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </td>
-                    <td>
-                      {teachers.length > 0 ? teachers.join(", ") : "-"}
-                    </td>
+                    <td>{teachers.length > 0 ? teachers.join(", ") : "-"}</td>
                   </tr>
                 );
               })}

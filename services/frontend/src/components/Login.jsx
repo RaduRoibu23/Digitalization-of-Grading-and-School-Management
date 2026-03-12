@@ -38,7 +38,7 @@ export default function Login({ onLogin }) {
     <div className="loginPage">
       <div className="loginCard">
         <div className="title">Login</div>
-        <div className="subtitle">Timetable Management System</div>
+        <div className="subtitle">Digitalization of Grading and School Management</div>
 
         <form onSubmit={handleSubmit}>
           <div className="field">
@@ -99,5 +99,6 @@ export default function Login({ onLogin }) {
     </div>
   );
 }
+
 
 

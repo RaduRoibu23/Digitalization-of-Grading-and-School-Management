@@ -55,7 +55,7 @@ export default function Dashboard({ accessToken, idToken, onRefreshToken, onLogo
       <main className="content">
         <div className="topBar">
           <div className="topBarLeft">
-            <div className="topTitle">Timetable Management</div>
+            <div className="topTitle">Digitalization of Grading</div>
             <div className="topSub">Token exp: {expiry}</div>
           </div>
           <div className="topBarRight">
@@ -91,3 +91,4 @@ export default function Dashboard({ accessToken, idToken, onRefreshToken, onLogo
     </div>
   );
 }
+

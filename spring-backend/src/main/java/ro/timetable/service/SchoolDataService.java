@@ -67,6 +67,7 @@ public class SchoolDataService {
     };
 
     private final CurriculumPlanService curriculumPlanService;
+    private final PersistentStateService persistentStateService;
     private final Map<Long, SchoolClass> classes = new LinkedHashMap<>();
     private final Map<Long, Subject> subjects = new LinkedHashMap<>();
     private final Map<Long, Room> rooms = new LinkedHashMap<>();
@@ -79,8 +80,9 @@ public class SchoolDataService {
     private final AtomicLong profileIds = new AtomicLong(1);
     private final AtomicLong jobIds = new AtomicLong(5000);
 
-    public SchoolDataService(CurriculumPlanService curriculumPlanService) {
+    public SchoolDataService(CurriculumPlanService curriculumPlanService, PersistentStateService persistentStateService) {
         this.curriculumPlanService = curriculumPlanService;
+        this.persistentStateService = persistentStateService;
     }
 
     @PostConstruct
@@ -89,6 +91,7 @@ public class SchoolDataService {
         seedSubjects();
         seedRooms();
         seedProfiles();
+        loadPersistedTimetables();
     }
 
     public List<SchoolClass> getClasses() {
@@ -120,6 +123,14 @@ public class SchoolDataService {
         return curriculumPlanService.weeklyHoursForSubject(schoolClass.name(), schoolClass.profile(), subjectName);
     }
 
+    public Long subjectIdByName(String subjectName) {
+        Long subjectId = subjectIdsByName.get(subjectName);
+        if (subjectId == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Subject not found");
+        }
+        return subjectId;
+    }
+
     public List<Map<String, Object>> getProfilesByRole(String role) {
         return profilesByUsername.values().stream()
                 .filter(profile -> role == null || role.isBlank() || role.equalsIgnoreCase(profile.role()))
@@ -148,6 +159,7 @@ public class SchoolDataService {
         SchoolClass schoolClass = requireClass(classId);
         List<TimetableEntry> generated = buildGeneratedTimetable(schoolClass, classId);
         timetablesByClassId.put(classId, generated);
+        persistentStateService.replaceTimetableForClass(classId, generated);
         return Map.of(
                 "detail", "Timetable generated",
                 "job_ids", List.of(jobIds.incrementAndGet())
@@ -157,6 +169,7 @@ public class SchoolDataService {
     public void deleteTimetable(Long classId) {
         requireClass(classId);
         timetablesByClassId.remove(classId);
+        persistentStateService.deleteTimetable(classId);
     }
 
     public TimetableEntry updateEntry(Long entryId, Integer version, Long subjectId, Long roomId) {
@@ -202,10 +215,23 @@ public class SchoolDataService {
                         existing.version() + 1
                 );
                 entries.set(index, updated);
+                persistentStateService.saveTimetableEntry(updated);
                 return updated;
             }
         }
         throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Timetable entry not found");
+    }
+
+    private void loadPersistedTimetables() {
+        timetablesByClassId.clear();
+        entryIds.set(1000);
+
+        for (TimetableEntry entry : persistentStateService.loadTimetableEntries()) {
+            timetablesByClassId.computeIfAbsent(entry.classId(), ignored -> new ArrayList<>()).add(entry);
+            entryIds.set(Math.max(entryIds.get(), entry.id()));
+        }
+
+        timetablesByClassId.values().forEach(entries -> entries.sort(Comparator.comparing(TimetableEntry::weekday).thenComparing(TimetableEntry::indexInDay)));
     }
 
     public Map<String, Object> meResponse(String username, List<String> roles, Map<String, Object> claims) {
@@ -835,32 +861,7 @@ public class SchoolDataService {
                 new TeacherSeed("stiinte01", "Violeta", "Enache", "Stiinte")
         );
     }
-
-    private void seedTimetables() {
-        timetablesByClassId.clear();
-        entryIds.set(1000);
-        for (SchoolClass schoolClass : classes.values()) {
-            timetablesByClassId.put(schoolClass.id(), buildGeneratedTimetable(schoolClass, schoolClass.id()));
-        }
-    }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

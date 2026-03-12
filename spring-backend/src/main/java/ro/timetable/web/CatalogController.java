@@ -9,6 +9,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -29,9 +30,17 @@ public class CatalogController {
         this.catalogService = catalogService;
     }
 
+    public record CreateGradeRequest(
+            @NotBlank String student_username,
+            @NotBlank String subject_name,
+            @NotNull @Min(value = 1, message = "Nota invalida") @Max(value = 10, message = "Nota invalida") Integer grade_value,
+            @NotBlank String grade_date
+    ) {
+    }
+
     public record UpdateGradeRequest(
             @NotNull Integer version,
-            @NotNull @Min(1) @Max(10) Integer grade_value,
+            @NotNull @Min(value = 1, message = "Nota invalida") @Max(value = 10, message = "Nota invalida") Integer grade_value,
             @NotBlank String grade_date
     ) {
     }
@@ -49,6 +58,18 @@ public class CatalogController {
     @GetMapping("/students/{studentUsername}")
     public Map<String, Object> studentCatalog(@PathVariable String studentUsername, JwtAuthenticationToken authentication) {
         return catalogService.getCatalogForStudent(username(authentication), roles(authentication), studentUsername);
+    }
+
+    @PostMapping("/grades")
+    public Map<String, Object> createGrade(@Valid @RequestBody CreateGradeRequest request, JwtAuthenticationToken authentication) {
+        return catalogService.createGrade(
+                username(authentication),
+                roles(authentication),
+                request.student_username(),
+                request.subject_name(),
+                request.grade_value(),
+                request.grade_date()
+        );
     }
 
     @PatchMapping("/grades/{gradeId}")

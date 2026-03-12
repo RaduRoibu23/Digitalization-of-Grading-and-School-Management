@@ -4,8 +4,8 @@ export default function Header({ status }) {
       <div className="brand">
         <div className="logo" aria-hidden="true"></div>
         <div>
-          <h1>Timetable Management Distributed System</h1>
-          <div className="sub">SCD — Frontend</div>
+          <h1>Digitalization of Grading and School Management</h1>
+          <div className="sub">Frontend</div>
         </div>
       </div>
       <div id="status-badge" className="badge">
