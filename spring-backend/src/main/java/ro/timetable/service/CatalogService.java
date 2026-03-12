@@ -26,17 +26,20 @@ public class CatalogService {
     private final SchoolDataService schoolDataService;
     private final CurriculumPlanService curriculumPlanService;
     private final PersistentStateService persistentStateService;
+    private final NotificationService notificationService;
     private final Map<String, List<StudentGrade>> gradesByStudentUsername = new LinkedHashMap<>();
     private final AtomicLong gradeIds = new AtomicLong(9000);
 
     public CatalogService(
             SchoolDataService schoolDataService,
             CurriculumPlanService curriculumPlanService,
-            PersistentStateService persistentStateService
+            PersistentStateService persistentStateService,
+            NotificationService notificationService
     ) {
         this.schoolDataService = schoolDataService;
         this.curriculumPlanService = curriculumPlanService;
         this.persistentStateService = persistentStateService;
+        this.notificationService = notificationService;
     }
 
     @PostConstruct
@@ -124,6 +127,7 @@ public class CatalogService {
         studentGrades.add(created);
         sortGrades(studentGrades);
         persistentStateService.saveGrade(created);
+        notificationService.createNotifications(List.of(student.username()), "Ai primit nota " + gradeValue + " la materia " + subjectName + ".");
         return gradeResponse(created, requesterUsername, roles);
     }
 
@@ -397,3 +401,5 @@ public class CatalogService {
         }
     }
 }
+
+

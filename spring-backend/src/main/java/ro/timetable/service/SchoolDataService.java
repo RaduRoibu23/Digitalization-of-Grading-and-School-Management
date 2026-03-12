@@ -68,6 +68,7 @@ public class SchoolDataService {
 
     private final CurriculumPlanService curriculumPlanService;
     private final PersistentStateService persistentStateService;
+    private final NotificationService notificationService;
     private final Map<Long, SchoolClass> classes = new LinkedHashMap<>();
     private final Map<Long, Subject> subjects = new LinkedHashMap<>();
     private final Map<Long, Room> rooms = new LinkedHashMap<>();
@@ -80,9 +81,10 @@ public class SchoolDataService {
     private final AtomicLong profileIds = new AtomicLong(1);
     private final AtomicLong jobIds = new AtomicLong(5000);
 
-    public SchoolDataService(CurriculumPlanService curriculumPlanService, PersistentStateService persistentStateService) {
+    public SchoolDataService(CurriculumPlanService curriculumPlanService, PersistentStateService persistentStateService, NotificationService notificationService) {
         this.curriculumPlanService = curriculumPlanService;
         this.persistentStateService = persistentStateService;
+        this.notificationService = notificationService;
     }
 
     @PostConstruct
@@ -117,6 +119,17 @@ public class SchoolDataService {
     public SchoolClass getClassById(Long classId) {
         return requireClass(classId);
     }
+
+    public List<String> getStudentUsernamesForClass(Long classId) {
+        requireClass(classId);
+        return profilesByUsername.values().stream()
+                .filter(profile -> "student".equals(profile.role()))
+                .filter(profile -> Objects.equals(classId, profile.classId()))
+                .sorted(Comparator.comparing(UserProfile::username))
+                .map(UserProfile::username)
+                .toList();
+    }
+
 
     public int weeklyHoursForSubject(Long classId, String subjectName) {
         SchoolClass schoolClass = requireClass(classId);
@@ -200,6 +213,12 @@ public class SchoolDataService {
                 validateRoomAvailability(room.id(), existing.id(), existing.weekday(), existing.indexInDay());
                 UserProfile teacher = profilesByUsername.get(teacherUsername);
 
+                if (Objects.equals(existing.subjectId(), subject.id())
+                        && Objects.equals(existing.roomId(), room.id())
+                        && Objects.equals(existing.teacherUsername(), teacher.username())) {
+                    return existing;
+                }
+
                 TimetableEntry updated = new TimetableEntry(
                         existing.id(),
                         existing.classId(),
@@ -216,12 +235,56 @@ public class SchoolDataService {
                 );
                 entries.set(index, updated);
                 persistentStateService.saveTimetableEntry(updated);
+                notifyStudentsAboutTimetableChange(updated);
                 return updated;
             }
         }
         throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Timetable entry not found");
     }
 
+    private void notifyStudentsAboutTimetableChange(TimetableEntry entry) {
+        List<String> recipients = getStudentUsernamesForClass(entry.classId());
+        if (recipients.isEmpty()) {
+            return;
+        }
+        notificationService.createNotifications(recipients, buildTimetableChangeMessage(entry));
+    }
+
+    private String buildTimetableChangeMessage(TimetableEntry entry) {
+        return "Orarul tau a fost modificat: "
+                + weekdayLabel(entry.weekday())
+                + ", "
+                + slotTimeLabel(entry.indexInDay())
+                + " - "
+                + entry.subjectName()
+                + " in sala "
+                + entry.roomName()
+                + ".";
+    }
+
+    private String weekdayLabel(Integer weekday) {
+        return switch (weekday == null ? 0 : weekday) {
+            case 1 -> "Luni";
+            case 2 -> "Marti";
+            case 3 -> "Miercuri";
+            case 4 -> "Joi";
+            case 5 -> "Vineri";
+            default -> "Zi necunoscuta";
+        };
+    }
+
+    private String slotTimeLabel(Integer indexInDay) {
+        return switch (indexInDay == null ? 0 : indexInDay) {
+            case 1 -> "08:00-08:50";
+            case 2 -> "09:00-09:50";
+            case 3 -> "10:00-10:50";
+            case 4 -> "11:00-11:50";
+            case 5 -> "12:00-12:50";
+            case 6 -> "13:00-13:50";
+            case 7 -> "14:00-14:50";
+            default -> "interval necunoscut";
+        };
+    }
     private void loadPersistedTimetables() {
         timetablesByClassId.clear();
         entryIds.set(1000);
@@ -862,6 +925,8 @@ public class SchoolDataService {
         );
     }
 }
+
+
 
 
 
