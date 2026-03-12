@@ -10,6 +10,10 @@ import ro.timetable.model.SchoolClass;
 import ro.timetable.model.Subject;
 import ro.timetable.model.TimetableEntry;
 import ro.timetable.model.UserProfile;
+import ro.timetable.web.dto.ApiDtos.ClassSummaryResponse;
+import ro.timetable.web.dto.ApiDtos.MeResponse;
+import ro.timetable.web.dto.ApiDtos.ProfileResponse;
+import ro.timetable.web.dto.ApiDtos.TimetableGenerationResponse;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -25,7 +29,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
 @Service
 public class SchoolDataService {
@@ -128,7 +131,7 @@ public class SchoolDataService {
         return profilesByUsername.containsKey(username);
     }
 
-    public Map<String, Object> registerStudentProfile(String username, String firstName, String lastName, String email, Long classId) {
+    public ProfileResponse registerStudentProfile(String username, String firstName, String lastName, String email, Long classId) {
         if (hasProfile(username)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Username folosit deja");
         }
@@ -177,15 +180,20 @@ public class SchoolDataService {
         return subjectId;
     }
 
-    public List<Map<String, Object>> getProfilesByRole(String role) {
+    public List<UserProfile> getUserProfilesByRole(String role) {
         return profilesByUsername.values().stream()
                 .filter(profile -> role == null || role.isBlank() || role.equalsIgnoreCase(profile.role()))
                 .sorted(Comparator.comparing(UserProfile::className, Comparator.nullsLast(String::compareTo))
                         .thenComparing(UserProfile::lastName)
                         .thenComparing(UserProfile::firstName)
                         .thenComparing(UserProfile::username))
+                .toList();
+    }
+
+    public List<ProfileResponse> getProfilesByRole(String role) {
+        return getUserProfilesByRole(role).stream()
                 .map(this::profileResponse)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     public List<TimetableEntry> getTimetableForClass(Long classId) {
@@ -201,15 +209,12 @@ public class SchoolDataService {
                 .toList();
     }
 
-    public Map<String, Object> generateTimetable(Long classId) {
+    public TimetableGenerationResponse generateTimetable(Long classId) {
         SchoolClass schoolClass = requireClass(classId);
         List<TimetableEntry> generated = buildGeneratedTimetable(schoolClass, classId);
         timetablesByClassId.put(classId, generated);
         persistentStateService.replaceTimetableForClass(classId, generated);
-        return Map.of(
-                "detail", "Timetable generated",
-                "job_ids", List.of(jobIds.incrementAndGet())
-        );
+        return new TimetableGenerationResponse("Timetable generated", List.of(jobIds.incrementAndGet()));
     }
 
     public void deleteTimetable(Long classId) {
@@ -401,43 +406,40 @@ public class SchoolDataService {
         timetablesByClassId.values().forEach(entries -> entries.sort(Comparator.comparing(TimetableEntry::weekday).thenComparing(TimetableEntry::indexInDay)));
     }
 
-    public Map<String, Object> meResponse(String username, List<String> roles, Map<String, Object> claims) {
+    public MeResponse meResponse(String username, List<String> roles, Map<String, Object> claims) {
         UserProfile profile = getProfile(username);
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("id", profile.id());
-        response.put("username", profile.username());
-        response.put("first_name", profile.firstName());
-        response.put("last_name", profile.lastName());
-        response.put("email", profile.email());
-        response.put("role", profile.role());
-        response.put("roles", roles);
-        response.put("class_id", profile.classId());
-        response.put("class_name", profile.className());
-        response.put("class_profile", profile.classId() == null ? null : requireClass(profile.classId()).profile());
-        response.put("subjects_taught", profile.subjectsTaught());
-        response.put("claims", claims);
-        if (profile.classId() != null) {
-            SchoolClass schoolClass = requireClass(profile.classId());
-            response.put("class", Map.of("id", profile.classId(), "name", profile.className(), "profile", schoolClass.profile()));
-        }
-        return response;
+        SchoolClass schoolClass = profile.classId() == null ? null : requireClass(profile.classId());
+        return new MeResponse(
+                profile.id(),
+                profile.username(),
+                profile.firstName(),
+                profile.lastName(),
+                profile.email(),
+                profile.role(),
+                roles,
+                profile.classId(),
+                profile.className(),
+                schoolClass == null ? null : schoolClass.profile(),
+                profile.subjectsTaught(),
+                claims,
+                schoolClass == null ? null : new ClassSummaryResponse(profile.classId(), profile.className(), schoolClass.profile())
+        );
     }
 
-    private Map<String, Object> profileResponse(UserProfile profile) {
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("id", profile.id());
-        response.put("username", profile.username());
-        response.put("role", profile.role());
-        response.put("first_name", profile.firstName());
-        response.put("last_name", profile.lastName());
-        response.put("email", profile.email());
-        response.put("class_id", profile.classId());
-        response.put("class_name", profile.className());
-        response.put("subjects_taught", profile.subjectsTaught());
-        if (profile.classId() != null) {
-            response.put("class_profile", requireClass(profile.classId()).profile());
-        }
-        return response;
+    private ProfileResponse profileResponse(UserProfile profile) {
+        SchoolClass schoolClass = profile.classId() == null ? null : requireClass(profile.classId());
+        return new ProfileResponse(
+                profile.id(),
+                profile.username(),
+                profile.role(),
+                profile.firstName(),
+                profile.lastName(),
+                profile.email(),
+                profile.classId(),
+                profile.className(),
+                schoolClass == null ? null : schoolClass.profile(),
+                profile.subjectsTaught()
+        );
     }
 
     private List<TimetableEntry> buildGeneratedTimetable(SchoolClass schoolClass, Long classId) {

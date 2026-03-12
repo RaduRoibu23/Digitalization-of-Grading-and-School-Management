@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import ro.timetable.service.NotificationService;
 import ro.timetable.service.SchoolDataService;
+import ro.timetable.web.dto.ApiDtos.NotificationDispatchResponse;
+import ro.timetable.web.dto.ApiDtos.NotificationResponse;
 
 import java.util.List;
 import java.util.Map;
@@ -42,7 +44,7 @@ public class NotificationController {
     }
 
     @GetMapping("/me")
-    public List<Map<String, Object>> myNotifications(
+    public List<NotificationResponse> myNotifications(
             @RequestParam(name = "unread_only", defaultValue = "false") boolean unreadOnly,
             JwtAuthenticationToken authentication
     ) {
@@ -50,12 +52,12 @@ public class NotificationController {
     }
 
     @PatchMapping("/{notificationId}/read")
-    public Map<String, Object> markRead(@PathVariable Long notificationId, JwtAuthenticationToken authentication) {
+    public NotificationResponse markRead(@PathVariable Long notificationId, JwtAuthenticationToken authentication) {
         return notificationService.markAsRead(username(authentication), notificationId);
     }
 
     @PostMapping("/send")
-    public Map<String, Object> sendNotification(@Valid @RequestBody SendNotificationRequest request, JwtAuthenticationToken authentication) {
+    public NotificationDispatchResponse sendNotification(@Valid @RequestBody SendNotificationRequest request, JwtAuthenticationToken authentication) {
         List<String> roles = roles(authentication);
         if (!(roles.contains("professor") || roles.contains("secretariat") || roles.contains("admin") || roles.contains("sysadmin"))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not allowed to send notifications");
@@ -68,7 +70,7 @@ public class NotificationController {
             }
             List<String> recipients = schoolDataService.getStudentUsernamesForClass(request.target_id());
             notificationService.createNotifications(recipients, request.message());
-            return Map.of("detail", "Notifications sent", "recipients", recipients.size());
+            return new NotificationDispatchResponse("Notifications sent", recipients.size(), null);
         }
 
         if ("user".equals(targetType)) {
@@ -76,7 +78,7 @@ public class NotificationController {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "target_username is required for user notifications");
             }
             schoolDataService.getProfile(request.target_username());
-            return notificationService.sendToUser(request.target_username(), request.message());
+            return new NotificationDispatchResponse("Notification sent", null, notificationService.sendToUser(request.target_username(), request.message()));
         }
 
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported notification target");

@@ -9,11 +9,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import ro.timetable.model.SchoolClass;
 import ro.timetable.service.RegistrationService;
 import ro.timetable.service.SchoolDataService;
+import ro.timetable.web.dto.ApiDtos.RegistrationResponse;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
@@ -38,12 +39,12 @@ public class RegistrationController {
     }
 
     @GetMapping("/public/classes")
-    public List<?> publicClasses() {
+    public List<SchoolClass> publicClasses() {
         return schoolDataService.getPublicClasses();
     }
 
     @PostMapping("/register")
-    public Map<String, Object> register(@Valid @RequestBody RegisterRequest request) {
+    public RegistrationResponse register(@Valid @RequestBody RegisterRequest request) {
         return registrationService.registerStudent(
                 request.username().trim(),
                 request.password(),

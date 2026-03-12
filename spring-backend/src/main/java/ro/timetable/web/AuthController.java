@@ -19,6 +19,10 @@ import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 import ro.timetable.service.SchoolDataService;
+import ro.timetable.web.dto.ApiDtos.ApiErrorResponse;
+import ro.timetable.web.dto.ApiDtos.HealthResponse;
+import ro.timetable.web.dto.ApiDtos.LoginResponse;
+import ro.timetable.web.dto.ApiDtos.MeResponse;
 
 import java.util.List;
 import java.util.Map;
@@ -44,12 +48,12 @@ public class AuthController {
     private String keycloakClientId;
 
     @GetMapping("/health")
-    public Map<String, String> health() {
-        return Map.of("status", "OK");
+    public HealthResponse health() {
+        return new HealthResponse("OK");
     }
 
     @GetMapping("/me")
-    public Map<String, Object> me(JwtAuthenticationToken authentication) {
+    public MeResponse me(JwtAuthenticationToken authentication) {
         List<String> roles = List.of();
         Object realmAccess = authentication.getToken().getClaims().get("realm_access");
         if (realmAccess instanceof Map<?, ?> realmAccessMap) {
@@ -89,32 +93,62 @@ public class AuthController {
         try {
             ResponseEntity<Map> response = restTemplate.postForEntity(keycloakTokenUrl, entity, Map.class);
             if (response.getBody() == null || response.getBody().isEmpty()) {
-                return ResponseEntity.internalServerError().body(Map.of(
-                        "error", "login_failed",
-                        "detail", "Keycloak returned an empty response body"
+                return ResponseEntity.internalServerError().body(new ApiErrorResponse(
+                        "login_failed",
+                        "Keycloak returned an empty response body",
+                        null,
+                        null,
+                        null
                 ));
             }
 
-            return ResponseEntity.status(response.getStatusCode()).body(response.getBody());
+            return ResponseEntity.status(response.getStatusCode()).body(toLoginResponse(response.getBody()));
         } catch (HttpStatusCodeException ex) {
-            Map<String, Object> body = Map.of(
-                    "error", "login_failed",
-                    "status", ex.getStatusCode().value(),
-                    "detail", ex.getResponseBodyAsString()
-            );
-            return ResponseEntity.status(ex.getStatusCode()).body(body);
+            return ResponseEntity.status(ex.getStatusCode()).body(new ApiErrorResponse(
+                    "login_failed",
+                    ex.getResponseBodyAsString(),
+                    ex.getStatusCode().value(),
+                    null,
+                    null
+            ));
         } catch (ResourceAccessException ex) {
-            return ResponseEntity.internalServerError().body(Map.of(
-                    "error", "keycloak_unreachable",
-                    "detail", "Backend could not reach Keycloak",
-                    "message", ex.getMostSpecificCause().getMessage()
+            return ResponseEntity.internalServerError().body(new ApiErrorResponse(
+                    "keycloak_unreachable",
+                    "Backend could not reach Keycloak",
+                    null,
+                    ex.getMostSpecificCause() == null ? ex.getMessage() : ex.getMostSpecificCause().getMessage(),
+                    null
             ));
         } catch (Exception ex) {
-            return ResponseEntity.internalServerError().body(Map.of(
-                    "error", "login_failed",
-                    "detail", ex.getMessage()
+            return ResponseEntity.internalServerError().body(new ApiErrorResponse(
+                    "login_failed",
+                    ex.getMessage(),
+                    null,
+                    null,
+                    null
             ));
         }
     }
-}
 
+    private LoginResponse toLoginResponse(Map<?, ?> body) {
+        return new LoginResponse(
+                asString(body.get("access_token")),
+                asInteger(body.get("expires_in")),
+                asInteger(body.get("refresh_expires_in")),
+                asString(body.get("refresh_token")),
+                asString(body.get("token_type")),
+                asString(body.get("id_token")),
+                asInteger(body.get("not-before-policy")),
+                asString(body.get("session_state")),
+                asString(body.get("scope"))
+        );
+    }
+
+    private String asString(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private Integer asInteger(Object value) {
+        return value instanceof Number number ? number.intValue() : null;
+    }
+}

@@ -15,6 +15,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ro.timetable.service.CatalogService;
+import ro.timetable.web.dto.ApiDtos.ActionResponse;
+import ro.timetable.web.dto.ApiDtos.CatalogResponse;
+import ro.timetable.web.dto.ApiDtos.GradeResponse;
+import ro.timetable.web.dto.ApiDtos.ProfileResponse;
 
 import java.util.List;
 import java.util.Map;
@@ -47,22 +51,22 @@ public class CatalogController {
     }
 
     @GetMapping("/students")
-    public List<Map<String, Object>> catalogStudents(JwtAuthenticationToken authentication) {
+    public List<ProfileResponse> catalogStudents(JwtAuthenticationToken authentication) {
         return catalogService.getCatalogStudents(username(authentication), roles(authentication));
     }
 
     @GetMapping("/me")
-    public Map<String, Object> myCatalog(JwtAuthenticationToken authentication) {
+    public CatalogResponse myCatalog(JwtAuthenticationToken authentication) {
         return catalogService.getMyCatalog(username(authentication), roles(authentication));
     }
 
     @GetMapping("/students/{studentUsername}")
-    public Map<String, Object> studentCatalog(@PathVariable String studentUsername, JwtAuthenticationToken authentication) {
+    public CatalogResponse studentCatalog(@PathVariable String studentUsername, JwtAuthenticationToken authentication) {
         return catalogService.getCatalogForStudent(username(authentication), roles(authentication), studentUsername);
     }
 
     @PostMapping("/grades")
-    public Map<String, Object> createGrade(@Valid @RequestBody CreateGradeRequest request, JwtAuthenticationToken authentication) {
+    public GradeResponse createGrade(@Valid @RequestBody CreateGradeRequest request, JwtAuthenticationToken authentication) {
         return catalogService.createGrade(
                 username(authentication),
                 roles(authentication),
@@ -74,7 +78,7 @@ public class CatalogController {
     }
 
     @PatchMapping("/grades/{gradeId}")
-    public Map<String, Object> updateGrade(
+    public GradeResponse updateGrade(
             @PathVariable Long gradeId,
             @Valid @RequestBody UpdateGradeRequest request,
             JwtAuthenticationToken authentication
@@ -90,7 +94,7 @@ public class CatalogController {
     }
 
     @DeleteMapping("/grades/{gradeId}")
-    public Map<String, Object> deleteGrade(@PathVariable Long gradeId, JwtAuthenticationToken authentication) {
+    public ActionResponse deleteGrade(@PathVariable Long gradeId, JwtAuthenticationToken authentication) {
         return catalogService.deleteGrade(username(authentication), roles(authentication), gradeId);
     }
 

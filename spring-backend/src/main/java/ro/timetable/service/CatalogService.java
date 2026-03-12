@@ -8,6 +8,11 @@ import ro.timetable.model.SchoolClass;
 import ro.timetable.model.StudentGrade;
 import ro.timetable.model.TimetableEntry;
 import ro.timetable.model.UserProfile;
+import ro.timetable.web.dto.ApiDtos.ActionResponse;
+import ro.timetable.web.dto.ApiDtos.CatalogResponse;
+import ro.timetable.web.dto.ApiDtos.CatalogSubjectResponse;
+import ro.timetable.web.dto.ApiDtos.GradeResponse;
+import ro.timetable.web.dto.ApiDtos.ProfileResponse;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -47,7 +52,7 @@ public class CatalogService {
         loadPersistedGrades();
     }
 
-    public List<Map<String, Object>> getCatalogStudents(String requesterUsername, List<String> roles) {
+    public List<ProfileResponse> getCatalogStudents(String requesterUsername, List<String> roles) {
         ensureCatalogVisible(roles);
 
         List<UserProfile> students;
@@ -56,9 +61,7 @@ public class CatalogService {
         } else if (hasRole(roles, "professor")) {
             students = getStudentsForProfessor(requesterUsername);
         } else {
-            students = schoolDataService.getProfilesByRole("student").stream()
-                    .map(this::mapToStudentProfile)
-                    .toList();
+            students = schoolDataService.getUserProfilesByRole("student");
         }
 
         return students.stream()
@@ -66,11 +69,11 @@ public class CatalogService {
                         .thenComparing(UserProfile::lastName)
                         .thenComparing(UserProfile::firstName)
                         .thenComparing(UserProfile::username))
-                .map(this::profileResponse)
+                .map(this::toProfileResponse)
                 .toList();
     }
 
-    public Map<String, Object> getMyCatalog(String requesterUsername, List<String> roles) {
+    public CatalogResponse getMyCatalog(String requesterUsername, List<String> roles) {
         ensureCatalogVisible(roles);
         if (!hasRole(roles, "student")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only students can access their own catalog endpoint");
@@ -78,7 +81,7 @@ public class CatalogService {
         return buildCatalogResponse(requireStudentProfile(requesterUsername), requesterUsername, roles);
     }
 
-    public Map<String, Object> getCatalogForStudent(String requesterUsername, List<String> roles, String studentUsername) {
+    public CatalogResponse getCatalogForStudent(String requesterUsername, List<String> roles, String studentUsername) {
         ensureCatalogVisible(roles);
         UserProfile student = requireStudentProfile(studentUsername);
         if (!canAccessStudentCatalog(requesterUsername, roles, student)) {
@@ -87,7 +90,7 @@ public class CatalogService {
         return buildCatalogResponse(student, requesterUsername, roles);
     }
 
-    public Map<String, Object> createGrade(String requesterUsername, List<String> roles, String studentUsername, String subjectName, Integer gradeValue, String gradeDate) {
+    public GradeResponse createGrade(String requesterUsername, List<String> roles, String studentUsername, String subjectName, Integer gradeValue, String gradeDate) {
         if (!hasRole(roles, "secretariat") && !hasRole(roles, "professor")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only secretariat and professors can add grades");
         }
@@ -131,7 +134,7 @@ public class CatalogService {
         return gradeResponse(created, requesterUsername, roles);
     }
 
-    public Map<String, Object> updateGrade(String requesterUsername, List<String> roles, Long gradeId, Integer version, Integer gradeValue, String gradeDate) {
+    public GradeResponse updateGrade(String requesterUsername, List<String> roles, Long gradeId, Integer version, Integer gradeValue, String gradeDate) {
         if (!hasRole(roles, "secretariat") && !hasRole(roles, "professor")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only secretariat and professors can update grades");
         }
@@ -177,7 +180,7 @@ public class CatalogService {
         throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Grade not found");
     }
 
-    public Map<String, Object> deleteGrade(String requesterUsername, List<String> roles, Long gradeId) {
+    public ActionResponse deleteGrade(String requesterUsername, List<String> roles, Long gradeId) {
         if (!hasRole(roles, "secretariat") && !hasRole(roles, "professor")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only secretariat and professors can delete grades");
         }
@@ -194,17 +197,14 @@ public class CatalogService {
                 }
                 grades.remove(index);
                 persistentStateService.deleteGrade(gradeId);
-                return Map.of(
-                        "detail", "Grade deleted",
-                        "id", gradeId
-                );
+                return new ActionResponse("Grade deleted", gradeId, null);
             }
         }
 
         throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Grade not found");
     }
 
-    private Map<String, Object> buildCatalogResponse(UserProfile student, String requesterUsername, List<String> roles) {
+    private CatalogResponse buildCatalogResponse(UserProfile student, String requesterUsername, List<String> roles) {
         SchoolClass schoolClass = schoolDataService.getClassById(student.classId());
         LinkedHashMap<String, Integer> weeklyHours = curriculumPlanService.hoursForClass(schoolClass.name(), schoolClass.profile());
         LinkedHashMap<String, List<StudentGrade>> gradesBySubject = new LinkedHashMap<>();
@@ -216,7 +216,7 @@ public class CatalogService {
             gradesBySubject.computeIfAbsent(grade.subjectName(), ignored -> new ArrayList<>()).add(grade);
         }
 
-        List<Map<String, Object>> subjectRows = new ArrayList<>();
+        List<CatalogSubjectResponse> subjectRows = new ArrayList<>();
         for (Map.Entry<String, Integer> planEntry : weeklyHours.entrySet()) {
             String subjectName = planEntry.getKey();
             Long subjectId = schoolDataService.subjectIdByName(subjectName);
@@ -234,41 +234,41 @@ public class CatalogService {
                 teacherNames = List.of(teacherAssignment.teacherName());
             }
 
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("subject_id", subjectId);
-            row.put("subject_name", subjectName);
-            row.put("weekly_hours", planEntry.getValue());
-            row.put("minimum_grades_for_average", minimumGrades);
-            row.put("average", average == null ? null : Math.round(average * 100.0) / 100.0);
-            row.put("teacher_names", teacherNames);
-            row.put("grades", subjectGrades.stream().map(grade -> gradeResponse(grade, requesterUsername, roles)).toList());
-            row.put("can_add", canAddGrade(requesterUsername, roles, student.classId(), subjectId, teacherAssignment));
-            subjectRows.add(row);
+            subjectRows.add(new CatalogSubjectResponse(
+                    subjectId,
+                    subjectName,
+                    planEntry.getValue(),
+                    minimumGrades,
+                    average == null ? null : Math.round(average * 100.0) / 100.0,
+                    teacherNames,
+                    subjectGrades.stream().map(grade -> gradeResponse(grade, requesterUsername, roles)).toList(),
+                    canAddGrade(requesterUsername, roles, student.classId(), subjectId, teacherAssignment)
+            ));
         }
 
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("student", profileResponse(student));
-        response.put("subjects", subjectRows);
-        response.put("can_edit", hasRole(roles, "secretariat") || hasRole(roles, "professor"));
-        return response;
+        return new CatalogResponse(
+                toProfileResponse(student),
+                subjectRows,
+                hasRole(roles, "secretariat") || hasRole(roles, "professor")
+        );
     }
 
-    private Map<String, Object> gradeResponse(StudentGrade grade, String requesterUsername, List<String> roles) {
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("id", grade.id());
-        response.put("student_username", grade.studentUsername());
-        response.put("student_name", grade.studentName());
-        response.put("class_id", grade.classId());
-        response.put("class_name", grade.className());
-        response.put("subject_id", grade.subjectId());
-        response.put("subject_name", grade.subjectName());
-        response.put("grade_value", grade.gradeValue());
-        response.put("grade_date", grade.gradeDate());
-        response.put("teacher_username", grade.teacherUsername());
-        response.put("teacher_name", grade.teacherName());
-        response.put("version", grade.version());
-        response.put("editable", canEditGrade(requesterUsername, roles, grade));
-        return response;
+    private GradeResponse gradeResponse(StudentGrade grade, String requesterUsername, List<String> roles) {
+        return new GradeResponse(
+                grade.id(),
+                grade.studentUsername(),
+                grade.studentName(),
+                grade.classId(),
+                grade.className(),
+                grade.subjectId(),
+                grade.subjectName(),
+                grade.gradeValue(),
+                grade.gradeDate(),
+                grade.teacherUsername(),
+                grade.teacherName(),
+                grade.version(),
+                canEditGrade(requesterUsername, roles, grade)
+        );
     }
 
     private boolean canAccessStudentCatalog(String requesterUsername, List<String> roles, UserProfile student) {
@@ -326,8 +326,7 @@ public class CatalogService {
 
     private List<UserProfile> getStudentsForProfessor(String professorUsername) {
         Set<Long> classIds = classesForProfessor(professorUsername);
-        return schoolDataService.getProfilesByRole("student").stream()
-                .map(this::mapToStudentProfile)
+        return schoolDataService.getUserProfilesByRole("student").stream()
                 .filter(profile -> profile.classId() != null && classIds.contains(profile.classId()))
                 .toList();
     }
@@ -373,37 +372,20 @@ public class CatalogService {
         return profile;
     }
 
-    private UserProfile mapToStudentProfile(Map<String, Object> source) {
-        Long classId = source.get("class_id") instanceof Number number ? number.longValue() : null;
-        List<String> subjectsTaught = source.get("subjects_taught") instanceof List<?> values
-                ? values.stream().map(String::valueOf).toList()
-                : List.of();
-
-        return new UserProfile(
-                source.get("id") instanceof Number number ? number.longValue() : null,
-                String.valueOf(source.get("username")),
-                String.valueOf(source.get("role")),
-                String.valueOf(source.get("first_name")),
-                String.valueOf(source.get("last_name")),
-                String.valueOf(source.get("email")),
-                classId,
-                source.get("class_name") == null ? null : String.valueOf(source.get("class_name")),
-                subjectsTaught
+    private ProfileResponse toProfileResponse(UserProfile profile) {
+        SchoolClass schoolClass = profile.classId() == null ? null : schoolDataService.getClassById(profile.classId());
+        return new ProfileResponse(
+                profile.id(),
+                profile.username(),
+                profile.role(),
+                profile.firstName(),
+                profile.lastName(),
+                profile.email(),
+                profile.classId(),
+                profile.className(),
+                schoolClass == null ? null : schoolClass.profile(),
+                profile.subjectsTaught()
         );
-    }
-
-    private Map<String, Object> profileResponse(UserProfile profile) {
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("id", profile.id());
-        response.put("username", profile.username());
-        response.put("role", profile.role());
-        response.put("first_name", profile.firstName());
-        response.put("last_name", profile.lastName());
-        response.put("email", profile.email());
-        response.put("class_id", profile.classId());
-        response.put("class_name", profile.className());
-        response.put("subjects_taught", profile.subjectsTaught());
-        return response;
     }
 
     private void loadPersistedGrades() {
@@ -428,5 +410,3 @@ public class CatalogService {
         }
     }
 }
-
-

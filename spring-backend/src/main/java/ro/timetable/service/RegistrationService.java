@@ -13,6 +13,8 @@ import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
+import ro.timetable.web.dto.ApiDtos.ProfileResponse;
+import ro.timetable.web.dto.ApiDtos.RegistrationResponse;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -45,7 +47,7 @@ public class RegistrationService {
         this.schoolDataService = schoolDataService;
     }
 
-    public Map<String, Object> registerStudent(String username, String password, String firstName, String lastName, String email, Long classId) {
+    public RegistrationResponse registerStudent(String username, String password, String firstName, String lastName, String email, Long classId) {
         if (schoolDataService.hasProfile(username)) {
             throw new ResponseStatusException(CONFLICT, "Username folosit deja");
         }
@@ -55,10 +57,20 @@ public class RegistrationService {
         String userId = findUserId(accessToken, username);
         assignStudentRole(accessToken, userId);
 
-        Map<String, Object> profile = schoolDataService.registerStudentProfile(username, firstName, lastName, email, classId);
-        Map<String, Object> response = new LinkedHashMap<>(profile);
-        response.put("detail", "Account created");
-        return response;
+        ProfileResponse profile = schoolDataService.registerStudentProfile(username, firstName, lastName, email, classId);
+        return new RegistrationResponse(
+                "Account created",
+                profile.id(),
+                profile.username(),
+                profile.role(),
+                profile.first_name(),
+                profile.last_name(),
+                profile.email(),
+                profile.class_id(),
+                profile.class_name(),
+                profile.class_profile(),
+                profile.subjects_taught()
+        );
     }
 
     private String adminAccessToken() {

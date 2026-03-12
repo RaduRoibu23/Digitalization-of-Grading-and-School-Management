@@ -12,12 +12,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 import ro.timetable.model.TimetableEntry;
 import ro.timetable.model.TimetableGenerationRequest;
 import ro.timetable.service.SchoolDataService;
+import ro.timetable.web.dto.ApiDtos.TimetableGenerationResponse;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/timetables")
@@ -47,9 +48,9 @@ public class TimetableController {
     }
 
     @PostMapping("/generate")
-    public Map<String, Object> generate(@Valid @RequestBody TimetableGenerationRequest request) {
+    public TimetableGenerationResponse generate(@Valid @RequestBody TimetableGenerationRequest request) {
         if (request.class_id() == null) {
-            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST, "class_id is required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "class_id is required");
         }
         return schoolDataService.generateTimetable(request.class_id());
     }
@@ -65,4 +66,3 @@ public class TimetableController {
         return schoolDataService.updateEntry(entryId, request.version(), request.subject_id(), request.room_id());
     }
 }
-
