@@ -1,6 +1,5 @@
 package ro.timetable.service;
 
-import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ro.timetable.model.Room;
@@ -16,47 +15,75 @@ import ro.timetable.persistence.SubjectRepository;
 import ro.timetable.persistence.UserProfileEntity;
 import ro.timetable.persistence.UserProfileRepository;
 
+import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 
 @Service
 public class ReferenceDataPersistenceService {
 
-    private final SchoolDataService schoolDataService;
     private final SchoolClassRepository schoolClassRepository;
     private final SubjectRepository subjectRepository;
     private final RoomRepository roomRepository;
     private final UserProfileRepository userProfileRepository;
 
     public ReferenceDataPersistenceService(
-            SchoolDataService schoolDataService,
             SchoolClassRepository schoolClassRepository,
             SubjectRepository subjectRepository,
             RoomRepository roomRepository,
             UserProfileRepository userProfileRepository
     ) {
-        this.schoolDataService = schoolDataService;
         this.schoolClassRepository = schoolClassRepository;
         this.subjectRepository = subjectRepository;
         this.roomRepository = roomRepository;
         this.userProfileRepository = userProfileRepository;
     }
 
-    @PostConstruct
+    @Transactional(readOnly = true)
+    public boolean hasReferenceData() {
+        return schoolClassRepository.count() > 0
+                && subjectRepository.count() > 0
+                && roomRepository.count() > 0
+                && userProfileRepository.count() > 0;
+    }
+
     @Transactional
-    void seedReferenceData() {
-        if (schoolClassRepository.count() == 0) {
-            schoolClassRepository.saveAll(schoolDataService.getClasses().stream().map(this::toEntity).toList());
-        }
-        if (subjectRepository.count() == 0) {
-            subjectRepository.saveAll(schoolDataService.getSubjects().stream().map(this::toEntity).toList());
-        }
-        if (roomRepository.count() == 0) {
-            roomRepository.saveAll(schoolDataService.getRooms().stream().map(this::toEntity).toList());
-        }
-        if (userProfileRepository.count() == 0) {
-            userProfileRepository.saveAll(schoolDataService.getProfilesByRole(null).stream().map(this::mapToUserProfile).map(this::toEntity).toList());
-        }
+    public void saveReferenceData(List<SchoolClass> classes, List<Subject> subjects, List<Room> rooms, List<UserProfile> profiles) {
+        schoolClassRepository.saveAll(classes.stream().map(this::toEntity).toList());
+        subjectRepository.saveAll(subjects.stream().map(this::toEntity).toList());
+        roomRepository.saveAll(rooms.stream().map(this::toEntity).toList());
+        userProfileRepository.saveAll(profiles.stream().map(this::toEntity).toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<SchoolClass> loadClasses() {
+        return schoolClassRepository.findAll().stream()
+                .sorted(Comparator.comparing(SchoolClassEntity::getId))
+                .map(entity -> new SchoolClass(entity.getId(), entity.getName(), entity.getProfile()))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Subject> loadSubjects() {
+        return subjectRepository.findAll().stream()
+                .sorted(Comparator.comparing(SubjectEntity::getId))
+                .map(entity -> new Subject(entity.getId(), entity.getName()))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Room> loadRooms() {
+        return roomRepository.findAll().stream()
+                .sorted(Comparator.comparing(RoomEntity::getId))
+                .map(entity -> new Room(entity.getId(), entity.getName(), entity.getCapacity()))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<UserProfile> loadProfiles() {
+        return userProfileRepository.findAll().stream()
+                .sorted(Comparator.comparing(UserProfileEntity::getId))
+                .map(this::toModel)
+                .toList();
     }
 
     @Transactional
@@ -64,22 +91,17 @@ public class ReferenceDataPersistenceService {
         userProfileRepository.save(toEntity(profile));
     }
 
-    private UserProfile mapToUserProfile(Map<String, Object> source) {
-        Long classId = source.get("class_id") instanceof Number number ? number.longValue() : null;
-        List<String> subjectsTaught = source.get("subjects_taught") instanceof List<?> values
-                ? values.stream().map(String::valueOf).toList()
-                : List.of();
-
+    private UserProfile toModel(UserProfileEntity entity) {
         return new UserProfile(
-                source.get("id") instanceof Number number ? number.longValue() : null,
-                String.valueOf(source.get("username")),
-                String.valueOf(source.get("role")),
-                String.valueOf(source.get("first_name")),
-                String.valueOf(source.get("last_name")),
-                String.valueOf(source.get("email")),
-                classId,
-                source.get("class_name") == null ? null : String.valueOf(source.get("class_name")),
-                subjectsTaught
+                entity.getId(),
+                entity.getUsername(),
+                entity.getRole(),
+                entity.getFirstName(),
+                entity.getLastName(),
+                entity.getEmail(),
+                entity.getSchoolClass() == null ? null : entity.getSchoolClass().getId(),
+                entity.getSchoolClass() == null ? null : entity.getSchoolClass().getName(),
+                entity.getSubjectsTaught() == null ? List.of() : List.copyOf(entity.getSubjectsTaught())
         );
     }
 

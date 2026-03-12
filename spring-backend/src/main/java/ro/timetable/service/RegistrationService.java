@@ -27,7 +27,6 @@ public class RegistrationService {
 
     private final RestTemplate restTemplate;
     private final SchoolDataService schoolDataService;
-    private final ReferenceDataPersistenceService referenceDataPersistenceService;
 
     @Value("${keycloak.base-url}")
     private String keycloakBaseUrl;
@@ -41,19 +40,14 @@ public class RegistrationService {
     @Value("${keycloak.admin.password}")
     private String keycloakAdminPassword;
 
-    public RegistrationService(
-            RestTemplate restTemplate,
-            SchoolDataService schoolDataService,
-            ReferenceDataPersistenceService referenceDataPersistenceService
-    ) {
+    public RegistrationService(RestTemplate restTemplate, SchoolDataService schoolDataService) {
         this.restTemplate = restTemplate;
         this.schoolDataService = schoolDataService;
-        this.referenceDataPersistenceService = referenceDataPersistenceService;
     }
 
     public Map<String, Object> registerStudent(String username, String password, String firstName, String lastName, String email, Long classId) {
         if (schoolDataService.hasProfile(username)) {
-            throw new ResponseStatusException(CONFLICT, "Username already exists");
+            throw new ResponseStatusException(CONFLICT, "Username folosit deja");
         }
 
         String accessToken = adminAccessToken();
@@ -62,8 +56,6 @@ public class RegistrationService {
         assignStudentRole(accessToken, userId);
 
         Map<String, Object> profile = schoolDataService.registerStudentProfile(username, firstName, lastName, email, classId);
-        referenceDataPersistenceService.saveUserProfile(schoolDataService.getProfile(username));
-
         Map<String, Object> response = new LinkedHashMap<>(profile);
         response.put("detail", "Account created");
         return response;
@@ -118,7 +110,7 @@ public class RegistrationService {
             );
         } catch (HttpStatusCodeException exception) {
             if (exception.getStatusCode().value() == 409) {
-                throw new ResponseStatusException(CONFLICT, "Username already exists");
+                throw new ResponseStatusException(CONFLICT, "Username folosit deja");
             }
             throw new ResponseStatusException(BAD_GATEWAY, "Could not create Keycloak user");
         }

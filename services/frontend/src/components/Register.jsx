@@ -82,7 +82,11 @@ export default function Register() {
         },
       })
     } catch (error) {
-      setBanner({ type: 'error', text: String(error?.message || error) })
+      const message = String(error?.message || error)
+      setBanner({
+        type: 'error',
+        text: message.includes('Username') ? 'Username folosit deja' : message,
+      })
     } finally {
       setLoading(false)
     }
@@ -94,32 +98,32 @@ export default function Register() {
         <div className="title">Register</div>
         <div className="subtitle">Creeaza un cont de elev in aplicatie</div>
 
-        <form onSubmit={handleSubmit}>
+        <form className="needs-validation" onSubmit={handleSubmit}>
           <div className="twoColFields">
             <div className="field">
               <div className="label">Prenume</div>
-              <input className="input" value={form.first_name} onChange={(event) => updateField('first_name', event.target.value)} required />
+              <input className="input form-control" value={form.first_name} onChange={(event) => updateField('first_name', event.target.value)} required />
             </div>
             <div className="field">
               <div className="label">Nume</div>
-              <input className="input" value={form.last_name} onChange={(event) => updateField('last_name', event.target.value)} required />
+              <input className="input form-control" value={form.last_name} onChange={(event) => updateField('last_name', event.target.value)} required />
             </div>
           </div>
 
           <div className="field">
             <div className="label">Email</div>
-            <input className="input" type="email" value={form.email} onChange={(event) => updateField('email', event.target.value)} required />
+            <input className="input form-control" type="email" value={form.email} onChange={(event) => updateField('email', event.target.value)} required />
           </div>
 
           <div className="twoColFields">
             <div className="field">
               <div className="label">Username</div>
-              <input className="input" value={form.username} onChange={(event) => updateField('username', event.target.value)} required />
+              <input className="input form-control" value={form.username} onChange={(event) => updateField('username', event.target.value)} required />
             </div>
             <div className="field">
               <div className="label">Clasa</div>
               <select
-                className="select"
+                className="select form-select"
                 value={form.class_id}
                 onChange={(event) => updateField('class_id', event.target.value)}
                 disabled={loadingClasses || classes.length === 0}
@@ -137,11 +141,11 @@ export default function Register() {
           <div className="twoColFields">
             <div className="field">
               <div className="label">Parola</div>
-              <input className="input" type="password" value={form.password} onChange={(event) => updateField('password', event.target.value)} required />
+              <input className="input form-control" type="password" value={form.password} onChange={(event) => updateField('password', event.target.value)} required />
             </div>
             <div className="field">
               <div className="label">Confirmare parola</div>
-              <input className="input" type="password" value={form.confirmPassword} onChange={(event) => updateField('confirmPassword', event.target.value)} required />
+              <input className="input form-control" type="password" value={form.confirmPassword} onChange={(event) => updateField('confirmPassword', event.target.value)} required />
             </div>
           </div>
 

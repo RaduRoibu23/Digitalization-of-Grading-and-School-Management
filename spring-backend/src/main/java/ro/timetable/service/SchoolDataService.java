@@ -69,6 +69,7 @@ public class SchoolDataService {
     private final CurriculumPlanService curriculumPlanService;
     private final PersistentStateService persistentStateService;
     private final NotificationService notificationService;
+    private final ReferenceDataPersistenceService referenceDataPersistenceService;
     private final Map<Long, SchoolClass> classes = new LinkedHashMap<>();
     private final Map<Long, Subject> subjects = new LinkedHashMap<>();
     private final Map<Long, Room> rooms = new LinkedHashMap<>();
@@ -81,18 +82,21 @@ public class SchoolDataService {
     private final AtomicLong profileIds = new AtomicLong(1);
     private final AtomicLong jobIds = new AtomicLong(5000);
 
-    public SchoolDataService(CurriculumPlanService curriculumPlanService, PersistentStateService persistentStateService, NotificationService notificationService) {
+    public SchoolDataService(
+            CurriculumPlanService curriculumPlanService,
+            PersistentStateService persistentStateService,
+            NotificationService notificationService,
+            ReferenceDataPersistenceService referenceDataPersistenceService
+    ) {
         this.curriculumPlanService = curriculumPlanService;
         this.persistentStateService = persistentStateService;
         this.notificationService = notificationService;
+        this.referenceDataPersistenceService = referenceDataPersistenceService;
     }
 
     @PostConstruct
     void init() {
-        seedClasses();
-        seedSubjects();
-        seedRooms();
-        seedProfiles();
+        initializeReferenceData();
         loadPersistedTimetables();
     }
 
@@ -126,7 +130,7 @@ public class SchoolDataService {
 
     public Map<String, Object> registerStudentProfile(String username, String firstName, String lastName, String email, Long classId) {
         if (hasProfile(username)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Username already exists");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Username folosit deja");
         }
         SchoolClass schoolClass = requireClass(classId);
         UserProfile profile = new UserProfile(
@@ -141,6 +145,7 @@ public class SchoolDataService {
                 List.of()
         );
         profilesByUsername.put(username, profile);
+        referenceDataPersistenceService.saveUserProfile(profile);
         return profileResponse(profile);
     }
 
@@ -312,6 +317,77 @@ public class SchoolDataService {
             case 7 -> "14:00-14:50";
             default -> "interval necunoscut";
         };
+    }
+    private void initializeReferenceData() {
+        if (referenceDataPersistenceService.hasReferenceData()) {
+            loadReferenceDataFromDatabase();
+            return;
+        }
+        seedClasses();
+        seedSubjects();
+        seedRooms();
+        seedProfiles();
+        referenceDataPersistenceService.saveReferenceData(
+                getClasses(),
+                getSubjects(),
+                getRooms(),
+                new ArrayList<>(profilesByUsername.values())
+        );
+    }
+
+    private void loadReferenceDataFromDatabase() {
+        classes.clear();
+        subjects.clear();
+        rooms.clear();
+        profilesByUsername.clear();
+
+        referenceDataPersistenceService.loadClasses().forEach(schoolClass -> classes.put(schoolClass.id(), schoolClass));
+        referenceDataPersistenceService.loadSubjects().forEach(subject -> subjects.put(subject.id(), subject));
+        referenceDataPersistenceService.loadRooms().forEach(room -> rooms.put(room.id(), room));
+        referenceDataPersistenceService.loadProfiles().forEach(profile -> profilesByUsername.put(profile.username(), profile));
+
+        rebuildDerivedIndexes();
+    }
+
+    private void rebuildDerivedIndexes() {
+        subjectIdsByName.clear();
+        teachersBySubjectId.clear();
+        homeRoomIdsByClassId.clear();
+
+        subjects.values().stream()
+                .sorted(Comparator.comparing(Subject::id))
+                .forEach(subject -> subjectIdsByName.put(subject.name(), subject.id()));
+
+        profilesByUsername.values().stream()
+                .filter(profile -> "professor".equals(profile.role()))
+                .sorted(Comparator.comparing(UserProfile::username))
+                .forEach(profile -> profile.subjectsTaught().forEach(subjectName -> {
+                    Long subjectId = subjectIdsByName.get(subjectName);
+                    if (subjectId != null) {
+                        teachersBySubjectId.computeIfAbsent(subjectId, ignored -> new ArrayList<>()).add(profile.username());
+                    }
+                }));
+
+        List<Long> normalRoomIds = rooms.values().stream()
+                .filter(room -> room.name().matches("\\d{3}"))
+                .sorted(Comparator.comparing(Room::name))
+                .map(Room::id)
+                .toList();
+
+        List<SchoolClass> orderedClasses = classes.values().stream()
+                .sorted(Comparator.comparing(SchoolClass::id))
+                .toList();
+
+        for (int index = 0; index < orderedClasses.size() && index < normalRoomIds.size(); index++) {
+            homeRoomIdsByClassId.put(orderedClasses.get(index).id(), normalRoomIds.get(index));
+        }
+
+        long nextProfileId = profilesByUsername.values().stream()
+                .map(UserProfile::id)
+                .filter(Objects::nonNull)
+                .max(Long::compareTo)
+                .orElse(0L) + 1;
+        profileIds.set(nextProfileId);
     }
     private void loadPersistedTimetables() {
         timetablesByClassId.clear();
@@ -953,6 +1029,13 @@ public class SchoolDataService {
         );
     }
 }
+
+
+
+
+
+
+
 
 
 

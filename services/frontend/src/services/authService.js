@@ -113,7 +113,7 @@ export async function registerAccount(payload) {
   const data = parseJsonSafely(text)
 
   if (!response.ok) {
-    const message = data?.error || data?.message || data?.detail || 'Register failed'
+    const message = data?.detail || data?.message || data?.error || 'Register failed'
     throw new Error(message)
   }
 
