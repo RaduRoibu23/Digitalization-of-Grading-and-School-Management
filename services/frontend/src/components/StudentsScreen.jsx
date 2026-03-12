@@ -3,6 +3,21 @@ import { apiGet } from '../services/apiService'
 
 const PAGE_SIZE = 15
 
+function buildStudentName(student) {
+  const lastName = student.last_name || student.lastName || ''
+  const firstName = student.first_name || student.firstName || ''
+  return `${lastName} ${firstName}`.trim() || 'Fara nume'
+}
+
+function buildInitials(name) {
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || '')
+    .join('')
+}
+
 export default function StudentsScreen({ accessToken }) {
   const [loading, setLoading] = useState(false)
   const [banner, setBanner] = useState(null)
@@ -50,7 +65,7 @@ export default function StudentsScreen({ accessToken }) {
     const sorted = [...list]
     sorted.sort((a, b) => {
       if (sortBy === 'last_name') {
-        return (a.last_name || a.lastName || '').localeCompare(b.last_name || b.lastName || '')
+        return buildStudentName(a).localeCompare(buildStudentName(b))
       }
       if (sortBy === 'class_name') {
         return (a.class_name || a.className || '').localeCompare(b.class_name || b.className || '')
@@ -62,16 +77,17 @@ export default function StudentsScreen({ accessToken }) {
 
   const totalPages = Math.max(1, Math.ceil(filteredStudents.length / PAGE_SIZE))
   const currentPage = Math.min(page, totalPages)
-  const paginatedStudents = filteredStudents.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+  const pageStart = (currentPage - 1) * PAGE_SIZE
+  const paginatedStudents = filteredStudents.slice(pageStart, pageStart + PAGE_SIZE)
 
   return (
     <section className="contentCard">
       <div className="contentHeader">
         <div>
-          <div className="title">Lista Studenti</div>
-          <div className="subtitle">Toti studentii din sistem.</div>
+          <div className="title">Lista studenti</div>
+          <div className="subtitle">Vizualizare clara a elevilor din sistem, cu cautare si paginare.</div>
         </div>
-        <div className="headerActions">
+        <div className="headerActions studentHeaderActions">
           <input
             className="input"
             placeholder="Cauta dupa nume, username sau clasa"
@@ -83,45 +99,67 @@ export default function StudentsScreen({ accessToken }) {
             onClick={() => setSortBy(sortBy === 'last_name' ? null : 'last_name')}
             disabled={loading || students.length === 0}
           >
-            Sort by Name
+            Sorteaza dupa nume
           </button>
           <button
             className={`btn ${sortBy === 'class_name' ? 'primary' : ''}`}
             onClick={() => setSortBy(sortBy === 'class_name' ? null : 'class_name')}
             disabled={loading || students.length === 0}
           >
-            Sort by Class
+            Sorteaza dupa clasa
           </button>
         </div>
+      </div>
+
+      <div className="catalogStats studentStats">
+        <div className="statPill">Total elevi: <strong>{students.length}</strong></div>
+        <div className="statPill">Rezultate filtrate: <strong>{filteredStudents.length}</strong></div>
+        <div className="statPill">Pagina curenta: <strong>{currentPage}</strong></div>
       </div>
 
       {banner && <div className={`banner ${banner.type}`}>{banner.text}</div>}
 
       {loading ? (
-        <div className="mutedBlock">Loading...</div>
+        <div className="mutedBlock">Se incarca lista de studenti...</div>
       ) : filteredStudents.length === 0 ? (
         <div className="mutedBlock">Nu exista studenti pentru filtrul selectat.</div>
       ) : (
         <>
-          <div className="tableWrap">
-            <table className="dataTable">
+          <div className="tableWrap studentTableWrap">
+            <table className="tbl studentTable">
               <thead>
                 <tr>
+                  <th className="thin">#</th>
+                  <th>Elev</th>
                   <th>Username</th>
-                  <th>Nume</th>
-                  <th>Prenume</th>
                   <th>Clasa</th>
                 </tr>
               </thead>
               <tbody>
-                {paginatedStudents.map((student) => (
-                  <tr key={student.id || student.username}>
-                    <td>{student.username || '-'}</td>
-                    <td>{student.last_name || student.lastName || '-'}</td>
-                    <td>{student.first_name || student.firstName || '-'}</td>
-                    <td>{student.class_name || student.className || (student.class_id ? `Clasa ${student.class_id}` : '-')}</td>
-                  </tr>
-                ))}
+                {paginatedStudents.map((student, index) => {
+                  const fullName = buildStudentName(student)
+                  const className = student.class_name || student.className || (student.class_id ? `Clasa ${student.class_id}` : '-')
+                  return (
+                    <tr key={student.id || student.username}>
+                      <td className="thin">{pageStart + index + 1}</td>
+                      <td>
+                        <div className="studentNameCell">
+                          <div className="studentInitials">{buildInitials(fullName)}</div>
+                          <div>
+                            <div className="studentName">{fullName}</div>
+                            <div className="studentMeta">Cont activ in platforma</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span className="studentUsername">@{student.username || '-'}</span>
+                      </td>
+                      <td>
+                        <span className="studentClassBadge">{className}</span>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

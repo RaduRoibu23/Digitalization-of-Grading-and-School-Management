@@ -517,7 +517,8 @@ public class SchoolDataService {
                 throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Missing subject " + subjectName);
             }
             String fixedTeacherUsername = teacherBySubjectId.get(subjectId);
-            SlotAssignment best = pickBestAssignment(classId, subjectId, subjectName, fixedTeacherUsername, slots, assignments, usedSlots, daySubjectCounts, occupiedTeachers, occupiedRooms);
+            String preferredTeacherUsername = fixedTeacherUsername != null ? fixedTeacherUsername : preferredTeacherForClassSubject(classId, subjectId);
+            SlotAssignment best = pickBestAssignment(classId, subjectId, subjectName, fixedTeacherUsername, preferredTeacherUsername, slots, assignments, usedSlots, daySubjectCounts, occupiedTeachers, occupiedRooms);
             if (best == null) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Nu am putut genera un orar valid pentru " + schoolClass.name() + ".");
             }
@@ -532,7 +533,7 @@ public class SchoolDataService {
         return assignments;
     }
 
-    private SlotAssignment pickBestAssignment(Long classId, Long subjectId, String subjectName, String fixedTeacherUsername, List<Slot> slots,
+    private SlotAssignment pickBestAssignment(Long classId, Long subjectId, String subjectName, String fixedTeacherUsername, String preferredTeacherUsername, List<Slot> slots,
                                               List<SlotAssignment> assignments, Set<String> usedSlots, Map<String, Integer> daySubjectCounts,
                                               Map<String, String> occupiedTeachers, Map<String, String> occupiedRooms) {
         List<String> candidateTeachers = teachersBySubjectId.getOrDefault(subjectId, List.of());
@@ -552,7 +553,7 @@ public class SchoolDataService {
                 continue;
             }
 
-            String teacherUsername = pickTeacherForSlot(slot, assignments, candidateTeachers, occupiedTeachers, fixedTeacherUsername);
+            String teacherUsername = pickTeacherForSlot(slot, assignments, candidateTeachers, occupiedTeachers, fixedTeacherUsername, preferredTeacherUsername);
             if (teacherUsername == null) {
                 continue;
             }
@@ -603,17 +604,39 @@ public class SchoolDataService {
     }
 
     private String pickTeacherForSlot(Slot slot, List<SlotAssignment> assignments,
-                                      List<String> candidateTeachers, Map<String, String> occupiedTeachers, String fixedTeacherUsername) {
-        List<String> pool = fixedTeacherUsername == null ? candidateTeachers : List.of(fixedTeacherUsername);
+                                      List<String> candidateTeachers, Map<String, String> occupiedTeachers,
+                                      String fixedTeacherUsername, String preferredTeacherUsername) {
+        List<String> pool = new ArrayList<>();
+        if (fixedTeacherUsername != null) {
+            pool.add(fixedTeacherUsername);
+        } else {
+            if (preferredTeacherUsername != null && candidateTeachers.contains(preferredTeacherUsername)) {
+                pool.add(preferredTeacherUsername);
+            }
+            candidateTeachers.stream()
+                    .filter(username -> !pool.contains(username))
+                    .forEach(pool::add);
+        }
+
         return pool.stream()
                 .filter(username -> !occupiedTeachers.containsKey(slotKey(slot.weekday(), slot.indexInDay(), username)))
                 .filter(username -> assignments.stream().noneMatch(entry -> username.equals(entry.teacherUsername())
                         && entry.slot().weekday() == slot.weekday()
                         && entry.slot().indexInDay() == slot.indexInDay()))
-                .min(Comparator.comparingInt((String username) -> teacherLoad(assignments, username))
+                .min(Comparator.comparingInt((String username) -> preferredTeacherUsername != null && preferredTeacherUsername.equals(username) ? 0 : 1)
+                        .thenComparingInt(username -> teacherLoad(assignments, username))
                         .thenComparingInt(this::existingTeacherLoad)
                         .thenComparing(String::compareTo))
                 .orElse(null);
+    }
+
+    private String preferredTeacherForClassSubject(Long classId, Long subjectId) {
+        List<String> teachers = teachersBySubjectId.getOrDefault(subjectId, List.of());
+        if (teachers.isEmpty()) {
+            return null;
+        }
+        int index = Math.floorMod(Math.toIntExact(classId - 1), teachers.size());
+        return teachers.get(index);
     }
 
     private List<Slot> buildSlotsForClass(int totalHours) {

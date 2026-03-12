@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { rolesFromToken, tokenExpiryText, loadSession, refreshAccessToken } from '../services/authService'
+import { rolesFromToken, loadSession, refreshAccessToken } from '../services/authService'
 import Sidebar, { NAV_ITEMS } from './Sidebar'
 import TimetableScreen from './TimetableScreen'
 import GenerateTimetableScreen from './GenerateTimetableScreen'
@@ -21,7 +21,6 @@ function defaultPathForRoles(roles, visibleItems) {
 
 export default function Dashboard({ accessToken, onRefreshToken, onLogout }) {
   const roles = useMemo(() => rolesFromToken(accessToken), [accessToken])
-  const expiry = tokenExpiryText(accessToken)
 
   const visibleItems = useMemo(() => {
     return NAV_ITEMS.filter((item) => hasAnyRole(roles, item.allowedRoles))
@@ -47,16 +46,17 @@ export default function Dashboard({ accessToken, onRefreshToken, onLogout }) {
       <Sidebar roles={roles} />
 
       <main className="content">
-        <div className="topBar">
+        <section className="topBar topBarCompact">
           <div className="topBarLeft">
             <div className="topTitle">Digitalization of Grading</div>
-            <div className="topSub">Token exp: {expiry}</div>
+            <div className="topSub">Spatiu de lucru pentru orar, catalog, notificari si administrare scolara.</div>
           </div>
+
           <div className="topBarRight">
             <button className="btn" onClick={handleRefreshToken}>Refresh token</button>
             <button className="btn danger" onClick={onLogout}>Logout</button>
           </div>
-        </div>
+        </section>
 
         <Routes>
           <Route index element={<Navigate to={defaultPath} replace />} />

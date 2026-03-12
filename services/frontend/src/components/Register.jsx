@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { loadPublicClasses, registerAccount } from '../services/authService'
+import AuthShowcase from './AuthShowcase'
 
 export default function Register() {
   const navigate = useNavigate()
@@ -41,6 +42,13 @@ export default function Register() {
       active = false
     }
   }, [])
+
+  const showcaseCards = useMemo(() => [
+    { value: `${classes.length || 0} clase`, title: 'Alegere directa', text: 'Contul nou este asociat clasei selectate chiar din momentul inregistrarii.' },
+    { value: 'Profil elev', title: 'Date clare', text: 'Informatiile completate aici sunt folosite mai departe in catalog, profil si orar.' },
+    { value: 'Acces rapid', title: 'Autentificare imediata', text: 'Dupa creare, contul poate fi folosit direct pentru intrarea in platforma.' },
+    { value: 'Flux curat', title: 'Totul intr-un loc', text: 'Platforma pastreaza intr-un singur spatiu datele importante pentru viata scolara.' },
+  ], [classes.length])
 
   const canSubmit = useMemo(() => {
     const hasRequired = form.username && form.password && form.confirmPassword && form.first_name && form.last_name && form.email
@@ -94,72 +102,86 @@ export default function Register() {
 
   return (
     <div className="loginPage">
-      <div className="loginCard registerCard">
-        <div className="title">Register</div>
-        <div className="subtitle">Creeaza un cont de elev in aplicatie</div>
+      <div className="authLayout authLayoutCompact">
+        <AuthShowcase
+          eyebrow="Cont nou de elev"
+          title="Creare rapida de cont pentru acces la platforma"
+          description="Completeaza datele principale si selecteaza clasa pentru a porni cu un cont nou, pregatit pentru autentificare si folosire imediata."
+          badges={['Inregistrare', 'Clase reale', 'Acces direct']}
+          cards={showcaseCards}
+          variant="compact"
+        />
 
-        <form className="needs-validation" onSubmit={handleSubmit}>
-          <div className="twoColFields">
-            <div className="field">
-              <div className="label">Prenume</div>
-              <input className="input form-control" value={form.first_name} onChange={(event) => updateField('first_name', event.target.value)} required />
-            </div>
-            <div className="field">
-              <div className="label">Nume</div>
-              <input className="input form-control" value={form.last_name} onChange={(event) => updateField('last_name', event.target.value)} required />
-            </div>
+        <div className="loginCard registerCard authCard">
+          <div className="authCardHeader">
+            <div className="title">Creare cont</div>
+            <div className="subtitle">Configureaza un cont nou de elev</div>
           </div>
 
-          <div className="field">
-            <div className="label">Email</div>
-            <input className="input form-control" type="email" value={form.email} onChange={(event) => updateField('email', event.target.value)} required />
-          </div>
-
-          <div className="twoColFields">
-            <div className="field">
-              <div className="label">Username</div>
-              <input className="input form-control" value={form.username} onChange={(event) => updateField('username', event.target.value)} required />
+          <form className="needs-validation" onSubmit={handleSubmit}>
+            <div className="twoColFields">
+              <div className="field">
+                <div className="label">Prenume</div>
+                <input className="input form-control" value={form.first_name} onChange={(event) => updateField('first_name', event.target.value)} required />
+              </div>
+              <div className="field">
+                <div className="label">Nume</div>
+                <input className="input form-control" value={form.last_name} onChange={(event) => updateField('last_name', event.target.value)} required />
+              </div>
             </div>
+
             <div className="field">
-              <div className="label">Clasa</div>
-              <select
-                className="select form-select"
-                value={form.class_id}
-                onChange={(event) => updateField('class_id', event.target.value)}
-                disabled={loadingClasses || classes.length === 0}
-                required={classes.length > 0}
-              >
-                {classes.map((schoolClass) => (
-                  <option key={schoolClass.id} value={schoolClass.id}>
-                    {schoolClass.name} - {schoolClass.profile}
-                  </option>
-                ))}
-              </select>
+              <div className="label">Email</div>
+              <input className="input form-control" type="email" value={form.email} onChange={(event) => updateField('email', event.target.value)} required />
             </div>
-          </div>
 
-          <div className="twoColFields">
-            <div className="field">
-              <div className="label">Parola</div>
-              <input className="input form-control" type="password" value={form.password} onChange={(event) => updateField('password', event.target.value)} required />
+            <div className="twoColFields">
+              <div className="field">
+                <div className="label">Username</div>
+                <input className="input form-control" value={form.username} onChange={(event) => updateField('username', event.target.value)} required />
+              </div>
+              <div className="field">
+                <div className="label">Clasa</div>
+                <select
+                  className="select form-select"
+                  value={form.class_id}
+                  onChange={(event) => updateField('class_id', event.target.value)}
+                  disabled={loadingClasses || classes.length === 0}
+                  required={classes.length > 0}
+                >
+                  {classes.map((schoolClass) => (
+                    <option key={schoolClass.id} value={schoolClass.id}>
+                      {schoolClass.name} - {schoolClass.profile}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div className="field">
-              <div className="label">Confirmare parola</div>
-              <input className="input form-control" type="password" value={form.confirmPassword} onChange={(event) => updateField('confirmPassword', event.target.value)} required />
+
+            <div className="twoColFields">
+              <div className="field">
+                <div className="label">Parola</div>
+                <input className="input form-control" type="password" value={form.password} onChange={(event) => updateField('password', event.target.value)} required />
+              </div>
+              <div className="field">
+                <div className="label">Confirmare parola</div>
+                <input className="input form-control" type="password" value={form.confirmPassword} onChange={(event) => updateField('confirmPassword', event.target.value)} required />
+              </div>
             </div>
-          </div>
 
-          <button className="btn btn-primary loginMainBtn" type="submit" disabled={!canSubmit}>
-            {loading ? 'Se creeaza contul...' : 'Register'}
-          </button>
+            <button className="btn btn-primary loginMainBtn" type="submit" disabled={!canSubmit}>
+              {loading ? 'Se creeaza contul...' : 'Register'}
+            </button>
 
-          <div className="authSwitch">
-            <span>Ai deja cont?</span>
-            <Link className="linkBtn" to="/login">Inapoi la login</Link>
-          </div>
+            <div className="authSwitch">
+              <Link className="linkBtn" to="/">Prima pagina</Link>
+              <span>/</span>
+              <Link className="linkBtn" to="/login">Inapoi la login</Link>
+            </div>
 
-          {banner && <div className={`banner ${banner.type}`}>{banner.text}</div>}
-        </form>
+            {banner && <div className={`banner ${banner.type}`}>{banner.text}</div>}
+          </form>
+        </div>
       </div>
     </div>
   )

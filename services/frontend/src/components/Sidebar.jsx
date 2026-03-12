@@ -20,22 +20,27 @@ export default function Sidebar({ roles }) {
 
   return (
     <aside className="sidebar">
-      <div className="sidebarTitle">Meniu</div>
+      <div className="sidebarIntro">
+        <div className="sidebarKicker">Navigation</div>
+        <div className="sidebarTitle">Meniu principal</div>
+        <div className="sidebarText">Modulele disponibile apar in functie de rolul autentificat.</div>
+      </div>
 
       <div className="sidebarGroup">
-        {visible.map((item) => (
+        {visible.map((item, index) => (
           <NavLink
             key={item.id}
             className={({ isActive }) => `navBtn ${isActive ? 'active' : ''}`.trim()}
             to={`/app/${item.path}`}
           >
-            {item.label}
+            <span className="navIndex">{String(index + 1).padStart(2, '0')}</span>
+            <span className="navText">{item.label}</span>
           </NavLink>
         ))}
       </div>
 
       <div className="sidebarFooter">
-        <div className="mutedSmall">Roluri:</div>
+        <div className="mutedSmall">Roluri active</div>
         <div className="rolesWrap">
           {roles.length === 0 ? (
             <span className="pill muted">-</span>

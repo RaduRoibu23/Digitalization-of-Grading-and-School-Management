@@ -75,6 +75,7 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
   }, [rooms]);
 
   const editingAllowed = canEdit(roles);
+  const isTeacherView = mode === "my" && roles.includes("professor");
 
   const filteredClasses = useMemo(() => {
     if (!classSearch.trim()) return classes;
@@ -112,8 +113,7 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
     }
   }
 
-  async function loadTimetableForClass(classId) {
-    const data = await apiGet(`/timetables/classes/${classId}`, accessToken);
+  function applyLoadedEntries(data) {
     const list = (Array.isArray(data) ? data : [])
       .map(normalizeEntry)
       .filter((entry) => entry && entry.id && typeof entry.id === "number");
@@ -123,16 +123,19 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
     setLastSig(signature(list));
   }
 
+  async function loadTimetableForClass(classId) {
+    const data = await apiGet(`/timetables/classes/${classId}`, accessToken);
+    applyLoadedEntries(data);
+  }
+
+  async function loadTeacherTimetable() {
+    const data = await apiGet("/timetables/me/teacher", accessToken);
+    applyLoadedEntries(data);
+  }
+
   async function loadMyTimetable() {
-    if (roles.includes("professor")) {
-      const data = await apiGet("/timetables/me/teacher", accessToken);
-      const list = (Array.isArray(data) ? data : [])
-        .map(normalizeEntry)
-        .filter((entry) => entry && entry.id && typeof entry.id === "number");
-      list.sort((a, b) => (a.weekday - b.weekday) || (a.indexInDay - b.indexInDay));
-      setEntries(list);
-      setOriginal(JSON.parse(JSON.stringify(list)));
-      setLastSig(signature(list));
+    if (isTeacherView) {
+      await loadTeacherTimetable();
       return;
     }
 
@@ -185,16 +188,41 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
         setLoading(false);
       }
     })();
-  }, [mode, selectedClassId]);
+  }, [mode, selectedClassId, isTeacherView]);
 
   useEffect(() => {
     if (isEditing) return;
 
     const intervalId = setInterval(async () => {
       try {
-        const classId = mode === "class"
-          ? selectedClassId
-          : (await apiGet("/me", accessToken))?.class_id ?? (await apiGet("/me", accessToken))?.classId ?? (await apiGet("/me", accessToken))?.class?.id;
+        if (mode === "class") {
+          const data = await apiGet(`/timetables/classes/${selectedClassId}`, accessToken);
+          const list = (Array.isArray(data) ? data : []).map(normalizeEntry).filter(Boolean);
+          list.sort((a, b) => (a.weekday - b.weekday) || (a.indexInDay - b.indexInDay));
+          const nextSig = signature(list);
+          if (nextSig !== lastSig) {
+            setEntries(list);
+            setOriginal(JSON.parse(JSON.stringify(list)));
+            setLastSig(nextSig);
+          }
+          return;
+        }
+
+        if (isTeacherView) {
+          const data = await apiGet("/timetables/me/teacher", accessToken);
+          const list = (Array.isArray(data) ? data : []).map(normalizeEntry).filter(Boolean);
+          list.sort((a, b) => (a.weekday - b.weekday) || (a.indexInDay - b.indexInDay));
+          const nextSig = signature(list);
+          if (nextSig !== lastSig) {
+            setEntries(list);
+            setOriginal(JSON.parse(JSON.stringify(list)));
+            setLastSig(nextSig);
+          }
+          return;
+        }
+
+        const me = await apiGet("/me", accessToken);
+        const classId = me?.class_id ?? me?.classId ?? me?.class?.id;
         if (!classId) return;
 
         const data = await apiGet(`/timetables/classes/${classId}`, accessToken);
@@ -211,7 +239,7 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
     }, POLL_MS);
 
     return () => clearInterval(intervalId);
-  }, [accessToken, isEditing, lastSig, mode, selectedClassId]);
+  }, [accessToken, isEditing, isTeacherView, lastSig, mode, selectedClassId]);
 
   function updateEntryLocal(entryId, patch) {
     setEntries((current) => current.map((entry) => (entry.id === entryId ? { ...entry, ...patch } : entry)));
@@ -321,7 +349,7 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
             {mode === "class" ? `Orar pe clasa${selectedClassName ? ` - ${selectedClassName}` : ""}` : "Orarul meu"}
           </div>
           <div className="subtitle">
-            {isEditing ? "Modul editare este activ." : "Vizualizare orar pe zile si intervale."}
+            {isEditing ? "Modul editare este activ." : isTeacherView ? "Programul profesorului pe zile, intervale, clase si sali." : "Vizualizare orar pe zile si intervale."}
           </div>
         </div>
 
@@ -389,32 +417,7 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
       {loading ? (
         <div className="mutedBlock">Loading...</div>
       ) : entries.length === 0 ? (
-        <div className="mutedBlock">Nu exista intrari de orar.</div>
-      ) : mode === "my" && roles.includes("professor") ? (
-        <div className="tableWrap">
-          <table className="dataTable">
-            <thead>
-              <tr>
-                <th>Zi</th>
-                <th>Ora</th>
-                <th>Materie</th>
-                <th>Clasa</th>
-                <th>Sala</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((entry) => (
-                <tr key={entry.id}>
-                  <td>{WEEKDAY[(entry.weekday || 1) - 1] || "-"}</td>
-                  <td>{TIME_LABELS[entry.indexInDay || 0] || `Slot ${entry.indexInDay}`}</td>
-                  <td>{entry.subjectName || `#${entry.subjectId}`}</td>
-                  <td>{entry.className || `Clasa ${entry.classId}`}</td>
-                  <td>{entry.roomName || (entry.roomId ? `Sala ${entry.roomId}` : "-")}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <div className="mutedBlock">{isTeacherView ? "Nu exista intrari in orarul profesorului." : "Nu exista intrari de orar."}</div>
       ) : (
         <div className="tableWrap">
           <table className="tbl tblGrid">
@@ -447,8 +450,9 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
                           <>
                             <div className="cellTitle">{cell.subjectName ?? `#${cell.subjectId}`}</div>
                             <div className="cellMeta">
-                              {cell.roomName ?? (cell.roomId == null ? "-" : `Sala ${cell.roomId}`)}
-                              {cell.teacherName && <div className="cellTeacher">{cell.teacherName}</div>}
+                              {isTeacherView && <span>{cell.className ?? `Clasa ${cell.classId}`}</span>}
+                              <span>{cell.roomName ?? (cell.roomId == null ? "-" : `Sala ${cell.roomId}`)}</span>
+                              {!isTeacherView && cell.teacherName && <div className="cellTeacher">{cell.teacherName}</div>}
                               <span className="cellVersion">v{cell.version}</span>
                             </div>
                           </>
@@ -525,10 +529,3 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
     </section>
   );
 }
-
-
-
-
-
-
-

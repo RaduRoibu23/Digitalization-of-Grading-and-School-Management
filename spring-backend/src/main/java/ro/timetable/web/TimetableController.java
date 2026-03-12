@@ -3,6 +3,7 @@ package ro.timetable.web;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -43,8 +44,9 @@ public class TimetableController {
     }
 
     @GetMapping("/me/teacher")
-    public List<TimetableEntry> timetableForTeacher(org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken authentication) {
-        return schoolDataService.getTimetableForTeacher(authentication.getName());
+    public List<TimetableEntry> timetableForTeacher(JwtAuthenticationToken authentication) {
+        String username = (String) authentication.getToken().getClaims().getOrDefault("preferred_username", authentication.getName());
+        return schoolDataService.getTimetableForTeacher(username);
     }
 
     @PostMapping("/generate")
