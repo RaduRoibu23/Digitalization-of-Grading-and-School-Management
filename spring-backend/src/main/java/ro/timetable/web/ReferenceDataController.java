@@ -45,6 +45,7 @@ public class ReferenceDataController {
             @NotBlank String last_name,
             @NotBlank @Email String email,
             Long class_id,
+            Long homeroom_class_id,
             String address,
             String cnp
     ) {
@@ -91,7 +92,8 @@ public class ReferenceDataController {
                 request.email(),
                 request.class_id(),
                 request.address(),
-                request.cnp()
+                request.cnp(),
+                request.homeroom_class_id()
         );
         catalogService.syncProfileData(previousProfile, updatedProfile);
         return schoolDataService.toProfileResponse(updatedProfile, true);

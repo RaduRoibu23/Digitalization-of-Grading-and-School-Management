@@ -2,8 +2,11 @@ package ro.timetable.service;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ro.timetable.model.StudentAbsence;
 import ro.timetable.model.StudentGrade;
 import ro.timetable.model.TimetableEntry;
+import ro.timetable.persistence.StudentAbsenceEntity;
+import ro.timetable.persistence.StudentAbsenceRepository;
 import ro.timetable.persistence.StudentGradeEntity;
 import ro.timetable.persistence.StudentGradeRepository;
 import ro.timetable.persistence.TimetableEntryEntity;
@@ -16,10 +19,16 @@ public class PersistentStateService {
 
     private final TimetableEntryRepository timetableEntryRepository;
     private final StudentGradeRepository studentGradeRepository;
+    private final StudentAbsenceRepository studentAbsenceRepository;
 
-    public PersistentStateService(TimetableEntryRepository timetableEntryRepository, StudentGradeRepository studentGradeRepository) {
+    public PersistentStateService(
+            TimetableEntryRepository timetableEntryRepository,
+            StudentGradeRepository studentGradeRepository,
+            StudentAbsenceRepository studentAbsenceRepository
+    ) {
         this.timetableEntryRepository = timetableEntryRepository;
         this.studentGradeRepository = studentGradeRepository;
+        this.studentAbsenceRepository = studentAbsenceRepository;
     }
 
     public List<TimetableEntry> loadTimetableEntries() {
@@ -58,6 +67,17 @@ public class PersistentStateService {
     @Transactional
     public void deleteGrade(Long gradeId) {
         studentGradeRepository.deleteById(gradeId);
+    }
+
+    public List<StudentAbsence> loadAbsences() {
+        return studentAbsenceRepository.findAllByOrderByStudentUsernameAscSubjectNameAscAbsenceDateDescIdDesc().stream()
+                .map(this::toModel)
+                .toList();
+    }
+
+    @Transactional
+    public void saveAbsence(StudentAbsence absence) {
+        studentAbsenceRepository.save(toEntity(absence));
     }
 
     private TimetableEntry toModel(TimetableEntryEntity entity) {
@@ -125,6 +145,46 @@ public class PersistentStateService {
         entity.setTeacherUsername(grade.teacherUsername());
         entity.setTeacherName(grade.teacherName());
         entity.setVersion(grade.version());
+        return entity;
+    }
+
+    private StudentAbsence toModel(StudentAbsenceEntity entity) {
+        return new StudentAbsence(
+                entity.getId(),
+                entity.getStudentUsername(),
+                entity.getStudentName(),
+                entity.getClassId(),
+                entity.getClassName(),
+                entity.getSubjectId(),
+                entity.getSubjectName(),
+                entity.getAbsenceDate(),
+                entity.getTeacherUsername(),
+                entity.getTeacherName(),
+                entity.isMotivated(),
+                entity.getMotivatedByUsername(),
+                entity.getMotivatedByName(),
+                entity.getMotivatedAt(),
+                entity.getVersion()
+        );
+    }
+
+    private StudentAbsenceEntity toEntity(StudentAbsence absence) {
+        StudentAbsenceEntity entity = new StudentAbsenceEntity();
+        entity.setId(absence.id());
+        entity.setStudentUsername(absence.studentUsername());
+        entity.setStudentName(absence.studentName());
+        entity.setClassId(absence.classId());
+        entity.setClassName(absence.className());
+        entity.setSubjectId(absence.subjectId());
+        entity.setSubjectName(absence.subjectName());
+        entity.setAbsenceDate(absence.absenceDate());
+        entity.setTeacherUsername(absence.teacherUsername());
+        entity.setTeacherName(absence.teacherName());
+        entity.setMotivated(absence.motivated());
+        entity.setMotivatedByUsername(absence.motivatedByUsername());
+        entity.setMotivatedByName(absence.motivatedByName());
+        entity.setMotivatedAt(absence.motivatedAt());
+        entity.setVersion(absence.version());
         return entity;
     }
 }

@@ -115,6 +115,7 @@ public class SchoolDataService {
     void init() {
         initializeReferenceData();
         loadPersistedTimetables();
+        reconcileHomeroomAssignmentsWithTimetables();
     }
 
     public List<SchoolClass> getClasses() {
@@ -171,7 +172,7 @@ public class SchoolDataService {
         return profileResponse(profile);
     }
 
-    public UserProfile updateProfile(String username, Integer version, String firstName, String lastName, String email, Long classId, String address, String cnp) {
+    public UserProfile updateProfile(String username, Integer version, String firstName, String lastName, String email, Long classId, String address, String cnp, Long homeroomClassId) {
         UserProfile existing = getProfile(username);
         int existingVersion = existing.version() == null ? 1 : existing.version();
         if (!Objects.equals(existingVersion, version)) {
@@ -207,6 +208,10 @@ public class SchoolDataService {
             }
         }
 
+        if (!"professor".equals(existing.role()) && homeroomClassId != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Doar profesorii pot fi diriginti");
+        }
+
         UserProfile updated = new UserProfile(
                 existing.id(),
                 existingVersion + 1,
@@ -223,6 +228,7 @@ public class SchoolDataService {
         );
 
         profilesByUsername.put(username, updated);
+        updateHomeroomTeacherAssignment(existing, updated, homeroomClassId);
         synchronizeTeacherDisplayName(existing, updated);
         referenceDataPersistenceService.saveUserProfile(updated);
         return updated;
@@ -294,6 +300,7 @@ public class SchoolDataService {
         List<TimetableEntry> generated = buildGeneratedTimetable(schoolClass, classId);
         timetablesByClassId.put(classId, generated);
         persistentStateService.replaceTimetableForClass(classId, generated);
+        reconcileHomeroomAssignmentForClass(classId);
         return new TimetableGenerationResponse("Timetable generated", List.of(jobIds.incrementAndGet()));
     }
 
@@ -301,6 +308,7 @@ public class SchoolDataService {
         requireClass(classId);
         timetablesByClassId.remove(classId);
         persistentStateService.deleteTimetable(classId);
+        reconcileHomeroomAssignmentForClass(classId);
     }
 
     public TimetableEntry updateEntry(Long entryId, Integer version, Long subjectId, Long roomId) {
@@ -516,6 +524,7 @@ public class SchoolDataService {
 
     public ProfileResponse toProfileResponse(UserProfile profile, boolean includeSensitive) {
         SchoolClass schoolClass = profile.classId() == null ? null : requireClass(profile.classId());
+        SchoolClass homeroomClass = "professor".equals(profile.role()) ? homeroomClassForTeacher(profile.username()) : null;
         return new ProfileResponse(
                 profile.id(),
                 profile.version(),
@@ -529,7 +538,9 @@ public class SchoolDataService {
                 profile.classId(),
                 profile.className(),
                 schoolClass == null ? null : schoolClass.profile(),
-                profile.subjectsTaught()
+                profile.subjectsTaught(),
+                homeroomClass == null ? null : homeroomClass.id(),
+                homeroomClass == null ? null : homeroomClass.name()
         );
     }
 
@@ -996,8 +1007,89 @@ public class SchoolDataService {
         homeRoomIdsByClassId.clear();
         for (int index = 0; index < CLASS_COUNT; index++) {
             long classId = index + 1L;
-            classes.put(classId, new SchoolClass(classId, CLASS_NAMES[index], CLASS_PROFILES[index]));
+            classes.put(classId, new SchoolClass(classId, CLASS_NAMES[index], CLASS_PROFILES[index], null, null));
         }
+    }
+
+    private void updateHomeroomTeacherAssignment(UserProfile previousProfile, UserProfile updatedProfile, Long homeroomClassId) {
+        if (!"professor".equals(updatedProfile.role())) {
+            return;
+        }
+
+        SchoolClass currentHomeroomClass = homeroomClassForTeacher(updatedProfile.username());
+        SchoolClass requestedClass = homeroomClassId == null ? null : requireClass(homeroomClassId);
+
+        if (requestedClass != null) {
+            if (!teachesClass(updatedProfile.username(), homeroomClassId)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Dirigintele trebuie sa predea la clasa selectata");
+            }
+            if (requestedClass.homeroomTeacherUsername() != null && !updatedProfile.username().equals(requestedClass.homeroomTeacherUsername())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Clasa are deja un alt diriginte");
+            }
+        }
+
+        if (currentHomeroomClass != null && !Objects.equals(currentHomeroomClass.id(), homeroomClassId)) {
+            saveSchoolClass(new SchoolClass(
+                    currentHomeroomClass.id(),
+                    currentHomeroomClass.name(),
+                    currentHomeroomClass.profile(),
+                    null,
+                    null
+            ));
+        }
+
+        if (requestedClass != null) {
+            saveSchoolClass(new SchoolClass(
+                    requestedClass.id(),
+                    requestedClass.name(),
+                    requestedClass.profile(),
+                    updatedProfile.username(),
+                    displayName(updatedProfile)
+            ));
+        }
+    }
+
+    private void saveSchoolClass(SchoolClass schoolClass) {
+        classes.put(schoolClass.id(), schoolClass);
+        referenceDataPersistenceService.saveSchoolClass(schoolClass);
+    }
+
+    private SchoolClass homeroomClassForTeacher(String teacherUsername) {
+        return classes.values().stream()
+                .filter(schoolClass -> teacherUsername.equals(schoolClass.homeroomTeacherUsername()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private void reconcileHomeroomAssignmentsWithTimetables() {
+        classes.values().stream()
+                .map(SchoolClass::id)
+                .sorted()
+                .forEach(this::reconcileHomeroomAssignmentForClass);
+    }
+
+    private void reconcileHomeroomAssignmentForClass(Long classId) {
+        SchoolClass schoolClass = requireClass(classId);
+        String homeroomTeacherUsername = schoolClass.homeroomTeacherUsername();
+        if (homeroomTeacherUsername == null || homeroomTeacherUsername.isBlank()) {
+            return;
+        }
+        if (teachesClass(homeroomTeacherUsername, classId)) {
+            return;
+        }
+
+        saveSchoolClass(new SchoolClass(
+                schoolClass.id(),
+                schoolClass.name(),
+                schoolClass.profile(),
+                null,
+                null
+        ));
+    }
+
+    private boolean teachesClass(String teacherUsername, Long classId) {
+        return getTimetableForClass(classId).stream()
+                .anyMatch(entry -> teacherUsername.equals(entry.teacherUsername()));
     }
 
     private void seedSubjects() {

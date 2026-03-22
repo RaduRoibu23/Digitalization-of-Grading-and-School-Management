@@ -68,8 +68,19 @@ public class ReferenceDataPersistenceService {
     public List<SchoolClass> loadClasses() {
         return schoolClassRepository.findAll().stream()
                 .sorted(Comparator.comparing(SchoolClassEntity::getId))
-                .map(entity -> new SchoolClass(entity.getId(), entity.getName(), entity.getProfile()))
+                .map(entity -> new SchoolClass(
+                        entity.getId(),
+                        entity.getName(),
+                        entity.getProfile(),
+                        entity.getHomeroomTeacherUsername(),
+                        entity.getHomeroomTeacherName()
+                ))
                 .toList();
+    }
+
+    @Transactional
+    public void saveSchoolClass(SchoolClass schoolClass) {
+        schoolClassRepository.save(toEntity(schoolClass));
     }
 
     @Transactional(readOnly = true)
@@ -123,6 +134,8 @@ public class ReferenceDataPersistenceService {
         entity.setId(schoolClass.id());
         entity.setName(schoolClass.name());
         entity.setProfile(schoolClass.profile());
+        entity.setHomeroomTeacherUsername(schoolClass.homeroomTeacherUsername());
+        entity.setHomeroomTeacherName(schoolClass.homeroomTeacherName());
         return entity;
     }
 

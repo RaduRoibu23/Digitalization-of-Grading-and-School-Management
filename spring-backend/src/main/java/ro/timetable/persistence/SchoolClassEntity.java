@@ -20,6 +20,10 @@ public class SchoolClassEntity {
 
     private String profile;
 
+    private String homeroomTeacherUsername;
+
+    private String homeroomTeacherName;
+
     @OneToMany(mappedBy = "schoolClass", cascade = CascadeType.ALL)
     private List<UserProfileEntity> students = new ArrayList<>();
 
@@ -51,6 +55,22 @@ public class SchoolClassEntity {
 
     public void setProfile(String profile) {
         this.profile = profile;
+    }
+
+    public String getHomeroomTeacherUsername() {
+        return homeroomTeacherUsername;
+    }
+
+    public void setHomeroomTeacherUsername(String homeroomTeacherUsername) {
+        this.homeroomTeacherUsername = homeroomTeacherUsername;
+    }
+
+    public String getHomeroomTeacherName() {
+        return homeroomTeacherName;
+    }
+
+    public void setHomeroomTeacherName(String homeroomTeacherName) {
+        this.homeroomTeacherName = homeroomTeacherName;
     }
 
     public List<UserProfileEntity> getStudents() {

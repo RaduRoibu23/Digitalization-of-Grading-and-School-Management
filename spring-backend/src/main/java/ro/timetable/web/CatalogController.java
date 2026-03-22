@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ro.timetable.service.CatalogService;
 import ro.timetable.web.dto.ApiDtos.ActionResponse;
+import ro.timetable.web.dto.ApiDtos.AbsenceResponse;
 import ro.timetable.web.dto.ApiDtos.CatalogResponse;
 import ro.timetable.web.dto.ApiDtos.GradeResponse;
 import ro.timetable.web.dto.ApiDtos.ProfileResponse;
@@ -47,6 +48,18 @@ public class CatalogController {
             @NotNull Integer version,
             @NotNull @Min(value = 1, message = "Nota invalida") @Max(value = 10, message = "Nota invalida") Integer grade_value,
             @NotBlank String grade_date
+    ) {
+    }
+
+    public record CreateAbsenceRequest(
+            @NotBlank String student_username,
+            @NotBlank String subject_name,
+            @NotBlank String absence_date
+    ) {
+    }
+
+    public record MotivateAbsenceRequest(
+            @NotNull Integer version
     ) {
     }
 
@@ -96,6 +109,31 @@ public class CatalogController {
     @DeleteMapping("/grades/{gradeId}")
     public ActionResponse deleteGrade(@PathVariable Long gradeId, JwtAuthenticationToken authentication) {
         return catalogService.deleteGrade(username(authentication), roles(authentication), gradeId);
+    }
+
+    @PostMapping("/absences")
+    public AbsenceResponse createAbsence(@Valid @RequestBody CreateAbsenceRequest request, JwtAuthenticationToken authentication) {
+        return catalogService.createAbsence(
+                username(authentication),
+                roles(authentication),
+                request.student_username(),
+                request.subject_name(),
+                request.absence_date()
+        );
+    }
+
+    @PatchMapping("/absences/{absenceId}/motivate")
+    public AbsenceResponse motivateAbsence(
+            @PathVariable Long absenceId,
+            @Valid @RequestBody MotivateAbsenceRequest request,
+            JwtAuthenticationToken authentication
+    ) {
+        return catalogService.motivateAbsence(
+                username(authentication),
+                roles(authentication),
+                absenceId,
+                request.version()
+        );
     }
 
     private String username(JwtAuthenticationToken authentication) {

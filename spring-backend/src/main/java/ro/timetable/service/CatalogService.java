@@ -5,10 +5,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import ro.timetable.model.SchoolClass;
+import ro.timetable.model.StudentAbsence;
 import ro.timetable.model.StudentGrade;
 import ro.timetable.model.TimetableEntry;
 import ro.timetable.model.UserProfile;
 import ro.timetable.web.dto.ApiDtos.ActionResponse;
+import ro.timetable.web.dto.ApiDtos.AbsenceResponse;
 import ro.timetable.web.dto.ApiDtos.CatalogResponse;
 import ro.timetable.web.dto.ApiDtos.CatalogSubjectResponse;
 import ro.timetable.web.dto.ApiDtos.GradeResponse;
@@ -33,7 +35,9 @@ public class CatalogService {
     private final PersistentStateService persistentStateService;
     private final NotificationService notificationService;
     private final Map<String, List<StudentGrade>> gradesByStudentUsername = new LinkedHashMap<>();
+    private final Map<String, List<StudentAbsence>> absencesByStudentUsername = new LinkedHashMap<>();
     private final AtomicLong gradeIds = new AtomicLong(9000);
+    private final AtomicLong absenceIds = new AtomicLong(12000);
 
     public CatalogService(
             SchoolDataService schoolDataService,
@@ -50,6 +54,7 @@ public class CatalogService {
     @PostConstruct
     void init() {
         loadPersistedGrades();
+        loadPersistedAbsences();
     }
 
     public List<ProfileResponse> getCatalogStudents(String requesterUsername, List<String> roles) {
@@ -204,12 +209,110 @@ public class CatalogService {
         throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Grade not found");
     }
 
+    public AbsenceResponse createAbsence(String requesterUsername, List<String> roles, String studentUsername, String subjectName, String absenceDate) {
+        if (!(hasRole(roles, "secretariat") || hasRole(roles, "professor") || hasRole(roles, "admin") || hasRole(roles, "sysadmin"))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only secretariat and professors can add absences");
+        }
+
+        LocalDate.parse(absenceDate);
+        UserProfile student = requireStudentProfile(studentUsername);
+        Long subjectId = schoolDataService.subjectIdByName(subjectName);
+        if (schoolDataService.weeklyHoursForSubject(student.classId(), subjectName) <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Materia nu apartine clasei selectate");
+        }
+
+        TimetableEntry teacherAssignment = assignedTeacherForClassSubject(student.classId(), subjectId);
+        if (teacherAssignment == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Genereaza mai intai orarul pentru materia selectata.");
+        }
+        if (!canAddAbsence(requesterUsername, roles, student.classId(), subjectId, teacherAssignment)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not allowed to add an absence for this subject");
+        }
+
+        ensureAbsenceNotDuplicated(student.username(), subjectId, absenceDate);
+        UserProfile creator = schoolDataService.getProfile(requesterUsername);
+
+        StudentAbsence created = new StudentAbsence(
+                absenceIds.incrementAndGet(),
+                student.username(),
+                student.firstName() + " " + student.lastName(),
+                student.classId(),
+                student.className(),
+                subjectId,
+                subjectName,
+                absenceDate,
+                creator.username(),
+                creator.firstName() + " " + creator.lastName(),
+                false,
+                null,
+                null,
+                null,
+                1
+        );
+
+        List<StudentAbsence> studentAbsences = absencesByStudentUsername.computeIfAbsent(student.username(), ignored -> new ArrayList<>());
+        studentAbsences.add(created);
+        sortAbsences(studentAbsences);
+        persistentStateService.saveAbsence(created);
+        notificationService.createNotifications(List.of(student.username()), "Ai primit o absenta la materia " + subjectName + ".");
+        return absenceResponse(created, requesterUsername, roles);
+    }
+
+    public AbsenceResponse motivateAbsence(String requesterUsername, List<String> roles, Long absenceId, Integer version) {
+        for (Map.Entry<String, List<StudentAbsence>> bucket : absencesByStudentUsername.entrySet()) {
+            List<StudentAbsence> absences = bucket.getValue();
+            for (int index = 0; index < absences.size(); index++) {
+                StudentAbsence existing = absences.get(index);
+                if (!Objects.equals(existing.id(), absenceId)) {
+                    continue;
+                }
+                if (!Objects.equals(existing.version(), version)) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Absenta a fost modificata intre timp. Da refresh si incearca din nou.");
+                }
+                if (!canMotivateAbsence(requesterUsername, roles, existing)) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not allowed to motivate this absence");
+                }
+                if (existing.motivated()) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Absenta este deja motivata");
+                }
+
+                UserProfile motivator = schoolDataService.getProfile(requesterUsername);
+                StudentAbsence updated = new StudentAbsence(
+                        existing.id(),
+                        existing.studentUsername(),
+                        existing.studentName(),
+                        existing.classId(),
+                        existing.className(),
+                        existing.subjectId(),
+                        existing.subjectName(),
+                        existing.absenceDate(),
+                        existing.teacherUsername(),
+                        existing.teacherName(),
+                        true,
+                        motivator.username(),
+                        motivator.firstName() + " " + motivator.lastName(),
+                        LocalDate.now().toString(),
+                        existing.version() + 1
+                );
+                absences.set(index, updated);
+                sortAbsences(absences);
+                persistentStateService.saveAbsence(updated);
+                notificationService.createNotifications(List.of(existing.studentUsername()), "O absenta la materia " + existing.subjectName() + " a fost motivata.");
+                return absenceResponse(updated, requesterUsername, roles);
+            }
+        }
+
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Absence not found");
+    }
+
     public void syncProfileData(UserProfile previousProfile, UserProfile updatedProfile) {
         if ("student".equals(updatedProfile.role())) {
             synchronizeStudentGrades(updatedProfile);
+            synchronizeStudentAbsences(updatedProfile);
         }
         if ("professor".equals(updatedProfile.role())) {
             synchronizeTeacherGrades(updatedProfile);
+            synchronizeTeacherAbsences(updatedProfile);
         }
     }
 
@@ -217,12 +320,19 @@ public class CatalogService {
         SchoolClass schoolClass = schoolDataService.getClassById(student.classId());
         LinkedHashMap<String, Integer> weeklyHours = curriculumPlanService.hoursForClass(schoolClass.name(), schoolClass.profile());
         LinkedHashMap<String, List<StudentGrade>> gradesBySubject = new LinkedHashMap<>();
+        LinkedHashMap<String, List<StudentAbsence>> absencesBySubject = new LinkedHashMap<>();
 
         for (StudentGrade grade : gradesByStudentUsername.getOrDefault(student.username(), List.of())) {
             if (!canViewGrade(requesterUsername, roles, grade)) {
                 continue;
             }
             gradesBySubject.computeIfAbsent(grade.subjectName(), ignored -> new ArrayList<>()).add(grade);
+        }
+        for (StudentAbsence absence : absencesByStudentUsername.getOrDefault(student.username(), List.of())) {
+            if (!canViewAbsence(requesterUsername, roles, absence)) {
+                continue;
+            }
+            absencesBySubject.computeIfAbsent(absence.subjectName(), ignored -> new ArrayList<>()).add(absence);
         }
 
         List<CatalogSubjectResponse> subjectRows = new ArrayList<>();
@@ -232,6 +342,9 @@ public class CatalogService {
             TimetableEntry teacherAssignment = assignedTeacherForClassSubject(student.classId(), subjectId);
             List<StudentGrade> subjectGrades = gradesBySubject.getOrDefault(subjectName, List.of()).stream()
                     .sorted(Comparator.comparing(StudentGrade::gradeDate, Comparator.reverseOrder()).thenComparing(StudentGrade::id, Comparator.reverseOrder()))
+                    .toList();
+            List<StudentAbsence> subjectAbsences = absencesBySubject.getOrDefault(subjectName, List.of()).stream()
+                    .sorted(Comparator.comparing(StudentAbsence::absenceDate, Comparator.reverseOrder()).thenComparing(StudentAbsence::id, Comparator.reverseOrder()))
                     .toList();
             int minimumGrades = planEntry.getValue() + 1;
             Double average = subjectGrades.size() >= minimumGrades
@@ -251,6 +364,7 @@ public class CatalogService {
                     average == null ? null : Math.round(average * 100.0) / 100.0,
                     teacherNames,
                     subjectGrades.stream().map(grade -> gradeResponse(grade, requesterUsername, roles)).toList(),
+                    subjectAbsences.stream().map(absence -> absenceResponse(absence, requesterUsername, roles)).toList(),
                     canAddGrade(requesterUsername, roles, student.classId(), subjectId, teacherAssignment)
             ));
         }
@@ -280,6 +394,27 @@ public class CatalogService {
         );
     }
 
+    private AbsenceResponse absenceResponse(StudentAbsence absence, String requesterUsername, List<String> roles) {
+        return new AbsenceResponse(
+                absence.id(),
+                absence.studentUsername(),
+                absence.studentName(),
+                absence.classId(),
+                absence.className(),
+                absence.subjectId(),
+                absence.subjectName(),
+                absence.absenceDate(),
+                absence.teacherUsername(),
+                absence.teacherName(),
+                absence.motivated(),
+                absence.motivatedByUsername(),
+                absence.motivatedByName(),
+                absence.motivatedAt(),
+                absence.version(),
+                canMotivateAbsence(requesterUsername, roles, absence) && !absence.motivated()
+        );
+    }
+
     private boolean canAccessStudentCatalog(String requesterUsername, List<String> roles, UserProfile student) {
         if (hasRole(roles, "student")) {
             return requesterUsername.equals(student.username());
@@ -296,6 +431,16 @@ public class CatalogService {
         }
         if (hasRole(roles, "professor")) {
             return professorCanManageGrade(requesterUsername, grade.classId(), grade.subjectId(), grade.teacherUsername());
+        }
+        return hasRole(roles, "secretariat") || hasRole(roles, "admin") || hasRole(roles, "sysadmin");
+    }
+
+    private boolean canViewAbsence(String requesterUsername, List<String> roles, StudentAbsence absence) {
+        if (hasRole(roles, "student")) {
+            return requesterUsername.equals(absence.studentUsername());
+        }
+        if (hasRole(roles, "professor")) {
+            return classesForProfessor(requesterUsername).contains(absence.classId());
         }
         return hasRole(roles, "secretariat") || hasRole(roles, "admin") || hasRole(roles, "sysadmin");
     }
@@ -317,6 +462,28 @@ public class CatalogService {
         }
         return hasRole(roles, "professor")
                 && professorCanManageGrade(requesterUsername, classId, subjectId, teacherAssignment.teacherUsername());
+    }
+
+    private boolean canAddAbsence(String requesterUsername, List<String> roles, Long classId, Long subjectId, TimetableEntry teacherAssignment) {
+        if (teacherAssignment == null) {
+            return false;
+        }
+        if (hasRole(roles, "secretariat") || hasRole(roles, "admin") || hasRole(roles, "sysadmin")) {
+            return true;
+        }
+        return hasRole(roles, "professor")
+                && professorCanManageGrade(requesterUsername, classId, subjectId, teacherAssignment.teacherUsername());
+    }
+
+    private boolean canMotivateAbsence(String requesterUsername, List<String> roles, StudentAbsence absence) {
+        if (hasRole(roles, "secretariat") || hasRole(roles, "admin") || hasRole(roles, "sysadmin")) {
+            return true;
+        }
+        if (!hasRole(roles, "professor")) {
+            return false;
+        }
+        return requesterUsername.equals(absence.teacherUsername())
+                || isHomeroomTeacherForClass(requesterUsername, absence.classId());
     }
 
     private boolean professorCanManageGrade(String requesterUsername, Long classId, Long subjectId, String assignedTeacherUsername) {
@@ -345,6 +512,11 @@ public class CatalogService {
                 .map(SchoolClass::id)
                 .filter(classId -> schoolDataService.getTimetableForClass(classId).stream().anyMatch(entry -> professorUsername.equals(entry.teacherUsername())))
                 .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
+    }
+
+    private boolean isHomeroomTeacherForClass(String professorUsername, Long classId) {
+        SchoolClass schoolClass = schoolDataService.getClassById(classId);
+        return Objects.equals(professorUsername, schoolClass.homeroomTeacherUsername());
     }
 
     private boolean teachesSubjectForClass(String professorUsername, Long classId, Long subjectId) {
@@ -396,7 +568,9 @@ public class CatalogService {
                 profile.classId(),
                 profile.className(),
                 schoolClass == null ? null : schoolClass.profile(),
-                profile.subjectsTaught()
+                profile.subjectsTaught(),
+                null,
+                null
         );
     }
 
@@ -456,6 +630,72 @@ public class CatalogService {
         }
     }
 
+    private void synchronizeStudentAbsences(UserProfile updatedProfile) {
+        List<StudentAbsence> absences = absencesByStudentUsername.get(updatedProfile.username());
+        if (absences == null || absences.isEmpty()) {
+            return;
+        }
+
+        String updatedStudentName = updatedProfile.firstName() + " " + updatedProfile.lastName();
+        for (int index = 0; index < absences.size(); index++) {
+            StudentAbsence absence = absences.get(index);
+            StudentAbsence updatedAbsence = new StudentAbsence(
+                    absence.id(),
+                    absence.studentUsername(),
+                    updatedStudentName,
+                    updatedProfile.classId(),
+                    updatedProfile.className(),
+                    absence.subjectId(),
+                    absence.subjectName(),
+                    absence.absenceDate(),
+                    absence.teacherUsername(),
+                    absence.teacherName(),
+                    absence.motivated(),
+                    absence.motivatedByUsername(),
+                    absence.motivatedByName(),
+                    absence.motivatedAt(),
+                    absence.version()
+            );
+            absences.set(index, updatedAbsence);
+            persistentStateService.saveAbsence(updatedAbsence);
+        }
+    }
+
+    private void synchronizeTeacherAbsences(UserProfile updatedProfile) {
+        String updatedTeacherName = updatedProfile.firstName() + " " + updatedProfile.lastName();
+        for (List<StudentAbsence> absences : absencesByStudentUsername.values()) {
+            for (int index = 0; index < absences.size(); index++) {
+                StudentAbsence absence = absences.get(index);
+                String motivatedByName = absence.motivatedByUsername() != null && absence.motivatedByUsername().equals(updatedProfile.username())
+                        ? updatedTeacherName
+                        : absence.motivatedByName();
+                if (!updatedProfile.username().equals(absence.teacherUsername()) && !updatedProfile.username().equals(absence.motivatedByUsername())) {
+                    continue;
+                }
+
+                StudentAbsence updatedAbsence = new StudentAbsence(
+                        absence.id(),
+                        absence.studentUsername(),
+                        absence.studentName(),
+                        absence.classId(),
+                        absence.className(),
+                        absence.subjectId(),
+                        absence.subjectName(),
+                        absence.absenceDate(),
+                        absence.teacherUsername(),
+                        updatedProfile.username().equals(absence.teacherUsername()) ? updatedTeacherName : absence.teacherName(),
+                        absence.motivated(),
+                        absence.motivatedByUsername(),
+                        motivatedByName,
+                        absence.motivatedAt(),
+                        absence.version()
+                );
+                absences.set(index, updatedAbsence);
+                persistentStateService.saveAbsence(updatedAbsence);
+            }
+        }
+    }
+
     private void loadPersistedGrades() {
         gradesByStudentUsername.clear();
         gradeIds.set(9000);
@@ -468,8 +708,32 @@ public class CatalogService {
         gradesByStudentUsername.values().forEach(this::sortGrades);
     }
 
+    private void loadPersistedAbsences() {
+        absencesByStudentUsername.clear();
+        absenceIds.set(12000);
+
+        for (StudentAbsence absence : persistentStateService.loadAbsences()) {
+            absencesByStudentUsername.computeIfAbsent(absence.studentUsername(), ignored -> new ArrayList<>()).add(absence);
+            absenceIds.set(Math.max(absenceIds.get(), absence.id()));
+        }
+
+        absencesByStudentUsername.values().forEach(this::sortAbsences);
+    }
+
     private void sortGrades(List<StudentGrade> grades) {
         grades.sort(Comparator.comparing(StudentGrade::subjectName).thenComparing(StudentGrade::gradeDate, Comparator.reverseOrder()).thenComparing(StudentGrade::id, Comparator.reverseOrder()));
+    }
+
+    private void sortAbsences(List<StudentAbsence> absences) {
+        absences.sort(Comparator.comparing(StudentAbsence::subjectName).thenComparing(StudentAbsence::absenceDate, Comparator.reverseOrder()).thenComparing(StudentAbsence::id, Comparator.reverseOrder()));
+    }
+
+    private void ensureAbsenceNotDuplicated(String studentUsername, Long subjectId, String absenceDate) {
+        boolean duplicate = absencesByStudentUsername.getOrDefault(studentUsername, List.of()).stream()
+                .anyMatch(absence -> Objects.equals(absence.subjectId(), subjectId) && Objects.equals(absence.absenceDate(), absenceDate));
+        if (duplicate) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Exista deja o absenta la aceasta materie pentru data selectata");
+        }
     }
 
     private void ensureValidGradeValue(Integer gradeValue) {

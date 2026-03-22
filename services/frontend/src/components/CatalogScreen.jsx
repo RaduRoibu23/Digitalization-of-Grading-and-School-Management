@@ -37,8 +37,11 @@ export default function CatalogScreen({ accessToken, roles }) {
   const [catalog, setCatalog] = useState(null)
   const [drafts, setDrafts] = useState({})
   const [newGrades, setNewGrades] = useState({})
+  const [newAbsences, setNewAbsences] = useState({})
   const [savingId, setSavingId] = useState(null)
   const [addingSubject, setAddingSubject] = useState(null)
+  const [addingAbsenceSubject, setAddingAbsenceSubject] = useState(null)
+  const [motivatingAbsenceId, setMotivatingAbsenceId] = useState(null)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [deleteTarget, setDeleteTarget] = useState(null)
@@ -115,6 +118,7 @@ export default function CatalogScreen({ accessToken, roles }) {
     const rows = Array.isArray(nextCatalog?.subjects) ? nextCatalog.subjects : []
     const nextDrafts = {}
     const nextNewGrades = {}
+    const nextNewAbsences = {}
 
     rows.forEach((row) => {
       const grades = Array.isArray(row.grades) ? row.grades : []
@@ -129,10 +133,14 @@ export default function CatalogScreen({ accessToken, roles }) {
         grade_value: '',
         grade_date: '',
       }
+      nextNewAbsences[row.subject_name] = {
+        absence_date: '',
+      }
     })
 
     setDrafts(nextDrafts)
     setNewGrades(nextNewGrades)
+    setNewAbsences(nextNewAbsences)
   }
 
   function updateDraft(gradeId, field, value) {
@@ -147,6 +155,16 @@ export default function CatalogScreen({ accessToken, roles }) {
 
   function updateNewGrade(subjectName, field, value) {
     setNewGrades((current) => ({
+      ...current,
+      [subjectName]: {
+        ...current[subjectName],
+        [field]: value,
+      },
+    }))
+  }
+
+  function updateNewAbsence(subjectName, field, value) {
+    setNewAbsences((current) => ({
       ...current,
       [subjectName]: {
         ...current[subjectName],
@@ -208,6 +226,54 @@ export default function CatalogScreen({ accessToken, roles }) {
       setBanner({ type: 'error', text: String(error?.message || error) })
     } finally {
       setAddingSubject(null)
+    }
+  }
+
+  async function addAbsence(row) {
+    const draft = newAbsences[row.subject_name]
+    const student = catalog?.student
+    if (!draft || !student) return
+
+    setAddingAbsenceSubject(row.subject_name)
+    setBanner(null)
+    try {
+      await apiPost(
+        '/catalog/absences',
+        {
+          student_username: student.username,
+          subject_name: row.subject_name,
+          absence_date: draft.absence_date,
+        },
+        accessToken
+      )
+      await reloadCurrentCatalog()
+      setBanner({ type: 'ok', text: 'Absenta a fost adaugata.' })
+    } catch (error) {
+      setBanner({ type: 'error', text: String(error?.message || error) })
+    } finally {
+      setAddingAbsenceSubject(null)
+    }
+  }
+
+  async function motivateAbsence(absence) {
+    setMotivatingAbsenceId(absence.id)
+    setBanner(null)
+    try {
+      await apiPatch(
+        `/catalog/absences/${absence.id}/motivate`,
+        { version: absence.version },
+        accessToken
+      )
+      await reloadCurrentCatalog()
+      setBanner({ type: 'ok', text: 'Absenta a fost motivata.' })
+    } catch (error) {
+      if ([409, 412, 423].includes(error?.status)) {
+        setBanner({ type: 'error', text: 'Absenta a fost modificata intre timp. Da Refresh si incearca din nou.' })
+      } else {
+        setBanner({ type: 'error', text: String(error?.message || error) })
+      }
+    } finally {
+      setMotivatingAbsenceId(null)
     }
   }
 
@@ -308,14 +374,17 @@ export default function CatalogScreen({ accessToken, roles }) {
                   <th>Materie</th>
                   <th>Medie</th>
                   <th>Nota si data</th>
+                  <th>Absente</th>
                   <th>Profesor</th>
                 </tr>
               </thead>
               <tbody>
                 {paginatedSubjects.map((row) => {
                   const grades = Array.isArray(row.grades) ? row.grades : []
+                  const absences = Array.isArray(row.absences) ? row.absences : []
                   const teachers = Array.isArray(row.teacher_names) ? row.teacher_names : []
                   const addDraft = newGrades[row.subject_name] || { grade_value: '', grade_date: '' }
+                  const addAbsenceDraft = newAbsences[row.subject_name] || { absence_date: '' }
 
                   return (
                     <tr key={row.subject_name}>
@@ -407,6 +476,58 @@ export default function CatalogScreen({ accessToken, roles }) {
                                     disabled={addingSubject === row.subject_name || !addDraft.grade_date || !addDraft.grade_value}
                                   >
                                     Add
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        {absences.length === 0 && !row.can_add ? (
+                          <span className="mutedSmall">-</span>
+                        ) : (
+                          <div className="catalogGradeList">
+                            {absences.map((absence) => (
+                              <div key={absence.id} className="catalogGradeItem">
+                                <div className="catalogPair">
+                                  <span className={absence.motivated ? 'gradeBadge good' : 'gradeBadge warn'}>
+                                    {absence.motivated ? 'Motivata' : 'Nemotivata'}
+                                  </span>
+                                  <span className="catalogDate">{formatDate(absence.absence_date)}</span>
+                                </div>
+                                <div className="catalogHint">
+                                  {absence.motivated
+                                    ? `de ${absence.motivated_by_name || absence.motivated_by_username || '-'}`
+                                    : `adaugata de ${absence.teacher_name || '-'}`}
+                                </div>
+                                {absence.motivatable && (
+                                  <button
+                                    className="btn primary"
+                                    onClick={() => motivateAbsence(absence)}
+                                    disabled={motivatingAbsenceId === absence.id}
+                                  >
+                                    Motiveaza
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+
+                            {row.can_add && (
+                              <div className="catalogGradeItem">
+                                <div className="catalogEditor">
+                                  <input
+                                    className="input small"
+                                    type="date"
+                                    value={addAbsenceDraft.absence_date}
+                                    onChange={(event) => updateNewAbsence(row.subject_name, 'absence_date', event.target.value)}
+                                  />
+                                  <button
+                                    className="btn primary"
+                                    onClick={() => addAbsence(row)}
+                                    disabled={addingAbsenceSubject === row.subject_name || !addAbsenceDraft.absence_date}
+                                  >
+                                    Adauga absenta
                                   </button>
                                 </div>
                               </div>

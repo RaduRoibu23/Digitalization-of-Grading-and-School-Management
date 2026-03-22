@@ -45,7 +45,9 @@ public final class ApiDtos {
             Long class_id,
             String class_name,
             String class_profile,
-            List<String> subjects_taught
+            List<String> subjects_taught,
+            Long homeroom_class_id,
+            String homeroom_class_name
     ) {
     }
 
@@ -116,6 +118,26 @@ public final class ApiDtos {
     ) {
     }
 
+    public record AbsenceResponse(
+            Long id,
+            String student_username,
+            String student_name,
+            Long class_id,
+            String class_name,
+            Long subject_id,
+            String subject_name,
+            String absence_date,
+            String teacher_username,
+            String teacher_name,
+            boolean motivated,
+            String motivated_by_username,
+            String motivated_by_name,
+            String motivated_at,
+            Integer version,
+            boolean motivatable
+    ) {
+    }
+
     public record CatalogSubjectResponse(
             Long subject_id,
             String subject_name,
@@ -124,6 +146,7 @@ public final class ApiDtos {
             Double average,
             List<String> teacher_names,
             List<GradeResponse> grades,
+            List<AbsenceResponse> absences,
             boolean can_add
     ) {
     }

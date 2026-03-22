@@ -28,7 +28,7 @@ function buildInitials(name) {
 }
 
 function classLabel(profile) {
-  return profile.class_name || profile.className || (profile.class_id ? `Clasa ${profile.class_id}` : '-')
+  return profile.class_name || profile.className || profile.homeroom_class_name || profile.homeroomClassName || (profile.class_id ? `Clasa ${profile.class_id}` : '-')
 }
 
 function roleLabel(role) {
@@ -57,6 +57,7 @@ function formFromProfile(profile) {
     last_name: profile?.last_name || profile?.lastName || '',
     email: profile?.email || '',
     class_id: profile?.class_id ? String(profile.class_id) : '',
+    homeroom_class_id: profile?.homeroom_class_id ? String(profile.homeroom_class_id) : '',
     address: profile?.address || '',
     cnp: profile?.cnp || '',
   }
@@ -186,6 +187,7 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
           last_name: form.last_name.trim(),
           email: form.email.trim(),
           class_id: editingProfile.role === 'student' && form.class_id ? Number(form.class_id) : null,
+          homeroom_class_id: editingProfile.role === 'professor' && form.homeroom_class_id ? Number(form.homeroom_class_id) : null,
           address: form.address.trim() || null,
           cnp: form.cnp.trim() || null,
         },
@@ -305,6 +307,19 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
                 <label className="label">Clasa</label>
                 <select className="select" value={form.class_id} onChange={(event) => updateField('class_id', event.target.value)} disabled={saving}>
                   <option value="">Selecteaza clasa</option>
+                  {classes.map((schoolClass) => (
+                    <option key={schoolClass.id} value={String(schoolClass.id)}>
+                      {schoolClass.profile ? `${schoolClass.name} - ${schoolClass.profile}` : schoolClass.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {editingProfile.role === 'professor' && (
+              <div className="field">
+                <label className="label">Diriginte la clasa</label>
+                <select className="select" value={form.homeroom_class_id} onChange={(event) => updateField('homeroom_class_id', event.target.value)} disabled={saving}>
+                  <option value="">Fara dirigentie</option>
                   {classes.map((schoolClass) => (
                     <option key={schoolClass.id} value={String(schoolClass.id)}>
                       {schoolClass.profile ? `${schoolClass.name} - ${schoolClass.profile}` : schoolClass.name}
