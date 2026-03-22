@@ -204,6 +204,15 @@ public class CatalogService {
         throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Grade not found");
     }
 
+    public void syncProfileData(UserProfile previousProfile, UserProfile updatedProfile) {
+        if ("student".equals(updatedProfile.role())) {
+            synchronizeStudentGrades(updatedProfile);
+        }
+        if ("professor".equals(updatedProfile.role())) {
+            synchronizeTeacherGrades(updatedProfile);
+        }
+    }
+
     private CatalogResponse buildCatalogResponse(UserProfile student, String requesterUsername, List<String> roles) {
         SchoolClass schoolClass = schoolDataService.getClassById(student.classId());
         LinkedHashMap<String, Integer> weeklyHours = curriculumPlanService.hoursForClass(schoolClass.name(), schoolClass.profile());
@@ -381,11 +390,69 @@ public class CatalogService {
                 profile.firstName(),
                 profile.lastName(),
                 profile.email(),
+                null,
+                null,
                 profile.classId(),
                 profile.className(),
                 schoolClass == null ? null : schoolClass.profile(),
                 profile.subjectsTaught()
         );
+    }
+
+    private void synchronizeStudentGrades(UserProfile updatedProfile) {
+        List<StudentGrade> grades = gradesByStudentUsername.get(updatedProfile.username());
+        if (grades == null || grades.isEmpty()) {
+            return;
+        }
+
+        String updatedStudentName = updatedProfile.firstName() + " " + updatedProfile.lastName();
+        for (int index = 0; index < grades.size(); index++) {
+            StudentGrade grade = grades.get(index);
+            StudentGrade updatedGrade = new StudentGrade(
+                    grade.id(),
+                    grade.studentUsername(),
+                    updatedStudentName,
+                    updatedProfile.classId(),
+                    updatedProfile.className(),
+                    grade.subjectId(),
+                    grade.subjectName(),
+                    grade.gradeValue(),
+                    grade.gradeDate(),
+                    grade.teacherUsername(),
+                    grade.teacherName(),
+                    grade.version()
+            );
+            grades.set(index, updatedGrade);
+            persistentStateService.saveGrade(updatedGrade);
+        }
+    }
+
+    private void synchronizeTeacherGrades(UserProfile updatedProfile) {
+        String updatedTeacherName = updatedProfile.firstName() + " " + updatedProfile.lastName();
+        for (List<StudentGrade> grades : gradesByStudentUsername.values()) {
+            for (int index = 0; index < grades.size(); index++) {
+                StudentGrade grade = grades.get(index);
+                if (!updatedProfile.username().equals(grade.teacherUsername())) {
+                    continue;
+                }
+                StudentGrade updatedGrade = new StudentGrade(
+                        grade.id(),
+                        grade.studentUsername(),
+                        grade.studentName(),
+                        grade.classId(),
+                        grade.className(),
+                        grade.subjectId(),
+                        grade.subjectName(),
+                        grade.gradeValue(),
+                        grade.gradeDate(),
+                        grade.teacherUsername(),
+                        updatedTeacherName,
+                        grade.version()
+                );
+                grades.set(index, updatedGrade);
+                persistentStateService.saveGrade(updatedGrade);
+            }
+        }
     }
 
     private void loadPersistedGrades() {

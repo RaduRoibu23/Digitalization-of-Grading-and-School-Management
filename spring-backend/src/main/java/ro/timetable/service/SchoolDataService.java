@@ -15,6 +15,7 @@ import ro.timetable.web.dto.ApiDtos.MeResponse;
 import ro.timetable.web.dto.ApiDtos.ProfileResponse;
 import ro.timetable.web.dto.ApiDtos.TimetableGenerationResponse;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -67,6 +68,19 @@ public class SchoolDataService {
             "Radu", "Stoica", "Enache", "Nistor", "Voicu", "Sandu", "Munteanu", "Ilie", "Barbu", "Preda",
             "Constantin", "Lazar", "Nedelcu", "Dragomir", "Serban", "Coman", "Neagu", "Manole", "Ene", "Pavel",
             "Oprea", "Tudor", "Florea", "Apostol", "Dobre", "Tudose", "Matei", "Mocanu", "Avram", "Rosu"
+    };
+    private static final String STUDENT_CITY = "Campulung Muscel";
+    private static final String STUDENT_COUNTY = "Arges";
+    private static final int ARGES_COUNTY_CODE = 3;
+    private static final long STUDENT_IDENTITY_RANDOM_SEED = 20260322L;
+    private static final String CNP_CONTROL_KEY = "279146358279";
+    private static final String[] STREET_NAMES = {
+            "Negru Voda", "Republicii", "Matei Basarab", "Plevnei", "Cuza Voda",
+            "General Dragalina", "Victoriei", "Eroilor", "Ion Luca Caragiale", "Alexandru cel Bun",
+            "Colonel Stancu", "Nicolae Balcescu", "Mihai Eminescu", "Trandafirilor", "Primaverii"
+    };
+    private static final String[] BLOCK_NAMES = {
+            "A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "D1", "E1"
     };
 
     private final CurriculumPlanService curriculumPlanService;
@@ -136,6 +150,8 @@ public class SchoolDataService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Username folosit deja");
         }
         SchoolClass schoolClass = requireClass(classId);
+        String generatedAddress = generateUniqueStudentAddress(usedStudentAddresses(), new Random(System.nanoTime()));
+        String generatedCnp = generateUniqueStudentCnp(usedStudentCnps(), new Random(System.nanoTime() ^ username.hashCode()), schoolClass.name());
         UserProfile profile = new UserProfile(
                 profileIds.getAndIncrement(),
                 username,
@@ -143,6 +159,8 @@ public class SchoolDataService {
                 firstName,
                 lastName,
                 email,
+                generatedAddress,
+                generatedCnp,
                 classId,
                 schoolClass.name(),
                 List.of()
@@ -150,6 +168,58 @@ public class SchoolDataService {
         profilesByUsername.put(username, profile);
         referenceDataPersistenceService.saveUserProfile(profile);
         return profileResponse(profile);
+    }
+
+    public UserProfile updateProfile(String username, String firstName, String lastName, String email, Long classId, String address, String cnp) {
+        UserProfile existing = getProfile(username);
+        String normalizedFirstName = normalizeRequiredProfileField(firstName, "Prenumele este obligatoriu");
+        String normalizedLastName = normalizeRequiredProfileField(lastName, "Numele este obligatoriu");
+        String normalizedEmail = normalizeRequiredProfileField(email, "Email-ul este obligatoriu");
+        String normalizedAddress = normalizeOptionalProfileField(address);
+        String normalizedCnp = normalizeOptionalProfileField(cnp);
+        SchoolClass schoolClass = classId == null ? null : requireClass(classId);
+
+        if (referenceDataPersistenceService.emailUsedByAnotherProfile(normalizedEmail, username)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email folosit deja");
+        }
+
+        if ("student".equals(existing.role())) {
+            if (schoolClass == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Clasa este obligatorie pentru elevi");
+            }
+            if (normalizedAddress == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Adresa este obligatorie pentru elevi");
+            }
+            if (normalizedCnp == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CNP-ul este obligatoriu pentru elevi");
+            }
+        }
+
+        if (normalizedCnp != null) {
+            validateCnp(normalizedCnp);
+            if (referenceDataPersistenceService.cnpUsedByAnotherProfile(normalizedCnp, username)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "CNP folosit deja");
+            }
+        }
+
+        UserProfile updated = new UserProfile(
+                existing.id(),
+                existing.username(),
+                existing.role(),
+                normalizedFirstName,
+                normalizedLastName,
+                normalizedEmail,
+                normalizedAddress,
+                normalizedCnp,
+                schoolClass == null ? null : schoolClass.id(),
+                schoolClass == null ? null : schoolClass.name(),
+                existing.subjectsTaught()
+        );
+
+        profilesByUsername.put(username, updated);
+        synchronizeTeacherDisplayName(existing, updated);
+        referenceDataPersistenceService.saveUserProfile(updated);
+        return updated;
     }
 
     public SchoolClass getClassById(Long classId) {
@@ -191,8 +261,12 @@ public class SchoolDataService {
     }
 
     public List<ProfileResponse> getProfilesByRole(String role) {
+        return getProfilesByRole(role, false);
+    }
+
+    public List<ProfileResponse> getProfilesByRole(String role, boolean includeSensitive) {
         return getUserProfilesByRole(role).stream()
-                .map(this::profileResponse)
+                .map(profile -> toProfileResponse(profile, includeSensitive))
                 .toList();
     }
 
@@ -352,6 +426,7 @@ public class SchoolDataService {
         referenceDataPersistenceService.loadProfiles().forEach(profile -> profilesByUsername.put(profile.username(), profile));
 
         rebuildDerivedIndexes();
+        backfillMissingStudentIdentityData();
     }
 
     private void rebuildDerivedIndexes() {
@@ -415,6 +490,8 @@ public class SchoolDataService {
                 profile.firstName(),
                 profile.lastName(),
                 profile.email(),
+                profile.address(),
+                profile.cnp(),
                 profile.role(),
                 roles,
                 profile.classId(),
@@ -427,6 +504,10 @@ public class SchoolDataService {
     }
 
     private ProfileResponse profileResponse(UserProfile profile) {
+        return toProfileResponse(profile, true);
+    }
+
+    public ProfileResponse toProfileResponse(UserProfile profile, boolean includeSensitive) {
         SchoolClass schoolClass = profile.classId() == null ? null : requireClass(profile.classId());
         return new ProfileResponse(
                 profile.id(),
@@ -435,6 +516,8 @@ public class SchoolDataService {
                 profile.firstName(),
                 profile.lastName(),
                 profile.email(),
+                includeSensitive ? profile.address() : null,
+                includeSensitive ? profile.cnp() : null,
                 profile.classId(),
                 profile.className(),
                 schoolClass == null ? null : schoolClass.profile(),
@@ -949,6 +1032,9 @@ public class SchoolDataService {
     private void seedProfiles() {
         profilesByUsername.clear();
         profileIds.set(1);
+        Random identityRandom = new Random(STUDENT_IDENTITY_RANDOM_SEED);
+        Set<String> usedAddresses = new LinkedHashSet<>();
+        Set<String> usedCnps = new LinkedHashSet<>();
 
         addStaffProfile("sysadmin01", "sysadmin", "Marius", "Stoica");
         addStaffProfile("admin01", "admin", "Roxana", "Marin");
@@ -965,6 +1051,8 @@ public class SchoolDataService {
             String username = String.format(Locale.ROOT, "student%03d", index);
             String firstName = FIRST_NAMES[(index - 1) % FIRST_NAMES.length];
             String lastName = LAST_NAMES[((index - 1) * 3) % LAST_NAMES.length];
+            String address = generateUniqueStudentAddress(usedAddresses, identityRandom);
+            String cnp = generateUniqueStudentCnp(usedCnps, identityRandom, schoolClass.name());
             profilesByUsername.put(username, new UserProfile(
                     profileIds.getAndIncrement(),
                     username,
@@ -972,6 +1060,8 @@ public class SchoolDataService {
                     firstName,
                     lastName,
                     username + "@timetable.local",
+                    address,
+                    cnp,
                     classId,
                     schoolClass.name(),
                     List.of()
@@ -989,6 +1079,8 @@ public class SchoolDataService {
                 username + "@timetable.local",
                 null,
                 null,
+                null,
+                null,
                 List.of()
         ));
     }
@@ -1001,6 +1093,8 @@ public class SchoolDataService {
                 teacher.firstName(),
                 teacher.lastName(),
                 teacher.username() + "@timetable.local",
+                null,
+                null,
                 null,
                 null,
                 List.of(teacher.subjectName())
@@ -1052,6 +1146,221 @@ public class SchoolDataService {
                 new TeacherSeed("literatura01", "Sabina", "Matei", "Literatura universala"),
                 new TeacherSeed("stiinte01", "Violeta", "Enache", "Stiinte")
         );
+    }
+
+    private void backfillMissingStudentIdentityData() {
+        Set<String> usedAddresses = usedStudentAddresses();
+        Set<String> usedCnps = usedStudentCnps();
+        Random identityRandom = new Random(STUDENT_IDENTITY_RANDOM_SEED);
+        List<UserProfile> updates = new ArrayList<>();
+
+        for (UserProfile profile : getUserProfilesByRole("student")) {
+            String address = profile.address();
+            String cnp = profile.cnp();
+            boolean changed = false;
+
+            if (address == null || address.isBlank()) {
+                address = generateUniqueStudentAddress(usedAddresses, identityRandom);
+                changed = true;
+            }
+            if (cnp == null || cnp.isBlank()) {
+                cnp = generateUniqueStudentCnp(usedCnps, identityRandom, profile.className());
+                changed = true;
+            }
+
+            if (changed) {
+                updates.add(new UserProfile(
+                        profile.id(),
+                        profile.username(),
+                        profile.role(),
+                        profile.firstName(),
+                        profile.lastName(),
+                        profile.email(),
+                        address,
+                        cnp,
+                        profile.classId(),
+                        profile.className(),
+                        profile.subjectsTaught()
+                ));
+            }
+        }
+
+        for (UserProfile updated : updates) {
+            profilesByUsername.put(updated.username(), updated);
+            referenceDataPersistenceService.saveUserProfile(updated);
+        }
+    }
+
+    private void synchronizeTeacherDisplayName(UserProfile previousProfile, UserProfile updatedProfile) {
+        if (!"professor".equals(updatedProfile.role())) {
+            return;
+        }
+        String previousTeacherName = displayName(previousProfile);
+        String updatedTeacherName = displayName(updatedProfile);
+        if (Objects.equals(previousTeacherName, updatedTeacherName)) {
+            return;
+        }
+
+        for (List<TimetableEntry> entries : timetablesByClassId.values()) {
+            for (int index = 0; index < entries.size(); index++) {
+                TimetableEntry entry = entries.get(index);
+                if (!updatedProfile.username().equals(entry.teacherUsername())) {
+                    continue;
+                }
+                TimetableEntry updatedEntry = new TimetableEntry(
+                        entry.id(),
+                        entry.classId(),
+                        entry.className(),
+                        entry.subjectId(),
+                        entry.subjectName(),
+                        entry.roomId(),
+                        entry.roomName(),
+                        entry.teacherUsername(),
+                        updatedTeacherName,
+                        entry.weekday(),
+                        entry.indexInDay(),
+                        entry.version()
+                );
+                entries.set(index, updatedEntry);
+                persistentStateService.saveTimetableEntry(updatedEntry);
+            }
+        }
+    }
+
+    private Set<String> usedStudentAddresses() {
+        return profilesByUsername.values().stream()
+                .filter(profile -> "student".equals(profile.role()))
+                .map(UserProfile::address)
+                .filter(address -> address != null && !address.isBlank())
+                .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
+    }
+
+    private Set<String> usedStudentCnps() {
+        return profilesByUsername.values().stream()
+                .filter(profile -> "student".equals(profile.role()))
+                .map(UserProfile::cnp)
+                .filter(cnp -> cnp != null && !cnp.isBlank())
+                .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
+    }
+
+    private String generateUniqueStudentAddress(Set<String> usedAddresses, Random random) {
+        for (int attempt = 0; attempt < 2000; attempt++) {
+            String street = STREET_NAMES[random.nextInt(STREET_NAMES.length)];
+            int number = 1 + random.nextInt(180);
+            String candidate;
+            if (random.nextBoolean()) {
+                candidate = "Str. " + street + " nr. " + number + ", " + STUDENT_CITY + ", " + STUDENT_COUNTY;
+            } else {
+                String block = BLOCK_NAMES[random.nextInt(BLOCK_NAMES.length)];
+                int staircase = 1 + random.nextInt(4);
+                int apartment = 1 + random.nextInt(40);
+                candidate = "Str. " + street + " nr. " + number + ", bl. " + block + ", sc. " + staircase + ", ap. " + apartment + ", " + STUDENT_CITY + ", " + STUDENT_COUNTY;
+            }
+            if (usedAddresses.add(candidate)) {
+                return candidate;
+            }
+        }
+        throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Nu s-a putut genera o adresa unica pentru elev");
+    }
+
+    private String generateUniqueStudentCnp(Set<String> usedCnps, Random random, String className) {
+        int birthYear = birthYearForClass(className);
+        for (int attempt = 0; attempt < 4000; attempt++) {
+            int month = 1 + random.nextInt(12);
+            int day = 1 + random.nextInt(LocalDate.of(birthYear, month, 1).lengthOfMonth());
+            int sexDigit = random.nextBoolean() ? 5 : 6;
+            int serial = 1 + random.nextInt(999);
+            String base = String.format(Locale.ROOT, "%d%02d%02d%02d%02d%03d", sexDigit, birthYear % 100, month, day, ARGES_COUNTY_CODE, serial);
+            String candidate = base + computeCnpControlDigit(base);
+            if (usedCnps.add(candidate)) {
+                return candidate;
+            }
+        }
+        throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Nu s-a putut genera un CNP unic pentru elev");
+    }
+
+    private int birthYearForClass(String className) {
+        if (className == null || className.isBlank()) {
+            return 2010;
+        }
+        String level = className.trim().split("\\s+")[0];
+        return switch (level) {
+            case "IX" -> 2010;
+            case "X" -> 2009;
+            case "XI" -> 2008;
+            case "XII" -> 2007;
+            default -> 2010;
+        };
+    }
+
+    private int computeCnpControlDigit(String base) {
+        int sum = 0;
+        for (int index = 0; index < base.length(); index++) {
+            sum += Character.getNumericValue(base.charAt(index)) * Character.getNumericValue(CNP_CONTROL_KEY.charAt(index));
+        }
+        int remainder = sum % 11;
+        return remainder == 10 ? 1 : remainder;
+    }
+
+    private void validateCnp(String cnp) {
+        if (cnp == null || !cnp.matches("\\d{13}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CNP invalid");
+        }
+
+        int sexDigit = Character.getNumericValue(cnp.charAt(0));
+        int countyCode = Integer.parseInt(cnp.substring(7, 9));
+        int serial = Integer.parseInt(cnp.substring(9, 12));
+        int controlDigit = Character.getNumericValue(cnp.charAt(12));
+        String base = cnp.substring(0, 12);
+
+        if (sexDigit < 1 || sexDigit > 8) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CNP invalid");
+        }
+        if ((countyCode < 1 || countyCode > 52) && countyCode != 99) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CNP invalid");
+        }
+        if (serial < 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CNP invalid");
+        }
+        if (computeCnpControlDigit(base) != controlDigit) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CNP invalid");
+        }
+
+        int century = switch (sexDigit) {
+            case 1, 2 -> 1900;
+            case 3, 4 -> 1800;
+            case 5, 6, 7, 8 -> 2000;
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CNP invalid");
+        };
+
+        int year = century + Integer.parseInt(cnp.substring(1, 3));
+        int month = Integer.parseInt(cnp.substring(3, 5));
+        int day = Integer.parseInt(cnp.substring(5, 7));
+        try {
+            LocalDate.of(year, month, day);
+        } catch (Exception ignored) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CNP invalid");
+        }
+    }
+
+    private String normalizeRequiredProfileField(String value, String errorMessage) {
+        String normalized = normalizeOptionalProfileField(value);
+        if (normalized == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, errorMessage);
+        }
+        return normalized;
+    }
+
+    private String normalizeOptionalProfileField(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    private String displayName(UserProfile profile) {
+        return profile.firstName() + " " + profile.lastName();
     }
 }
 

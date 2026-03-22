@@ -46,6 +46,16 @@ public class ReferenceDataPersistenceService {
                 && userProfileRepository.count() > 0;
     }
 
+    @Transactional(readOnly = true)
+    public boolean emailUsedByAnotherProfile(String email, String username) {
+        return userProfileRepository.existsByEmailAndUsernameNot(email, username);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean cnpUsedByAnotherProfile(String cnp, String username) {
+        return cnp != null && !cnp.isBlank() && userProfileRepository.existsByCnpAndUsernameNot(cnp, username);
+    }
+
     @Transactional
     public void saveReferenceData(List<SchoolClass> classes, List<Subject> subjects, List<Room> rooms, List<UserProfile> profiles) {
         schoolClassRepository.saveAll(classes.stream().map(this::toEntity).toList());
@@ -99,6 +109,8 @@ public class ReferenceDataPersistenceService {
                 entity.getFirstName(),
                 entity.getLastName(),
                 entity.getEmail(),
+                entity.getAddress(),
+                entity.getCnp(),
                 entity.getSchoolClass() == null ? null : entity.getSchoolClass().getId(),
                 entity.getSchoolClass() == null ? null : entity.getSchoolClass().getName(),
                 entity.getSubjectsTaught() == null ? List.of() : List.copyOf(entity.getSubjectsTaught())
@@ -136,6 +148,8 @@ public class ReferenceDataPersistenceService {
         entity.setFirstName(profile.firstName());
         entity.setLastName(profile.lastName());
         entity.setEmail(profile.email());
+        entity.setAddress(profile.address());
+        entity.setCnp(profile.cnp());
         entity.setSubjectsTaught(profile.subjectsTaught());
         if (profile.classId() != null) {
             entity.setSchoolClass(schoolClassRepository.getReferenceById(profile.classId()));

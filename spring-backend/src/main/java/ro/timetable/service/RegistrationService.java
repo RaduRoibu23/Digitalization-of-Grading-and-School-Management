@@ -66,6 +66,8 @@ public class RegistrationService {
                 profile.first_name(),
                 profile.last_name(),
                 profile.email(),
+                profile.address(),
+                profile.cnp(),
                 profile.class_id(),
                 profile.class_name(),
                 profile.class_profile(),

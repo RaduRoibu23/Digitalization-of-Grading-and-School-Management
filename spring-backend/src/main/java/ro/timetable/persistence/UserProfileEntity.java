@@ -36,6 +36,12 @@ public class UserProfileEntity {
     @Column(nullable = false, unique = true)
     private String email;
 
+    @Column(name = "address")
+    private String address;
+
+    @Column(name = "cnp", unique = true, length = 13)
+    private String cnp;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "class_id")
     private SchoolClassEntity schoolClass;
@@ -103,6 +109,22 @@ public class UserProfileEntity {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getAddress() {
+        return address;
+    }
+
+    public void setAddress(String address) {
+        this.address = address;
+    }
+
+    public String getCnp() {
+        return cnp;
+    }
+
+    public void setCnp(String cnp) {
+        this.cnp = cnp;
     }
 
     public SchoolClassEntity getSchoolClass() {

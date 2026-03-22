@@ -1,11 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { apiGet } from '../services/apiService'
+import { apiGet, apiPut } from '../services/apiService'
 
 const PAGE_SIZE = 15
+const ROLE_OPTIONS = [
+  { value: 'student', label: 'Studenti' },
+  { value: 'professor', label: 'Profesori' },
+  { value: 'secretariat', label: 'Secretariat' },
+  { value: 'scheduler', label: 'Scheduler' },
+  { value: 'admin', label: 'Admin' },
+  { value: 'sysadmin', label: 'Sysadmin' },
+  { value: '', label: 'Toate rolurile' },
+]
 
-function buildStudentName(student) {
-  const lastName = student.last_name || student.lastName || ''
-  const firstName = student.first_name || student.firstName || ''
+function buildProfileName(profile) {
+  const lastName = profile.last_name || profile.lastName || ''
+  const firstName = profile.first_name || profile.firstName || ''
   return `${lastName} ${firstName}`.trim() || 'Fara nume'
 }
 
@@ -18,43 +27,105 @@ function buildInitials(name) {
     .join('')
 }
 
-export default function StudentsScreen({ accessToken }) {
+function classLabel(profile) {
+  return profile.class_name || profile.className || (profile.class_id ? `Clasa ${profile.class_id}` : '-')
+}
+
+function roleLabel(role) {
+  switch (role) {
+    case 'student':
+      return 'Student'
+    case 'professor':
+      return 'Profesor'
+    case 'secretariat':
+      return 'Secretariat'
+    case 'scheduler':
+      return 'Scheduler'
+    case 'admin':
+      return 'Admin'
+    case 'sysadmin':
+      return 'Sysadmin'
+    default:
+      return role || '-'
+  }
+}
+
+function formFromProfile(profile) {
+  return {
+    first_name: profile?.first_name || profile?.firstName || '',
+    last_name: profile?.last_name || profile?.lastName || '',
+    email: profile?.email || '',
+    class_id: profile?.class_id ? String(profile.class_id) : '',
+    address: profile?.address || '',
+    cnp: profile?.cnp || '',
+  }
+}
+
+export default function StudentsScreen({ accessToken, roles = [] }) {
+  const canManageProfiles = roles.includes('secretariat') || roles.includes('sysadmin')
   const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [banner, setBanner] = useState(null)
-  const [students, setStudents] = useState([])
+  const [profiles, setProfiles] = useState([])
+  const [classes, setClasses] = useState([])
   const [sortBy, setSortBy] = useState(null)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [roleFilter, setRoleFilter] = useState('student')
+  const [editingUsername, setEditingUsername] = useState('')
+  const [form, setForm] = useState(formFromProfile(null))
 
   useEffect(() => {
     ;(async () => {
       setLoading(true)
       setBanner(null)
       try {
-        const data = await apiGet('/profiles?role=student', accessToken)
-        setStudents(Array.isArray(data) ? data : [])
+        const profilePath = canManageProfiles
+          ? `/profiles${roleFilter ? `?role=${encodeURIComponent(roleFilter)}` : ''}`
+          : '/profiles?role=student'
+        const [profileData, classData] = await Promise.all([
+          apiGet(profilePath, accessToken),
+          canManageProfiles ? apiGet('/classes', accessToken) : Promise.resolve([]),
+        ])
+        setProfiles(Array.isArray(profileData) ? profileData : [])
+        setClasses(Array.isArray(classData) ? classData : [])
+        if (editingUsername) {
+          const freshProfile = (Array.isArray(profileData) ? profileData : []).find((profile) => profile.username === editingUsername)
+          if (!freshProfile) {
+            setEditingUsername('')
+            setForm(formFromProfile(null))
+          }
+        }
       } catch (error) {
         setBanner({ type: 'error', text: String(error?.message || error) })
       } finally {
         setLoading(false)
       }
     })()
-  }, [accessToken])
+  }, [accessToken, canManageProfiles, roleFilter, editingUsername])
 
   useEffect(() => {
     setPage(1)
-  }, [search, sortBy])
+  }, [search, sortBy, roleFilter])
 
-  const filteredStudents = useMemo(() => {
+  const editingProfile = useMemo(
+    () => profiles.find((profile) => profile.username === editingUsername) || null,
+    [profiles, editingUsername]
+  )
+
+  const filteredProfiles = useMemo(() => {
     const query = search.trim().toLowerCase()
-    let list = students
+    let list = profiles
     if (query) {
-      list = list.filter((student) => {
-        const username = student.username || ''
-        const lastName = student.last_name || student.lastName || ''
-        const firstName = student.first_name || student.firstName || ''
-        const className = student.class_name || student.className || ''
-        return `${username} ${lastName} ${firstName} ${className}`.toLowerCase().includes(query)
+      list = list.filter((profile) => {
+        const username = profile.username || ''
+        const role = profile.role || ''
+        const email = profile.email || ''
+        const address = profile.address || ''
+        const cnp = profile.cnp || ''
+        return `${username} ${buildProfileName(profile)} ${classLabel(profile)} ${role} ${email} ${address} ${cnp}`
+          .toLowerCase()
+          .includes(query)
       })
     }
 
@@ -65,64 +136,197 @@ export default function StudentsScreen({ accessToken }) {
     const sorted = [...list]
     sorted.sort((a, b) => {
       if (sortBy === 'last_name') {
-        return buildStudentName(a).localeCompare(buildStudentName(b))
+        return buildProfileName(a).localeCompare(buildProfileName(b))
       }
       if (sortBy === 'class_name') {
-        return (a.class_name || a.className || '').localeCompare(b.class_name || b.className || '')
+        return classLabel(a).localeCompare(classLabel(b))
+      }
+      if (sortBy === 'role') {
+        return roleLabel(a.role).localeCompare(roleLabel(b.role))
       }
       return 0
     })
     return sorted
-  }, [search, sortBy, students])
+  }, [profiles, search, sortBy])
 
-  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(filteredProfiles.length / PAGE_SIZE))
   const currentPage = Math.min(page, totalPages)
   const pageStart = (currentPage - 1) * PAGE_SIZE
-  const paginatedStudents = filteredStudents.slice(pageStart, pageStart + PAGE_SIZE)
+  const paginatedProfiles = filteredProfiles.slice(pageStart, pageStart + PAGE_SIZE)
+
+  function beginEdit(profile) {
+    setEditingUsername(profile.username || '')
+    setForm(formFromProfile(profile))
+    setBanner(null)
+  }
+
+  function cancelEdit() {
+    setEditingUsername('')
+    setForm(formFromProfile(null))
+  }
+
+  function updateField(field, value) {
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+    }))
+  }
+
+  async function saveProfile() {
+    if (!editingProfile) return
+    setSaving(true)
+    setBanner(null)
+    try {
+      const updated = await apiPut(
+        `/profiles/${editingProfile.username}`,
+        {
+          first_name: form.first_name.trim(),
+          last_name: form.last_name.trim(),
+          email: form.email.trim(),
+          class_id: editingProfile.role === 'student' && form.class_id ? Number(form.class_id) : null,
+          address: form.address.trim() || null,
+          cnp: form.cnp.trim() || null,
+        },
+        accessToken
+      )
+
+      setProfiles((current) =>
+        current.map((profile) => (profile.username === updated.username ? updated : profile))
+      )
+      setForm(formFromProfile(updated))
+      setBanner({ type: 'ok', text: 'Profilul a fost actualizat.' })
+    } catch (error) {
+      setBanner({ type: 'error', text: String(error?.message || error) })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const title = canManageProfiles ? 'Administrare persoane' : 'Lista studenti'
+  const subtitle = canManageProfiles
+    ? 'Secretariatul si sysadmin-ul pot filtra si modifica orice profil din sistem.'
+    : 'Vizualizare clara a elevilor din sistem, cu cautare si paginare.'
 
   return (
     <section className="contentCard">
       <div className="contentHeader">
         <div>
-          <div className="title">Lista studenti</div>
-          <div className="subtitle">Vizualizare clara a elevilor din sistem, cu cautare si paginare.</div>
+          <div className="title">{title}</div>
+          <div className="subtitle">{subtitle}</div>
         </div>
         <div className="headerActions studentHeaderActions">
+          {canManageProfiles && (
+            <select
+              className="select"
+              value={roleFilter}
+              onChange={(event) => setRoleFilter(event.target.value)}
+              disabled={loading || saving}
+            >
+              {ROLE_OPTIONS.map((option) => (
+                <option key={option.value || 'all'} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          )}
           <input
             className="input"
-            placeholder="Cauta dupa nume, username sau clasa"
+            placeholder="Cauta dupa nume, username, rol, email, adresa, CNP sau clasa"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
           <button
             className={`btn ${sortBy === 'last_name' ? 'primary' : ''}`}
             onClick={() => setSortBy(sortBy === 'last_name' ? null : 'last_name')}
-            disabled={loading || students.length === 0}
+            disabled={loading || profiles.length === 0}
           >
             Sorteaza dupa nume
           </button>
           <button
             className={`btn ${sortBy === 'class_name' ? 'primary' : ''}`}
             onClick={() => setSortBy(sortBy === 'class_name' ? null : 'class_name')}
-            disabled={loading || students.length === 0}
+            disabled={loading || profiles.length === 0}
           >
             Sorteaza dupa clasa
           </button>
+          {canManageProfiles && (
+            <button
+              className={`btn ${sortBy === 'role' ? 'primary' : ''}`}
+              onClick={() => setSortBy(sortBy === 'role' ? null : 'role')}
+              disabled={loading || profiles.length === 0}
+            >
+              Sorteaza dupa rol
+            </button>
+          )}
         </div>
       </div>
 
       <div className="catalogStats studentStats">
-        <div className="statPill">Total elevi: <strong>{students.length}</strong></div>
-        <div className="statPill">Rezultate filtrate: <strong>{filteredStudents.length}</strong></div>
+        <div className="statPill">Total in lista: <strong>{profiles.length}</strong></div>
+        <div className="statPill">Rezultate filtrate: <strong>{filteredProfiles.length}</strong></div>
         <div className="statPill">Pagina curenta: <strong>{currentPage}</strong></div>
       </div>
 
       {banner && <div className={`banner ${banner.type}`}>{banner.text}</div>}
 
+      {canManageProfiles && editingProfile && (
+        <div className="mutedBlock" style={{ marginBottom: 18 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
+            <div>
+              <strong>Editezi:</strong> {buildProfileName(editingProfile)} ({roleLabel(editingProfile.role)})
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button className="btn primary" onClick={saveProfile} disabled={saving}>
+                {saving ? 'Se salveaza...' : 'Salveaza'}
+              </button>
+              <button className="btn" onClick={cancelEdit} disabled={saving}>
+                Renunta
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+            <div className="field">
+              <label className="label">Nume</label>
+              <input className="input" value={form.last_name} onChange={(event) => updateField('last_name', event.target.value)} disabled={saving} />
+            </div>
+            <div className="field">
+              <label className="label">Prenume</label>
+              <input className="input" value={form.first_name} onChange={(event) => updateField('first_name', event.target.value)} disabled={saving} />
+            </div>
+            <div className="field">
+              <label className="label">Email</label>
+              <input className="input" value={form.email} onChange={(event) => updateField('email', event.target.value)} disabled={saving} />
+            </div>
+            {editingProfile.role === 'student' && (
+              <div className="field">
+                <label className="label">Clasa</label>
+                <select className="select" value={form.class_id} onChange={(event) => updateField('class_id', event.target.value)} disabled={saving}>
+                  <option value="">Selecteaza clasa</option>
+                  {classes.map((schoolClass) => (
+                    <option key={schoolClass.id} value={String(schoolClass.id)}>
+                      {schoolClass.profile ? `${schoolClass.name} - ${schoolClass.profile}` : schoolClass.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="field">
+              <label className="label">Adresa</label>
+              <input className="input" value={form.address} onChange={(event) => updateField('address', event.target.value)} disabled={saving} />
+            </div>
+            <div className="field">
+              <label className="label">CNP</label>
+              <input className="input" value={form.cnp} onChange={(event) => updateField('cnp', event.target.value)} disabled={saving} />
+            </div>
+          </div>
+        </div>
+      )}
+
       {loading ? (
-        <div className="mutedBlock">Se incarca lista de studenti...</div>
-      ) : filteredStudents.length === 0 ? (
-        <div className="mutedBlock">Nu exista studenti pentru filtrul selectat.</div>
+        <div className="mutedBlock">Se incarca lista...</div>
+      ) : filteredProfiles.length === 0 ? (
+        <div className="mutedBlock">Nu exista profiluri pentru filtrul selectat.</div>
       ) : (
         <>
           <div className="tableWrap studentTableWrap">
@@ -130,33 +334,51 @@ export default function StudentsScreen({ accessToken }) {
               <thead>
                 <tr>
                   <th className="thin">#</th>
-                  <th>Elev</th>
+                  <th>{canManageProfiles ? 'Persoana' : 'Elev'}</th>
                   <th>Username</th>
+                  {canManageProfiles && <th>Rol</th>}
                   <th>Clasa</th>
+                  {canManageProfiles && <th>Adresa</th>}
+                  {canManageProfiles && <th>CNP</th>}
+                  {canManageProfiles && <th>Actiuni</th>}
                 </tr>
               </thead>
               <tbody>
-                {paginatedStudents.map((student, index) => {
-                  const fullName = buildStudentName(student)
-                  const className = student.class_name || student.className || (student.class_id ? `Clasa ${student.class_id}` : '-')
+                {paginatedProfiles.map((profile, index) => {
+                  const fullName = buildProfileName(profile)
+                  const className = classLabel(profile)
                   return (
-                    <tr key={student.id || student.username}>
+                    <tr key={profile.id || profile.username}>
                       <td className="thin">{pageStart + index + 1}</td>
                       <td>
                         <div className="studentNameCell">
                           <div className="studentInitials">{buildInitials(fullName)}</div>
                           <div>
                             <div className="studentName">{fullName}</div>
-                            <div className="studentMeta">Cont activ in platforma</div>
+                            <div className="studentMeta">{profile.email || 'Fara email'}</div>
                           </div>
                         </div>
                       </td>
                       <td>
-                        <span className="studentUsername">@{student.username || '-'}</span>
+                        <span className="studentUsername">@{profile.username || '-'}</span>
                       </td>
+                      {canManageProfiles && (
+                        <td>
+                          <span className="studentClassBadge">{roleLabel(profile.role)}</span>
+                        </td>
+                      )}
                       <td>
                         <span className="studentClassBadge">{className}</span>
                       </td>
+                      {canManageProfiles && <td>{profile.address || '-'}</td>}
+                      {canManageProfiles && <td>{profile.cnp || '-'}</td>}
+                      {canManageProfiles && (
+                        <td>
+                          <button className="btn" onClick={() => beginEdit(profile)} disabled={saving}>
+                            {editingUsername === profile.username ? 'Editezi' : 'Editeaza'}
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   )
                 })}

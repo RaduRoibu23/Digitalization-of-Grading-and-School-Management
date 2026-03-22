@@ -9,6 +9,8 @@ public record UserProfile(
         String firstName,
         String lastName,
         String email,
+        String address,
+        String cnp,
         Long classId,
         String className,
         List<String> subjectsTaught
