@@ -76,6 +76,7 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
 
   const editingAllowed = canEdit(roles);
   const isTeacherView = mode === "my" && roles.includes("professor");
+  const showEntryVersion = !(mode === "my" && roles.includes("student") && !isTeacherView);
 
   const filteredClasses = useMemo(() => {
     if (!classSearch.trim()) return classes;
@@ -453,7 +454,7 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
                               {isTeacherView && <span>{cell.className ?? `Clasa ${cell.classId}`}</span>}
                               <span>{cell.roomName ?? (cell.roomId == null ? "-" : `Sala ${cell.roomId}`)}</span>
                               {!isTeacherView && cell.teacherName && <div className="cellTeacher">{cell.teacherName}</div>}
-                              <span className="cellVersion">v{cell.version}</span>
+                              {showEntryVersion && <span className="cellVersion">v{cell.version}</span>}
                             </div>
                           </>
                         ) : (

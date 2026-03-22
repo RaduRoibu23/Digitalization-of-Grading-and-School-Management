@@ -63,6 +63,8 @@ export default function ProfileScreen({ accessToken, roles }) {
   );
 
   const email = pickFirst(tokenInfo?.email, me?.email);
+  const address = pickFirst(me?.address);
+  const cnp = pickFirst(me?.cnp);
 
   const classId = me?.class_id ?? me?.classId ?? me?.class?.id ?? null;
   const className = me?.class_name ?? me?.className ?? me?.class?.name ?? me?.class?.class_name ?? "";
@@ -97,6 +99,8 @@ export default function ProfileScreen({ accessToken, roles }) {
             <div><strong>Nume:</strong> {lastName}</div>
             <div><strong>Prenume:</strong> {firstName}</div>
             <div><strong>Email:</strong> {email}</div>
+            <div><strong>Adresa:</strong> {address}</div>
+            <div><strong>CNP:</strong> {cnp}</div>
             <div><strong>Clasa:</strong> {classText}</div>
 
             {subjectsTaught.length > 0 && (
