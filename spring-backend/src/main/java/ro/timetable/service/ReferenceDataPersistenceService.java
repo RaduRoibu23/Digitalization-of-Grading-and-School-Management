@@ -104,6 +104,7 @@ public class ReferenceDataPersistenceService {
     private UserProfile toModel(UserProfileEntity entity) {
         return new UserProfile(
                 entity.getId(),
+                entity.getVersion(),
                 entity.getUsername(),
                 entity.getRole(),
                 entity.getFirstName(),
@@ -143,6 +144,7 @@ public class ReferenceDataPersistenceService {
     private UserProfileEntity toEntity(UserProfile profile) {
         UserProfileEntity entity = new UserProfileEntity();
         entity.setId(profile.id());
+        entity.setVersion(profile.version());
         entity.setUsername(profile.username());
         entity.setRole(profile.role());
         entity.setFirstName(profile.firstName());

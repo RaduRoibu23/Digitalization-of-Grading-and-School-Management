@@ -4,6 +4,7 @@ import java.util.List;
 
 public record UserProfile(
         Long id,
+        Integer version,
         String username,
         String role,
         String firstName,

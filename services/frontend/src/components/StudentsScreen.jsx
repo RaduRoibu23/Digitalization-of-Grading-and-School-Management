@@ -52,6 +52,7 @@ function roleLabel(role) {
 
 function formFromProfile(profile) {
   return {
+    version: profile?.version ?? null,
     first_name: profile?.first_name || profile?.firstName || '',
     last_name: profile?.last_name || profile?.lastName || '',
     email: profile?.email || '',
@@ -180,6 +181,7 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
       const updated = await apiPut(
         `/profiles/${editingProfile.username}`,
         {
+          version: form.version,
           first_name: form.first_name.trim(),
           last_name: form.last_name.trim(),
           email: form.email.trim(),

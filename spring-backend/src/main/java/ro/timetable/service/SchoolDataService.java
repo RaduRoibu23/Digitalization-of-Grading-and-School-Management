@@ -154,6 +154,7 @@ public class SchoolDataService {
         String generatedCnp = generateUniqueStudentCnp(usedStudentCnps(), new Random(System.nanoTime() ^ username.hashCode()), schoolClass.name());
         UserProfile profile = new UserProfile(
                 profileIds.getAndIncrement(),
+                1,
                 username,
                 "student",
                 firstName,
@@ -170,8 +171,12 @@ public class SchoolDataService {
         return profileResponse(profile);
     }
 
-    public UserProfile updateProfile(String username, String firstName, String lastName, String email, Long classId, String address, String cnp) {
+    public UserProfile updateProfile(String username, Integer version, String firstName, String lastName, String email, Long classId, String address, String cnp) {
         UserProfile existing = getProfile(username);
+        int existingVersion = existing.version() == null ? 1 : existing.version();
+        if (!Objects.equals(existingVersion, version)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Profilul a fost modificat intre timp. Da refresh si incearca din nou.");
+        }
         String normalizedFirstName = normalizeRequiredProfileField(firstName, "Prenumele este obligatoriu");
         String normalizedLastName = normalizeRequiredProfileField(lastName, "Numele este obligatoriu");
         String normalizedEmail = normalizeRequiredProfileField(email, "Email-ul este obligatoriu");
@@ -204,6 +209,7 @@ public class SchoolDataService {
 
         UserProfile updated = new UserProfile(
                 existing.id(),
+                existingVersion + 1,
                 existing.username(),
                 existing.role(),
                 normalizedFirstName,
@@ -486,6 +492,7 @@ public class SchoolDataService {
         SchoolClass schoolClass = profile.classId() == null ? null : requireClass(profile.classId());
         return new MeResponse(
                 profile.id(),
+                profile.version(),
                 profile.username(),
                 profile.firstName(),
                 profile.lastName(),
@@ -511,6 +518,7 @@ public class SchoolDataService {
         SchoolClass schoolClass = profile.classId() == null ? null : requireClass(profile.classId());
         return new ProfileResponse(
                 profile.id(),
+                profile.version(),
                 profile.username(),
                 profile.role(),
                 profile.firstName(),
@@ -1055,6 +1063,7 @@ public class SchoolDataService {
             String cnp = generateUniqueStudentCnp(usedCnps, identityRandom, schoolClass.name());
             profilesByUsername.put(username, new UserProfile(
                     profileIds.getAndIncrement(),
+                    1,
                     username,
                     "student",
                     firstName,
@@ -1072,6 +1081,7 @@ public class SchoolDataService {
     private void addStaffProfile(String username, String role, String firstName, String lastName) {
         profilesByUsername.put(username, new UserProfile(
                 profileIds.getAndIncrement(),
+                1,
                 username,
                 role,
                 firstName,
@@ -1088,6 +1098,7 @@ public class SchoolDataService {
     private void addTeacherProfile(TeacherSeed teacher) {
         profilesByUsername.put(teacher.username(), new UserProfile(
                 profileIds.getAndIncrement(),
+                1,
                 teacher.username(),
                 "professor",
                 teacher.firstName(),
@@ -1163,7 +1174,7 @@ public class SchoolDataService {
                 address = generateUniqueStudentAddress(usedAddresses, identityRandom);
                 changed = true;
             }
-            if (cnp == null || cnp.isBlank()) {
+            if (cnp == null || cnp.isBlank() || !hasPreferredGeneratedStudentCnpFormat(cnp)) {
                 cnp = generateUniqueStudentCnp(usedCnps, identityRandom, profile.className());
                 changed = true;
             }
@@ -1171,6 +1182,7 @@ public class SchoolDataService {
             if (changed) {
                 updates.add(new UserProfile(
                         profile.id(),
+                        profile.version() == null ? 1 : profile.version(),
                         profile.username(),
                         profile.role(),
                         profile.firstName(),
@@ -1269,14 +1281,18 @@ public class SchoolDataService {
             int month = 1 + random.nextInt(12);
             int day = 1 + random.nextInt(LocalDate.of(birthYear, month, 1).lengthOfMonth());
             int sexDigit = random.nextBoolean() ? 5 : 6;
-            int serial = 1 + random.nextInt(999);
-            String base = String.format(Locale.ROOT, "%d%02d%02d%02d%02d%03d", sexDigit, birthYear % 100, month, day, ARGES_COUNTY_CODE, serial);
+            int serial = 1 + random.nextInt(9);
+            String base = String.format(Locale.ROOT, "%d%02d%02d%02d%02d00%d", sexDigit, birthYear % 100, month, day, ARGES_COUNTY_CODE, serial);
             String candidate = base + computeCnpControlDigit(base);
             if (usedCnps.add(candidate)) {
                 return candidate;
             }
         }
         throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Nu s-a putut genera un CNP unic pentru elev");
+    }
+
+    private boolean hasPreferredGeneratedStudentCnpFormat(String cnp) {
+        return cnp != null && cnp.matches("[56]\\d{6}0300\\d\\d");
     }
 
     private int birthYearForClass(String className) {

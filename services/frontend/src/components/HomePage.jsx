@@ -47,7 +47,7 @@ export default function HomePage() {
             <div className="landingKicker">Gestionare scolara intr-un singur loc</div>
             <div className="landingTitle">Acces clar la orar, catalog si comunicarile importante.</div>
             <p className="landingCopy">
-              Prima pagina ramane simpla si orientata spre intrarea in platforma, iar fluxul din dreapta descrie pe scurt cum circula informatia in aplicatie.
+              Fluxul din dreapta descrie pe scurt cum circula informatia in aplicatie.
             </p>
 
             <div className="landingActions landingActionsInline">

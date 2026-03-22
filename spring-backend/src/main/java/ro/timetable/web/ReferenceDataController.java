@@ -3,6 +3,7 @@ package ro.timetable.web;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -39,6 +40,7 @@ public class ReferenceDataController {
     }
 
     public record UpdateProfileRequest(
+            @NotNull Integer version,
             @NotBlank String first_name,
             @NotBlank String last_name,
             @NotBlank @Email String email,
@@ -83,6 +85,7 @@ public class ReferenceDataController {
         UserProfile previousProfile = schoolDataService.getProfile(username);
         UserProfile updatedProfile = schoolDataService.updateProfile(
                 username,
+                request.version(),
                 request.first_name(),
                 request.last_name(),
                 request.email(),

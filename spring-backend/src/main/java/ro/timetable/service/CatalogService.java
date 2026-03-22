@@ -385,6 +385,7 @@ public class CatalogService {
         SchoolClass schoolClass = profile.classId() == null ? null : schoolDataService.getClassById(profile.classId());
         return new ProfileResponse(
                 profile.id(),
+                profile.version(),
                 profile.username(),
                 profile.role(),
                 profile.firstName(),

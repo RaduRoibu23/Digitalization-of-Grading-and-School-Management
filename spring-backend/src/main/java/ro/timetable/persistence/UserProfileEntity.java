@@ -21,6 +21,9 @@ public class UserProfileEntity {
     @Id
     private Long id;
 
+    @Column(nullable = false)
+    private Integer version = 1;
+
     @Column(nullable = false, unique = true)
     private String username;
 
@@ -69,6 +72,14 @@ public class UserProfileEntity {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public Integer getVersion() {
+        return version;
+    }
+
+    public void setVersion(Integer version) {
+        this.version = version;
     }
 
     public String getUsername() {

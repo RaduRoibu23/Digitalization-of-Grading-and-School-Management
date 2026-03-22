@@ -61,6 +61,7 @@ public class RegistrationService {
         return new RegistrationResponse(
                 "Account created",
                 profile.id(),
+                profile.version(),
                 profile.username(),
                 profile.role(),
                 profile.first_name(),

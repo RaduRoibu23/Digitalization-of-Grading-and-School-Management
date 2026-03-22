@@ -34,6 +34,7 @@ public final class ApiDtos {
 
     public record ProfileResponse(
             Long id,
+            Integer version,
             String username,
             String role,
             String first_name,
@@ -57,6 +58,7 @@ public final class ApiDtos {
 
     public record MeResponse(
             Long id,
+            Integer version,
             String username,
             String first_name,
             String last_name,
@@ -137,6 +139,7 @@ public final class ApiDtos {
     public record RegistrationResponse(
             String detail,
             Long id,
+            Integer version,
             String username,
             String role,
             String first_name,
