@@ -76,17 +76,35 @@ public class AuthController {
     ) {
     }
 
+    public record RefreshRequest(
+            @NotBlank(message = "refreshToken is required") String refreshToken
+    ) {
+    }
+
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
-
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("grant_type", "password");
         form.add("client_id", keycloakClientId);
         form.add("username", request.username());
         form.add("password", request.password());
+
+        return exchangeToken(form);
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refresh(@Valid @RequestBody RefreshRequest request) {
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("grant_type", "refresh_token");
+        form.add("client_id", keycloakClientId);
+        form.add("refresh_token", request.refreshToken());
+        return exchangeToken(form);
+    }
+
+    private ResponseEntity<?> exchangeToken(MultiValueMap<String, String> form) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
 
         HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(form, headers);
 

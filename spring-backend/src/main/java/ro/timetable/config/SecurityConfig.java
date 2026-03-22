@@ -26,6 +26,7 @@ public class SecurityConfig {
                                 "/actuator/health",
                                 "/api/health",
                                 "/api/login",
+                                "/api/refresh",
                                 "/api/register",
                                 "/api/public/classes",
                                 "/v3/api-docs/**",

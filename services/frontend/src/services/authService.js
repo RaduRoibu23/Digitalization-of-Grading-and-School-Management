@@ -2,9 +2,6 @@ import { CONFIG } from '../config'
 
 const STORAGE_KEY = CONFIG.auth.storageKey
 const API_BASE = CONFIG.api.baseUrl
-const KEYCLOAK_URL = CONFIG.keycloak.url
-const REALM = CONFIG.keycloak.realm
-const CLIENT_ID = CONFIG.keycloak.clientId
 const APP_ROLES = ['student', 'professor', 'secretariat', 'scheduler', 'admin', 'sysadmin']
 
 function parseJsonSafely(text) {
@@ -134,15 +131,13 @@ export async function loadPublicClasses() {
 }
 
 export async function refreshAccessToken(refreshToken) {
-  const response = await fetch(`${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/token`, {
+  const response = await fetch(`${API_BASE}/refresh`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Type': 'application/json',
     },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      client_id: CLIENT_ID,
-      refresh_token: refreshToken,
+    body: JSON.stringify({
+      refreshToken,
     }),
   })
 
