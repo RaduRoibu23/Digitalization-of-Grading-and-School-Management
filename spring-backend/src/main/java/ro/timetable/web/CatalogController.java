@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ro.timetable.service.CatalogService;
+import ro.timetable.service.SchoolDataService;
 import ro.timetable.web.dto.ApiDtos.ActionResponse;
 import ro.timetable.web.dto.ApiDtos.AbsenceResponse;
 import ro.timetable.web.dto.ApiDtos.CatalogResponse;
@@ -31,9 +32,11 @@ public class CatalogController {
     private static final List<String> APP_ROLES = List.of("student", "professor", "secretariat", "scheduler", "admin", "sysadmin");
 
     private final CatalogService catalogService;
+    private final SchoolDataService schoolDataService;
 
-    public CatalogController(CatalogService catalogService) {
+    public CatalogController(CatalogService catalogService, SchoolDataService schoolDataService) {
         this.catalogService = catalogService;
+        this.schoolDataService = schoolDataService;
     }
 
     public record CreateGradeRequest(
@@ -137,7 +140,10 @@ public class CatalogController {
     }
 
     private String username(JwtAuthenticationToken authentication) {
-        return (String) authentication.getToken().getClaims().getOrDefault("preferred_username", authentication.getName());
+        return schoolDataService.resolveAuthenticatedUsername(
+                (String) authentication.getToken().getClaims().getOrDefault("preferred_username", authentication.getName()),
+                (String) authentication.getToken().getClaims().get("email")
+        );
     }
 
     private List<String> roles(JwtAuthenticationToken authentication) {

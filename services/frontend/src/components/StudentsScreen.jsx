@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { apiGet, apiPost, apiPut } from '../services/apiService'
+import { apiGet, apiPut } from '../services/apiService'
 
 const PAGE_SIZE = 15
 const ROLE_OPTIONS = [
@@ -10,15 +10,6 @@ const ROLE_OPTIONS = [
   { value: 'admin', label: 'Admin' },
   { value: 'sysadmin', label: 'Sysadmin' },
   { value: '', label: 'Toate rolurile' },
-]
-
-const CREATE_ROLE_OPTIONS = [
-  { value: 'student', label: 'Student' },
-  { value: 'professor', label: 'Profesor' },
-  { value: 'secretariat', label: 'Secretariat' },
-  { value: 'scheduler', label: 'Scheduler' },
-  { value: 'admin', label: 'Admin' },
-  { value: 'sysadmin', label: 'Sysadmin' },
 ]
 
 function buildProfileName(profile) {
@@ -72,58 +63,30 @@ function formFromProfile(profile) {
   }
 }
 
-function createFormState() {
-  return {
-    username: '',
-    password: '',
-    role: 'student',
-    first_name: '',
-    last_name: '',
-    email: '',
-    class_id: '',
-    subject_name: '',
-  }
-}
-
 export default function StudentsScreen({ accessToken, roles = [] }) {
   const canManageProfiles = roles.includes('secretariat') || roles.includes('sysadmin')
-  const canCreateAccounts = roles.includes('sysadmin')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [creating, setCreating] = useState(false)
   const [banner, setBanner] = useState(null)
   const [profiles, setProfiles] = useState([])
   const [classes, setClasses] = useState([])
-  const [subjects, setSubjects] = useState([])
   const [sortBy, setSortBy] = useState(null)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [roleFilter, setRoleFilter] = useState('student')
   const [editingUsername, setEditingUsername] = useState('')
-  const [createOpen, setCreateOpen] = useState(false)
   const [form, setForm] = useState(formFromProfile(null))
-  const [createForm, setCreateForm] = useState(createFormState())
-  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     ;(async () => {
       setLoading(true)
       try {
-        const [profileData, classData, subjectData] = await Promise.all([
+        const [profileData, classData] = await Promise.all([
           apiGet(`/profiles${roleFilter ? `?role=${encodeURIComponent(roleFilter)}` : ''}`, accessToken),
           canManageProfiles ? apiGet('/classes', accessToken) : Promise.resolve([]),
-          canCreateAccounts ? apiGet('/subjects', accessToken) : Promise.resolve([]),
         ])
         setProfiles(Array.isArray(profileData) ? profileData : [])
         setClasses(Array.isArray(classData) ? classData : [])
-        setSubjects(Array.isArray(subjectData) ? subjectData : [])
-        if (canCreateAccounts) {
-          setCreateForm((current) => ({
-            ...current,
-            class_id: current.class_id || (Array.isArray(classData) && classData.length > 0 ? String(classData[0].id) : ''),
-            subject_name: current.subject_name || (Array.isArray(subjectData) && subjectData.length > 0 ? subjectData[0].name : ''),
-          }))
-        }
         if (editingUsername) {
           const freshProfile = (Array.isArray(profileData) ? profileData : []).find((profile) => profile.username === editingUsername)
           if (!freshProfile) {
@@ -137,7 +100,7 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
         setLoading(false)
       }
     })()
-  }, [accessToken, canCreateAccounts, canManageProfiles, roleFilter, editingUsername, reloadKey])
+  }, [accessToken, canManageProfiles, roleFilter, editingUsername])
 
   useEffect(() => {
     setPage(1)
@@ -207,32 +170,6 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
     }))
   }
 
-  function updateCreateField(field, value) {
-    setCreateForm((current) => {
-      if (field !== 'role') {
-        return {
-          ...current,
-          [field]: value,
-        }
-      }
-
-      return {
-        ...current,
-        role: value,
-        class_id: value === 'student' ? (current.class_id || (classes[0] ? String(classes[0].id) : '')) : '',
-        subject_name: value === 'professor' ? (current.subject_name || (subjects[0]?.name || '')) : '',
-      }
-    })
-  }
-
-  function resetCreateForm() {
-    setCreateForm({
-      ...createFormState(),
-      class_id: classes.length > 0 ? String(classes[0].id) : '',
-      subject_name: subjects.length > 0 ? subjects[0].name : '',
-    })
-  }
-
   async function saveProfile() {
     if (!editingProfile) return
     setSaving(true)
@@ -265,53 +202,10 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
     }
   }
 
-  async function createProfile() {
-    setCreating(true)
-    setBanner(null)
-    try {
-      const created = await apiPost(
-        '/profiles',
-        {
-          username: createForm.username.trim(),
-          password: createForm.password,
-          role: createForm.role,
-          first_name: createForm.first_name.trim(),
-          last_name: createForm.last_name.trim(),
-          email: createForm.email.trim(),
-          class_id: createForm.role === 'student' && createForm.class_id ? Number(createForm.class_id) : null,
-          subjects_taught: createForm.role === 'professor' && createForm.subject_name ? [createForm.subject_name] : [],
-        },
-        accessToken
-      )
-
-      setCreateOpen(false)
-      resetCreateForm()
-      setReloadKey((current) => current + 1)
-      if (!roleFilter || roleFilter === created.role) {
-        setProfiles((current) => [created, ...current.filter((profile) => profile.username !== created.username)])
-      }
-      setBanner({ type: 'ok', text: `Contul ${created.username} a fost creat.` })
-    } catch (error) {
-      setBanner({ type: 'error', text: String(error?.message || error) })
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  const title = canManageProfiles ? 'Administrare persoane' : 'Lista studenti'
+  const title = canManageProfiles ? 'Utilizatori' : 'Lista utilizatori'
   const subtitle = canManageProfiles
-    ? 'Secretariatul si sysadmin-ul pot filtra si modifica profiluri, iar sysadmin-ul poate crea conturi noi.'
-    : 'Vizualizare clara a elevilor din sistem, cu cautare si paginare.'
-  const canSubmitCreate = Boolean(
-    canCreateAccounts
-      && createForm.username.trim()
-      && createForm.password
-      && createForm.first_name.trim()
-      && createForm.last_name.trim()
-      && createForm.email.trim()
-      && (createForm.role !== 'student' || createForm.class_id)
-      && (createForm.role !== 'professor' || createForm.subject_name)
-  )
+    ? 'Secretariatul si sysadmin-ul pot filtra si modifica profiluri din toate rolurile.'
+    : 'Vizualizare clara a utilizatorilor din sistem, cu cautare si paginare.'
 
   return (
     <section className="contentCard">
@@ -321,26 +215,12 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
           <div className="subtitle">{subtitle}</div>
         </div>
         <div className="headerActions studentHeaderActions">
-          {canCreateAccounts && (
-            <button
-              className={`btn ${createOpen ? 'primary' : ''}`}
-              onClick={() => {
-                const nextOpen = !createOpen
-                setCreateOpen(nextOpen)
-                setBanner(null)
-                resetCreateForm()
-              }}
-              disabled={loading || saving || creating}
-            >
-              {createOpen ? 'Ascunde formularul' : 'Cont nou'}
-            </button>
-          )}
           {canManageProfiles && (
             <select
               className="select"
               value={roleFilter}
               onChange={(event) => setRoleFilter(event.target.value)}
-              disabled={loading || saving || creating}
+              disabled={loading || saving}
             >
               {ROLE_OPTIONS.map((option) => (
                 <option key={option.value || 'all'} value={option.value}>
@@ -358,14 +238,14 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
           <button
             className={`btn ${sortBy === 'last_name' ? 'primary' : ''}`}
             onClick={() => setSortBy(sortBy === 'last_name' ? null : 'last_name')}
-            disabled={loading || profiles.length === 0 || creating}
+            disabled={loading || profiles.length === 0}
           >
             Sorteaza dupa nume
           </button>
           <button
             className={`btn ${sortBy === 'class_name' ? 'primary' : ''}`}
             onClick={() => setSortBy(sortBy === 'class_name' ? null : 'class_name')}
-            disabled={loading || profiles.length === 0 || creating}
+            disabled={loading || profiles.length === 0}
           >
             Sorteaza dupa clasa
           </button>
@@ -373,7 +253,7 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
             <button
               className={`btn ${sortBy === 'role' ? 'primary' : ''}`}
               onClick={() => setSortBy(sortBy === 'role' ? null : 'role')}
-              disabled={loading || profiles.length === 0 || creating}
+              disabled={loading || profiles.length === 0}
             >
               Sorteaza dupa rol
             </button>
@@ -389,92 +269,9 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
 
       {banner && <div className={`banner ${banner.type}`}>{banner.text}</div>}
 
-      {canCreateAccounts && createOpen && (
+      {roles.includes('sysadmin') && (
         <div className="mutedBlock" style={{ marginBottom: 18 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
-            <div>
-              <strong>Cont nou:</strong> creeaza un utilizator nou direct din consola de administrare.
-            </div>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <button className="btn primary" onClick={createProfile} disabled={!canSubmitCreate || creating}>
-                {creating ? 'Se creeaza...' : 'Creeaza cont'}
-              </button>
-              <button
-                className="btn"
-                onClick={() => {
-                  setCreateOpen(false)
-                  resetCreateForm()
-                }}
-                disabled={creating}
-              >
-                Renunta
-              </button>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-            <div className="field">
-              <label className="label">Rol</label>
-              <select className="select" value={createForm.role} onChange={(event) => updateCreateField('role', event.target.value)} disabled={creating}>
-                {CREATE_ROLE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label className="label">Username</label>
-              <input className="input" value={createForm.username} onChange={(event) => updateCreateField('username', event.target.value)} disabled={creating} />
-            </div>
-            <div className="field">
-              <label className="label">Parola</label>
-              <input className="input" type="password" value={createForm.password} onChange={(event) => updateCreateField('password', event.target.value)} disabled={creating} />
-            </div>
-            <div className="field">
-              <label className="label">Prenume</label>
-              <input className="input" value={createForm.first_name} onChange={(event) => updateCreateField('first_name', event.target.value)} disabled={creating} />
-            </div>
-            <div className="field">
-              <label className="label">Nume</label>
-              <input className="input" value={createForm.last_name} onChange={(event) => updateCreateField('last_name', event.target.value)} disabled={creating} />
-            </div>
-            <div className="field">
-              <label className="label">Email</label>
-              <input className="input" type="email" value={createForm.email} onChange={(event) => updateCreateField('email', event.target.value)} disabled={creating} />
-            </div>
-            {createForm.role === 'student' && (
-              <div className="field">
-                <label className="label">Clasa</label>
-                <select className="select" value={createForm.class_id} onChange={(event) => updateCreateField('class_id', event.target.value)} disabled={creating}>
-                  <option value="">Selecteaza clasa</option>
-                  {classes.map((schoolClass) => (
-                    <option key={schoolClass.id} value={String(schoolClass.id)}>
-                      {schoolClass.profile ? `${schoolClass.name} - ${schoolClass.profile}` : schoolClass.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            {createForm.role === 'professor' && (
-              <div className="field">
-                <label className="label">Materia predata</label>
-                <select className="select" value={createForm.subject_name} onChange={(event) => updateCreateField('subject_name', event.target.value)} disabled={creating}>
-                  <option value="">Selecteaza materia</option>
-                  {subjects.map((subject) => (
-                    <option key={subject.id || subject.name} value={subject.name}>
-                      {subject.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            {createForm.role === 'student' && (
-              <div className="mutedSmall" style={{ alignSelf: 'end' }}>
-                Adresa si CNP-ul se genereaza automat la creare si apar imediat in profilul elevului.
-              </div>
-            )}
-          </div>
+          Pentru conturi noi foloseste intrarea separata <strong>Creeaza cont</strong> din meniul principal.
         </div>
       )}
 
@@ -556,7 +353,7 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
               <thead>
                 <tr>
                   <th className="thin">#</th>
-                  <th>{canManageProfiles ? 'Persoana' : 'Elev'}</th>
+                  <th>{canManageProfiles ? 'Persoana' : 'Utilizator'}</th>
                   <th>Username</th>
                   {canManageProfiles && <th>Rol</th>}
                   <th>Clasa</th>

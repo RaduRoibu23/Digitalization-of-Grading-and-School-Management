@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicLong;
@@ -135,15 +136,22 @@ public class SchoolDataService {
     }
 
     public UserProfile getProfile(String username) {
-        UserProfile profile = profilesByUsername.get(username);
-        if (profile == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User profile not found");
-        }
-        return profile;
+        return findProfileByUsername(username)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User profile not found"));
     }
 
     public boolean hasProfile(String username) {
-        return profilesByUsername.containsKey(username);
+        return findProfileByUsername(username).isPresent();
+    }
+
+    public UserProfile resolveAuthenticatedProfile(String username, String email) {
+        return findProfileByUsername(username)
+                .or(() -> findProfileByEmail(email))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User profile not found"));
+    }
+
+    public String resolveAuthenticatedUsername(String username, String email) {
+        return resolveAuthenticatedProfile(username, email).username();
     }
 
     public ProfileResponse createManagedProfile(
@@ -155,7 +163,7 @@ public class SchoolDataService {
             Long classId,
             List<String> subjectsTaught
     ) {
-        String normalizedUsername = normalizeRequiredProfileField(username, "Username-ul este obligatoriu");
+        String normalizedUsername = normalizeUsername(username, "Username-ul este obligatoriu");
         String normalizedRole = normalizeRequiredProfileField(role, "Rolul este obligatoriu").toLowerCase(Locale.ROOT);
         String normalizedFirstName = normalizeRequiredProfileField(firstName, "Prenumele este obligatoriu");
         String normalizedLastName = normalizeRequiredProfileField(lastName, "Numele este obligatoriu");
@@ -232,7 +240,7 @@ public class SchoolDataService {
         String normalizedCnp = normalizeOptionalProfileField(cnp);
         SchoolClass schoolClass = classId == null ? null : requireClass(classId);
 
-        if (referenceDataPersistenceService.emailUsedByAnotherProfile(normalizedEmail, username)) {
+        if (referenceDataPersistenceService.emailUsedByAnotherProfile(normalizedEmail, existing.username())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Email folosit deja");
         }
 
@@ -250,7 +258,7 @@ public class SchoolDataService {
 
         if (normalizedCnp != null) {
             validateCnp(normalizedCnp);
-            if (referenceDataPersistenceService.cnpUsedByAnotherProfile(normalizedCnp, username)) {
+            if (referenceDataPersistenceService.cnpUsedByAnotherProfile(normalizedCnp, existing.username())) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "CNP folosit deja");
             }
         }
@@ -274,7 +282,7 @@ public class SchoolDataService {
                 existing.subjectsTaught()
         );
 
-        profilesByUsername.put(username, updated);
+        profilesByUsername.put(existing.username(), updated);
         updateHomeroomTeacherAssignment(existing, updated, homeroomClassId);
         synchronizeTeacherDisplayName(existing, updated);
         referenceDataPersistenceService.saveUserProfile(updated);
@@ -335,9 +343,10 @@ public class SchoolDataService {
     }
 
     public List<TimetableEntry> getTimetableForTeacher(String username) {
+        String canonicalUsername = getProfile(username).username();
         return timetablesByClassId.values().stream()
                 .flatMap(Collection::stream)
-                .filter(entry -> username.equals(entry.teacherUsername()))
+                .filter(entry -> canonicalUsername.equals(entry.teacherUsername()))
                 .sorted(Comparator.comparing(TimetableEntry::weekday).thenComparing(TimetableEntry::indexInDay))
                 .toList();
     }
@@ -562,7 +571,8 @@ public class SchoolDataService {
     }
 
     public MeResponse meResponse(String username, List<String> roles, Map<String, Object> claims) {
-        UserProfile profile = getProfile(username);
+        Object emailClaim = claims == null ? null : claims.get("email");
+        UserProfile profile = resolveAuthenticatedProfile(username, emailClaim == null ? null : String.valueOf(emailClaim));
         SchoolClass schoolClass = profile.classId() == null ? null : requireClass(profile.classId());
         return new MeResponse(
                 profile.id(),
@@ -1525,6 +1535,10 @@ public class SchoolDataService {
         return normalized;
     }
 
+    private String normalizeUsername(String value, String errorMessage) {
+        return normalizeRequiredProfileField(value, errorMessage).toLowerCase(Locale.ROOT);
+    }
+
     private String normalizeOptionalProfileField(String value) {
         if (value == null) {
             return null;
@@ -1551,6 +1565,33 @@ public class SchoolDataService {
         }
 
         return normalized;
+    }
+
+    private Optional<UserProfile> findProfileByUsername(String username) {
+        String normalized = normalizeOptionalProfileField(username);
+        if (normalized == null) {
+            return Optional.empty();
+        }
+
+        UserProfile exactMatch = profilesByUsername.get(normalized);
+        if (exactMatch != null) {
+            return Optional.of(exactMatch);
+        }
+
+        return profilesByUsername.values().stream()
+                .filter(profile -> normalized.equalsIgnoreCase(profile.username()))
+                .findFirst();
+    }
+
+    private Optional<UserProfile> findProfileByEmail(String email) {
+        String normalized = normalizeOptionalProfileField(email);
+        if (normalized == null) {
+            return Optional.empty();
+        }
+
+        return profilesByUsername.values().stream()
+                .filter(profile -> normalized.equalsIgnoreCase(profile.email()))
+                .findFirst();
     }
 
     private String displayName(UserProfile profile) {

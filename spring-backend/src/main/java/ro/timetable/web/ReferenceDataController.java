@@ -176,6 +176,9 @@ public class ReferenceDataController {
     }
 
     private String username(JwtAuthenticationToken authentication) {
-        return (String) authentication.getToken().getClaims().getOrDefault("preferred_username", authentication.getName());
+        return schoolDataService.resolveAuthenticatedUsername(
+                (String) authentication.getToken().getClaims().getOrDefault("preferred_username", authentication.getName()),
+                (String) authentication.getToken().getClaims().get("email")
+        );
     }
 }

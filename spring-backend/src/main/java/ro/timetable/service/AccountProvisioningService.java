@@ -17,6 +17,7 @@ import ro.timetable.web.dto.ApiDtos.ProfileResponse;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.springframework.http.HttpStatus.BAD_GATEWAY;
@@ -56,13 +57,14 @@ public class AccountProvisioningService {
             Long classId,
             List<String> subjectsTaught
     ) {
+        String normalizedUsername = username == null ? null : username.trim().toLowerCase(Locale.ROOT);
         String accessToken = adminAccessToken();
-        createKeycloakUser(accessToken, username, password, firstName, lastName, email);
-        String userId = findUserId(accessToken, username);
+        createKeycloakUser(accessToken, normalizedUsername, password, firstName, lastName, email);
+        String userId = findUserId(accessToken, normalizedUsername);
 
         try {
             assignRealmRole(accessToken, userId, role);
-            return schoolDataService.createManagedProfile(username, role, firstName, lastName, email, classId, subjectsTaught);
+            return schoolDataService.createManagedProfile(normalizedUsername, role, firstName, lastName, email, classId, subjectsTaught);
         } catch (RuntimeException exception) {
             deleteKeycloakUser(accessToken, userId);
             throw exception;

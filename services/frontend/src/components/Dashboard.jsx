@@ -8,6 +8,7 @@ import AuditConsole from './AuditConsole'
 import NotificationPopup from './NotificationPopup'
 import ProfileScreen from './ProfileScreen'
 import StudentsScreen from './StudentsScreen'
+import AccountCreationScreen from './AccountCreationScreen'
 import CatalogScreen from './CatalogScreen'
 
 function hasAnyRole(userRoles, allowedRoles) {
@@ -71,8 +72,11 @@ export default function Dashboard({ accessToken, onRefreshToken, onLogout }) {
           {visibleItems.some((item) => item.path === 'genereaza-orar') && (
             <Route path="genereaza-orar" element={<GenerateTimetableScreen accessToken={accessToken} roles={roles} />} />
           )}
-          {visibleItems.some((item) => item.path === 'studenti') && (
-            <Route path="studenti" element={<StudentsScreen accessToken={accessToken} roles={roles} />} />
+          {visibleItems.some((item) => item.path === 'utilizatori') && (
+            <Route path="utilizatori" element={<StudentsScreen accessToken={accessToken} roles={roles} />} />
+          )}
+          {visibleItems.some((item) => item.path === 'creeaza-cont') && (
+            <Route path="creeaza-cont" element={<AccountCreationScreen accessToken={accessToken} roles={roles} />} />
           )}
           {visibleItems.some((item) => item.path === 'catalog') && (
             <Route path="catalog" element={<CatalogScreen accessToken={accessToken} roles={roles} />} />
@@ -80,6 +84,7 @@ export default function Dashboard({ accessToken, onRefreshToken, onLogout }) {
           {visibleItems.some((item) => item.path === 'profil') && (
             <Route path="profil" element={<ProfileScreen accessToken={accessToken} roles={roles} />} />
           )}
+          <Route path="studenti" element={<Navigate to="/app/utilizatori" replace />} />
           <Route path="*" element={<Navigate to={defaultPath} replace />} />
         </Routes>
       </main>
