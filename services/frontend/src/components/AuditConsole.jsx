@@ -40,19 +40,19 @@ export default function AuditConsole({ accessToken }) {
 
   return (
     <>
-      <button className="auditConsoleToggle" type="button" onClick={() => setOpen((current) => !current)}>
+      <button className="auditConsoleToggle btn primary" type="button" onClick={() => setOpen((current) => !current)}>
         {open ? 'Inchide audit' : 'Audit'}
       </button>
 
       {open && (
-        <section className="auditConsolePanel">
-          <div className="auditConsoleHeader">
+        <section className="auditConsolePanel contentCard">
+          <div className="auditConsoleHeader contentHeader">
             <div>
-              <div className="auditConsoleTitle">Consola audit</div>
-              <div className="auditConsoleSubtitle">Istoric pentru actiunile importante din aplicatie.</div>
+              <div className="title">Consola audit</div>
+              <div className="subtitle">Istoric pentru actiunile importante din aplicatie.</div>
             </div>
 
-            <div className="auditConsoleActions">
+            <div className="auditConsoleActions headerActions">
               <button className="btn" type="button" onClick={loadAuditEntries} disabled={loading}>
                 {loading ? 'Se incarca...' : 'Refresh'}
               </button>
@@ -64,7 +64,7 @@ export default function AuditConsole({ accessToken }) {
 
           {error && <div className="banner error">{error}</div>}
 
-          <div className="auditConsoleMeta">
+          <div className="auditConsoleMeta catalogStats">
             <span className="statPill">Intrari: <strong>{entries.length}</strong></span>
             <span className="statPill">Actualizare: <strong>la 20s</strong></span>
           </div>
@@ -74,7 +74,7 @@ export default function AuditConsole({ accessToken }) {
           ) : entries.length === 0 ? (
             <div className="mutedBlock">Nu exista inca actiuni inregistrate.</div>
           ) : (
-            <div className="auditConsoleTableWrap">
+            <div className="auditConsoleTableWrap tableWrap">
               <table className="tbl auditConsoleTable">
                 <thead>
                   <tr>
@@ -88,11 +88,11 @@ export default function AuditConsole({ accessToken }) {
                 <tbody>
                   {entries.map((entry) => (
                     <tr key={entry.id}>
-                      <td>{entry.id}</td>
-                      <td>{entry.action || '-'}</td>
-                      <td>{entry.actor_username || '-'}</td>
-                      <td>{entry.effect || '-'}</td>
-                      <td>{formatTimestamp(entry.created_at)}</td>
+                      <td className="auditConsoleOrderCell">{entry.id}</td>
+                      <td className="auditConsoleActionCell">{entry.action || '-'}</td>
+                      <td className="auditConsoleActorCell">{entry.actor_username || '-'}</td>
+                      <td className="auditConsoleEffectCell">{entry.effect || '-'}</td>
+                      <td className="auditConsoleTimeCell">{formatTimestamp(entry.created_at)}</td>
                     </tr>
                   ))}
                 </tbody>
