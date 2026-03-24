@@ -43,10 +43,10 @@ export default function Login({ onLogin }) {
     await doLogin(username, password)
   }
 
-  const loginPreset = async (user) => {
+  const applyPreset = (user) => {
     setUsername(user.username)
-    setPassword(user.password)
-    await doLogin(user.username, user.password)
+    setPassword('')
+    setError(`Username presetat pentru ${user.label}. Completeaza parola contului pentru autentificare.`)
   }
 
   return (
@@ -107,9 +107,9 @@ export default function Login({ onLogin }) {
                   key={user.label}
                   className="btn btnSmall"
                   type="button"
-                  onClick={() => loginPreset(user)}
+                  onClick={() => applyPreset(user)}
                   disabled={loading}
-                  title={`Login: ${user.username}`}
+                  title={`Completeaza login pentru ${user.username}`}
                 >
                   {user.label}
                 </button>

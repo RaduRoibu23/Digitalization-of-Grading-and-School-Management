@@ -124,7 +124,7 @@ public class AuthController {
         } catch (HttpStatusCodeException ex) {
             return ResponseEntity.status(ex.getStatusCode()).body(new ApiErrorResponse(
                     "login_failed",
-                    ex.getResponseBodyAsString(),
+                    "Autentificarea a esuat",
                     ex.getStatusCode().value(),
                     null,
                     null
@@ -134,13 +134,13 @@ public class AuthController {
                     "keycloak_unreachable",
                     "Backend could not reach Keycloak",
                     null,
-                    ex.getMostSpecificCause() == null ? ex.getMessage() : ex.getMostSpecificCause().getMessage(),
+                    null,
                     null
             ));
         } catch (Exception ex) {
             return ResponseEntity.internalServerError().body(new ApiErrorResponse(
                     "login_failed",
-                    ex.getMessage(),
+                    "Autentificarea nu a putut fi procesata",
                     null,
                     null,
                     null

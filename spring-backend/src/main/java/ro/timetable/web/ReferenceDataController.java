@@ -69,6 +69,9 @@ public class ReferenceDataController {
     @GetMapping("/profiles")
     public List<ProfileResponse> profiles(@RequestParam(required = false) String role, JwtAuthenticationToken authentication) {
         List<String> roles = roles(authentication);
+        if (!canManageProfiles(roles)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar secretariatul si sysadmin-ul pot vedea lista de profiluri");
+        }
         return schoolDataService.getProfilesByRole(role, canManageProfiles(roles));
     }
 

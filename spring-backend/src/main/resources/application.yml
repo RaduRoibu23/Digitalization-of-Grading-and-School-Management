@@ -3,9 +3,9 @@ spring:
     name: timetable-backend
 
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/keycloak}
-    username: ${SPRING_DATASOURCE_USERNAME:keycloak}
-    password: ${SPRING_DATASOURCE_PASSWORD:keycloak}
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -27,13 +27,13 @@ spring:
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8181/realms/timetable-realm}
 
 keycloak:
-  base-url: ${KEYCLOAK_BASE_URL:http://localhost:8181}
-  realm: ${KEYCLOAK_REALM:timetable-realm}
-  token-url: ${KEYCLOAK_TOKEN_URL:http://localhost:8181/realms/timetable-realm/protocol/openid-connect/token}
-  client-id: ${KEYCLOAK_CLIENT_ID:timetable-backend}
+  base-url: ${KEYCLOAK_BASE_URL}
+  realm: ${KEYCLOAK_REALM}
+  token-url: ${KEYCLOAK_TOKEN_URL}
+  client-id: ${KEYCLOAK_CLIENT_ID}
   admin:
-    username: ${KEYCLOAK_ADMIN_USERNAME:admin}
-    password: ${KEYCLOAK_ADMIN_PASSWORD:admin}
+    username: ${KEYCLOAK_ADMIN_USERNAME}
+    password: ${KEYCLOAK_ADMIN_PASSWORD}
 
 springdoc:
   api-docs:

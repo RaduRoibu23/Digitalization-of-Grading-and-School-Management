@@ -20,10 +20,13 @@ import ro.timetable.service.SchoolDataService;
 import ro.timetable.web.dto.ApiDtos.TimetableGenerationResponse;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/timetables")
 public class TimetableController {
+
+    private static final List<String> APP_ROLES = List.of("student", "professor", "secretariat", "scheduler", "admin", "sysadmin");
 
     private final SchoolDataService schoolDataService;
 
@@ -39,32 +42,72 @@ public class TimetableController {
     }
 
     @GetMapping("/classes/{classId}")
-    public List<TimetableEntry> timetableForClass(@PathVariable Long classId) {
+    public List<TimetableEntry> timetableForClass(@PathVariable Long classId, JwtAuthenticationToken authentication) {
+        ensureTimetableAccess(username(authentication), roles(authentication), classId);
         return schoolDataService.getTimetableForClass(classId);
     }
 
     @GetMapping("/me/teacher")
     public List<TimetableEntry> timetableForTeacher(JwtAuthenticationToken authentication) {
-        String username = (String) authentication.getToken().getClaims().getOrDefault("preferred_username", authentication.getName());
-        return schoolDataService.getTimetableForTeacher(username);
+        if (!roles(authentication).contains("professor")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar profesorii pot accesa acest endpoint");
+        }
+        return schoolDataService.getTimetableForTeacher(username(authentication));
     }
 
     @PostMapping("/generate")
-    public TimetableGenerationResponse generate(@Valid @RequestBody TimetableGenerationRequest request) {
+    public TimetableGenerationResponse generate(@Valid @RequestBody TimetableGenerationRequest request, JwtAuthenticationToken authentication) {
         if (request.class_id() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "class_id is required");
         }
+        ensureTimetableManagement(roles(authentication));
         return schoolDataService.generateTimetable(request.class_id());
     }
 
     @DeleteMapping("/classes/{classId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Long classId) {
+    public void delete(@PathVariable Long classId, JwtAuthenticationToken authentication) {
+        ensureTimetableManagement(roles(authentication));
         schoolDataService.deleteTimetable(classId);
     }
 
     @PatchMapping("/entries/{entryId}")
-    public TimetableEntry updateEntry(@PathVariable Long entryId, @Valid @RequestBody UpdateTimetableEntryRequest request) {
+    public TimetableEntry updateEntry(
+            @PathVariable Long entryId,
+            @Valid @RequestBody UpdateTimetableEntryRequest request,
+            JwtAuthenticationToken authentication
+    ) {
+        ensureTimetableManagement(roles(authentication));
         return schoolDataService.updateEntry(entryId, request.version(), request.subject_id(), request.room_id());
+    }
+
+    private void ensureTimetableAccess(String username, List<String> roles, Long classId) {
+        if (!schoolDataService.canAccessTimetableForClass(username, roles, classId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Nu poti accesa orarul pentru aceasta clasa");
+        }
+    }
+
+    private void ensureTimetableManagement(List<String> roles) {
+        if (!schoolDataService.canManageTimetables(roles)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Nu ai dreptul sa modifici orarul");
+        }
+    }
+
+    private String username(JwtAuthenticationToken authentication) {
+        return (String) authentication.getToken().getClaims().getOrDefault("preferred_username", authentication.getName());
+    }
+
+    private List<String> roles(JwtAuthenticationToken authentication) {
+        Object realmAccess = authentication.getToken().getClaims().get("realm_access");
+        if (realmAccess instanceof Map<?, ?> realmAccessMap) {
+            Object roleValues = realmAccessMap.get("roles");
+            if (roleValues instanceof List<?> roleList) {
+                return roleList.stream()
+                        .map(String::valueOf)
+                        .filter(APP_ROLES::contains)
+                        .toList();
+            }
+        }
+        return List.of();
     }
 }

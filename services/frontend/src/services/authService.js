@@ -4,6 +4,15 @@ const STORAGE_KEY = CONFIG.auth.storageKey
 const API_BASE = CONFIG.api.baseUrl
 const APP_ROLES = ['student', 'professor', 'secretariat', 'scheduler', 'admin', 'sysadmin']
 
+function sessionStorageRef() {
+  if (typeof window === 'undefined') return null
+  try {
+    return window.sessionStorage
+  } catch {
+    return null
+  }
+}
+
 function parseJsonSafely(text) {
   if (!text) return null
   try {
@@ -25,21 +34,27 @@ export function decodeJwt(token) {
 }
 
 export function persistSession(accessToken, idToken, refreshToken) {
+  const storage = sessionStorageRef()
+  if (!storage) return
   const payload = {
     accessToken,
     idToken,
     refreshToken,
     savedAt: Date.now(),
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
+  storage.setItem(STORAGE_KEY, JSON.stringify(payload))
 }
 
 export function clearSession() {
-  localStorage.removeItem(STORAGE_KEY)
+  const storage = sessionStorageRef()
+  if (!storage) return
+  storage.removeItem(STORAGE_KEY)
 }
 
 export function loadSession() {
-  const raw = localStorage.getItem(STORAGE_KEY)
+  const storage = sessionStorageRef()
+  if (!storage) return null
+  const raw = storage.getItem(STORAGE_KEY)
   if (!raw) return null
 
   try {

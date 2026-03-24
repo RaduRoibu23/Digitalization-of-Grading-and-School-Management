@@ -74,7 +74,7 @@ public class RestExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleUnexpected(Exception ex) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ApiErrorResponse(
                 "internal_error",
-                ex.getMessage() == null ? "Unexpected server error" : ex.getMessage(),
+                "Unexpected server error",
                 null,
                 null,
                 null

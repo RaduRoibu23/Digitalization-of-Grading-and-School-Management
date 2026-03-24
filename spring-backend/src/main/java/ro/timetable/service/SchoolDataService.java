@@ -295,6 +295,25 @@ public class SchoolDataService {
                 .toList();
     }
 
+    public boolean canAccessTimetableForClass(String username, List<String> roles, Long classId) {
+        requireClass(classId);
+
+        if (hasAnyRole(roles, "secretariat", "scheduler", "admin", "sysadmin")) {
+            return true;
+        }
+
+        if (roles.contains("student")) {
+            UserProfile profile = getProfile(username);
+            return Objects.equals(profile.classId(), classId);
+        }
+
+        return roles.contains("professor") && teachesClass(username, classId);
+    }
+
+    public boolean canManageTimetables(List<String> roles) {
+        return hasAnyRole(roles, "secretariat", "scheduler", "admin", "sysadmin");
+    }
+
     public TimetableGenerationResponse generateTimetable(Long classId) {
         SchoolClass schoolClass = requireClass(classId);
         List<TimetableEntry> generated = buildGeneratedTimetable(schoolClass, classId);
@@ -1469,6 +1488,15 @@ public class SchoolDataService {
 
     private String displayName(UserProfile profile) {
         return profile.firstName() + " " + profile.lastName();
+    }
+
+    private boolean hasAnyRole(List<String> roles, String... allowedRoles) {
+        for (String allowedRole : allowedRoles) {
+            if (roles.contains(allowedRole)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
 
