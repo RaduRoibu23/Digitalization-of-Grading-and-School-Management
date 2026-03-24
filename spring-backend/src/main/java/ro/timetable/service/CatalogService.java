@@ -33,6 +33,7 @@ public class CatalogService {
     private final SchoolDataService schoolDataService;
     private final CurriculumPlanService curriculumPlanService;
     private final PersistentStateService persistentStateService;
+    private final AuditService auditService;
     private final NotificationService notificationService;
     private final Map<String, List<StudentGrade>> gradesByStudentUsername = new LinkedHashMap<>();
     private final Map<String, List<StudentAbsence>> absencesByStudentUsername = new LinkedHashMap<>();
@@ -43,11 +44,13 @@ public class CatalogService {
             SchoolDataService schoolDataService,
             CurriculumPlanService curriculumPlanService,
             PersistentStateService persistentStateService,
+            AuditService auditService,
             NotificationService notificationService
     ) {
         this.schoolDataService = schoolDataService;
         this.curriculumPlanService = curriculumPlanService;
         this.persistentStateService = persistentStateService;
+        this.auditService = auditService;
         this.notificationService = notificationService;
     }
 
@@ -136,6 +139,11 @@ public class CatalogService {
         sortGrades(studentGrades);
         persistentStateService.saveGrade(created);
         notificationService.createNotifications(List.of(student.username()), "Ai primit nota " + gradeValue + " la materia " + subjectName + ".");
+        auditService.record(
+                "Adaugare nota",
+                requesterUsername,
+                "A fost adaugata nota " + gradeValue + " la " + subjectName + " pentru elevul " + student.username()
+        );
         return gradeResponse(created, requesterUsername, roles);
     }
 
@@ -178,6 +186,11 @@ public class CatalogService {
                 grades.set(index, updated);
                 sortGrades(grades);
                 persistentStateService.saveGrade(updated);
+                auditService.record(
+                        "Actualizare nota",
+                        requesterUsername,
+                        "Nota " + updated.id() + " a fost actualizata la valoarea " + gradeValue + " pentru elevul " + updated.studentUsername()
+                );
                 return gradeResponse(updated, requesterUsername, roles);
             }
         }
@@ -202,6 +215,11 @@ public class CatalogService {
                 }
                 grades.remove(index);
                 persistentStateService.deleteGrade(gradeId);
+                auditService.record(
+                        "Stergere nota",
+                        requesterUsername,
+                        "Nota " + gradeId + " a fost stearsa pentru elevul " + existing.studentUsername()
+                );
                 return new ActionResponse("Grade deleted", gradeId, null);
             }
         }
@@ -255,6 +273,11 @@ public class CatalogService {
         sortAbsences(studentAbsences);
         persistentStateService.saveAbsence(created);
         notificationService.createNotifications(List.of(student.username()), "Ai primit o absenta la materia " + subjectName + ".");
+        auditService.record(
+                "Adaugare absenta",
+                requesterUsername,
+                "A fost adaugata o absenta la " + subjectName + " pentru elevul " + student.username()
+        );
         return absenceResponse(created, requesterUsername, roles);
     }
 
@@ -298,6 +321,11 @@ public class CatalogService {
                 sortAbsences(absences);
                 persistentStateService.saveAbsence(updated);
                 notificationService.createNotifications(List.of(existing.studentUsername()), "O absenta la materia " + existing.subjectName() + " a fost motivata.");
+                auditService.record(
+                        "Motivare absenta",
+                        requesterUsername,
+                        "Absenta " + absenceId + " a fost motivata pentru elevul " + existing.studentUsername()
+                );
                 return absenceResponse(updated, requesterUsername, roles);
             }
         }

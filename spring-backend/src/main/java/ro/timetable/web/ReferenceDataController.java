@@ -19,6 +19,7 @@ import ro.timetable.model.SchoolClass;
 import ro.timetable.model.Subject;
 import ro.timetable.model.UserProfile;
 import ro.timetable.service.AccountProvisioningService;
+import ro.timetable.service.AuditService;
 import ro.timetable.service.CatalogService;
 import ro.timetable.service.SchoolDataService;
 import ro.timetable.web.dto.ApiDtos.ProfileResponse;
@@ -34,11 +35,18 @@ public class ReferenceDataController {
     private static final List<String> APP_ROLES = List.of("student", "professor", "secretariat", "scheduler", "admin", "sysadmin");
 
     private final AccountProvisioningService accountProvisioningService;
+    private final AuditService auditService;
     private final SchoolDataService schoolDataService;
     private final CatalogService catalogService;
 
-    public ReferenceDataController(AccountProvisioningService accountProvisioningService, SchoolDataService schoolDataService, CatalogService catalogService) {
+    public ReferenceDataController(
+            AccountProvisioningService accountProvisioningService,
+            AuditService auditService,
+            SchoolDataService schoolDataService,
+            CatalogService catalogService
+    ) {
         this.accountProvisioningService = accountProvisioningService;
+        this.auditService = auditService;
         this.schoolDataService = schoolDataService;
         this.catalogService = catalogService;
     }
@@ -93,11 +101,12 @@ public class ReferenceDataController {
 
     @PostMapping("/profiles")
     public ProfileResponse createProfile(@Valid @RequestBody CreateProfileRequest request, JwtAuthenticationToken authentication) {
+        String actorUsername = username(authentication);
         if (!roles(authentication).contains("sysadmin")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar sysadmin-ul poate crea conturi noi");
         }
 
-        return accountProvisioningService.createManagedAccount(
+        ProfileResponse created = accountProvisioningService.createManagedAccount(
                 request.username().trim(),
                 request.password(),
                 request.role().trim().toLowerCase(),
@@ -107,6 +116,13 @@ public class ReferenceDataController {
                 request.class_id(),
                 request.subjects_taught() == null ? List.of() : request.subjects_taught()
         );
+        auditService.record(
+                "Creare cont",
+                actorUsername,
+                "A fost creat contul " + created.role() + " pentru utilizatorul " + created.username()
+                        + (created.class_name() == null ? "" : " in clasa " + created.class_name())
+        );
+        return created;
     }
 
     @PutMapping("/profiles/{username}")
@@ -133,6 +149,11 @@ public class ReferenceDataController {
                 request.homeroom_class_id()
         );
         catalogService.syncProfileData(previousProfile, updatedProfile);
+        auditService.record(
+                "Actualizare profil",
+                username(authentication),
+                "Profilul utilizatorului " + updatedProfile.username() + " a fost actualizat"
+        );
         return schoolDataService.toProfileResponse(updatedProfile, true);
     }
 
@@ -152,5 +173,9 @@ public class ReferenceDataController {
             }
         }
         return List.of();
+    }
+
+    private String username(JwtAuthenticationToken authentication) {
+        return (String) authentication.getToken().getClaims().getOrDefault("preferred_username", authentication.getName());
     }
 }

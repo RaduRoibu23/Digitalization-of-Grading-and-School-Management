@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import ro.timetable.service.AuditService;
 import ro.timetable.service.NotificationService;
 import ro.timetable.service.SchoolDataService;
 import ro.timetable.web.dto.ApiDtos.NotificationDispatchResponse;
@@ -27,10 +28,12 @@ public class NotificationController {
 
     private static final List<String> APP_ROLES = List.of("student", "professor", "secretariat", "scheduler", "admin", "sysadmin");
 
+    private final AuditService auditService;
     private final NotificationService notificationService;
     private final SchoolDataService schoolDataService;
 
-    public NotificationController(NotificationService notificationService, SchoolDataService schoolDataService) {
+    public NotificationController(AuditService auditService, NotificationService notificationService, SchoolDataService schoolDataService) {
+        this.auditService = auditService;
         this.notificationService = notificationService;
         this.schoolDataService = schoolDataService;
     }
@@ -70,6 +73,12 @@ public class NotificationController {
             }
             List<String> recipients = schoolDataService.getStudentUsernamesForClass(request.target_id());
             notificationService.createNotifications(recipients, request.message());
+            auditService.record(
+                    "Trimitere notificare",
+                    username(authentication),
+                    "A fost trimisa o notificare catre clasa " + schoolDataService.getClassById(request.target_id()).name()
+                            + " pentru " + recipients.size() + " destinatari"
+            );
             return new NotificationDispatchResponse("Notifications sent", recipients.size(), null);
         }
 
@@ -78,7 +87,13 @@ public class NotificationController {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "target_username is required for user notifications");
             }
             schoolDataService.getProfile(request.target_username());
-            return new NotificationDispatchResponse("Notification sent", null, notificationService.sendToUser(request.target_username(), request.message()));
+            NotificationResponse notification = notificationService.sendToUser(request.target_username(), request.message());
+            auditService.record(
+                    "Trimitere notificare",
+                    username(authentication),
+                    "A fost trimisa o notificare catre utilizatorul " + request.target_username()
+            );
+            return new NotificationDispatchResponse("Notification sent", null, notification);
         }
 
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported notification target");

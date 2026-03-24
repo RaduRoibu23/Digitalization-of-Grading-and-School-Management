@@ -2700,3 +2700,93 @@ body::after{
     grid-template-columns: 1fr;
   }
 }
+
+.auditConsoleToggle{
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 60;
+  border: 1px solid rgba(22, 35, 64, 0.12);
+  border-radius: 999px;
+  padding: 12px 18px;
+  background: linear-gradient(135deg, #10233f 0%, #1a4f7a 100%);
+  color: #fff;
+  box-shadow: 0 20px 50px rgba(10, 23, 48, 0.28);
+}
+
+.auditConsolePanel{
+  position: fixed;
+  right: 24px;
+  bottom: 84px;
+  z-index: 60;
+  width: min(720px, calc(100vw - 32px));
+  max-height: min(72vh, 820px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(22, 35, 64, 0.1);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 30px 80px rgba(10, 23, 48, 0.22);
+  backdrop-filter: blur(12px);
+}
+
+.auditConsoleHeader{
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.auditConsoleTitle{
+  font-family: var(--display);
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.auditConsoleSubtitle{
+  margin-top: 4px;
+  color: rgba(16, 35, 63, 0.72);
+}
+
+.auditConsoleActions{
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.auditConsoleMeta{
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.auditConsoleTableWrap{
+  overflow: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(22, 35, 64, 0.08);
+}
+
+.auditConsoleTable td,
+.auditConsoleTable th{
+  white-space: normal;
+  vertical-align: top;
+}
+
+@media (max-width: 820px){
+  .auditConsoleToggle{
+    right: 16px;
+    bottom: 16px;
+  }
+
+  .auditConsolePanel{
+    right: 16px;
+    bottom: 72px;
+    width: calc(100vw - 32px);
+    max-height: 76vh;
+    padding: 14px;
+  }
+}

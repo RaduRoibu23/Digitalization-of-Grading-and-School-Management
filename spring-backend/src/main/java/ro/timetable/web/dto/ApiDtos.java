@@ -93,6 +93,15 @@ public final class ApiDtos {
     ) {
     }
 
+    public record AuditEntryResponse(
+            Long id,
+            String action,
+            String actor_username,
+            String effect,
+            String created_at
+    ) {
+    }
+
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record NotificationDispatchResponse(
             String detail,

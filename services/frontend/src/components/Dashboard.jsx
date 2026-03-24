@@ -4,6 +4,7 @@ import { rolesFromToken, loadSession, refreshAccessToken } from '../services/aut
 import Sidebar, { NAV_ITEMS } from './Sidebar'
 import TimetableScreen from './TimetableScreen'
 import GenerateTimetableScreen from './GenerateTimetableScreen'
+import AuditConsole from './AuditConsole'
 import NotificationPopup from './NotificationPopup'
 import ProfileScreen from './ProfileScreen'
 import StudentsScreen from './StudentsScreen'
@@ -43,6 +44,7 @@ export default function Dashboard({ accessToken, onRefreshToken, onLogout }) {
   return (
     <div className="appShell">
       <NotificationPopup accessToken={accessToken} />
+      <AuditConsole accessToken={accessToken} />
       <Sidebar roles={roles} />
 
       <main className="content">

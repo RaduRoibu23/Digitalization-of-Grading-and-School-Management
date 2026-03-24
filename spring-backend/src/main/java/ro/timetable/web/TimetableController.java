@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import ro.timetable.model.TimetableEntry;
 import ro.timetable.model.TimetableGenerationRequest;
+import ro.timetable.service.AuditService;
 import ro.timetable.service.SchoolDataService;
 import ro.timetable.web.dto.ApiDtos.TimetableGenerationResponse;
 
@@ -28,9 +29,11 @@ public class TimetableController {
 
     private static final List<String> APP_ROLES = List.of("student", "professor", "secretariat", "scheduler", "admin", "sysadmin");
 
+    private final AuditService auditService;
     private final SchoolDataService schoolDataService;
 
-    public TimetableController(SchoolDataService schoolDataService) {
+    public TimetableController(AuditService auditService, SchoolDataService schoolDataService) {
+        this.auditService = auditService;
         this.schoolDataService = schoolDataService;
     }
 
@@ -61,14 +64,26 @@ public class TimetableController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "class_id is required");
         }
         ensureTimetableManagement(roles(authentication));
-        return schoolDataService.generateTimetable(request.class_id());
+        TimetableGenerationResponse response = schoolDataService.generateTimetable(request.class_id());
+        auditService.record(
+                "Generare orar",
+                username(authentication),
+                "Orar generat pentru clasa " + schoolDataService.getClassById(request.class_id()).name()
+        );
+        return response;
     }
 
     @DeleteMapping("/classes/{classId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long classId, JwtAuthenticationToken authentication) {
         ensureTimetableManagement(roles(authentication));
+        String className = schoolDataService.getClassById(classId).name();
         schoolDataService.deleteTimetable(classId);
+        auditService.record(
+                "Stergere orar",
+                username(authentication),
+                "Orarul clasei " + className + " a fost sters"
+        );
     }
 
     @PatchMapping("/entries/{entryId}")
@@ -78,7 +93,13 @@ public class TimetableController {
             JwtAuthenticationToken authentication
     ) {
         ensureTimetableManagement(roles(authentication));
-        return schoolDataService.updateEntry(entryId, request.version(), request.subject_id(), request.room_id());
+        TimetableEntry updated = schoolDataService.updateEntry(entryId, request.version(), request.subject_id(), request.room_id());
+        auditService.record(
+                "Actualizare orar",
+                username(authentication),
+                "Orarul clasei " + updated.className() + " a fost actualizat la " + updated.subjectName() + " in sala " + updated.roomName()
+        );
+        return updated;
     }
 
     private void ensureTimetableAccess(String username, List<String> roles, Long classId) {
