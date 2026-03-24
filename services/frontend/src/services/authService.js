@@ -112,39 +112,6 @@ export async function login(username, password) {
   }
 }
 
-export async function registerAccount(payload) {
-  const response = await fetch(`${API_BASE}/register`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  })
-
-  const text = await response.text()
-  const data = parseJsonSafely(text)
-
-  if (!response.ok) {
-    const message = data?.detail || data?.message || data?.error || 'Register failed'
-    throw new Error(message)
-  }
-
-  return data
-}
-
-export async function loadPublicClasses() {
-  const response = await fetch(`${API_BASE}/public/classes`)
-  const text = await response.text()
-  const data = parseJsonSafely(text)
-
-  if (!response.ok) {
-    const message = data?.error || data?.message || data?.detail || 'Could not load classes'
-    throw new Error(message)
-  }
-
-  return Array.isArray(data) ? data : []
-}
-
 export async function refreshAccessToken(refreshToken) {
   const response = await fetch(`${API_BASE}/refresh`, {
     method: 'POST',

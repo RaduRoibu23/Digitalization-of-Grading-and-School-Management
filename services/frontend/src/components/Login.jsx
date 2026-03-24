@@ -118,8 +118,6 @@ export default function Login({ onLogin }) {
 
             <div className="authSwitch">
               <Link className="linkBtn" to="/">Prima pagina</Link>
-              <span>/</span>
-              <Link className="linkBtn" to="/register">Creeaza cont</Link>
             </div>
 
             {successMessage && <div className="banner ok">{successMessage}</div>}

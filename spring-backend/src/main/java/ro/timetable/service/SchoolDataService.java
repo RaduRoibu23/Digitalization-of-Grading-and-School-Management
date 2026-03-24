@@ -146,29 +146,76 @@ public class SchoolDataService {
         return profilesByUsername.containsKey(username);
     }
 
-    public ProfileResponse registerStudentProfile(String username, String firstName, String lastName, String email, Long classId) {
-        if (hasProfile(username)) {
+    public ProfileResponse createManagedProfile(
+            String username,
+            String role,
+            String firstName,
+            String lastName,
+            String email,
+            Long classId,
+            List<String> subjectsTaught
+    ) {
+        String normalizedUsername = normalizeRequiredProfileField(username, "Username-ul este obligatoriu");
+        String normalizedRole = normalizeRequiredProfileField(role, "Rolul este obligatoriu").toLowerCase(Locale.ROOT);
+        String normalizedFirstName = normalizeRequiredProfileField(firstName, "Prenumele este obligatoriu");
+        String normalizedLastName = normalizeRequiredProfileField(lastName, "Numele este obligatoriu");
+        String normalizedEmail = normalizeRequiredProfileField(email, "Email-ul este obligatoriu");
+
+        if (hasProfile(normalizedUsername)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Username folosit deja");
         }
-        SchoolClass schoolClass = requireClass(classId);
-        String generatedAddress = generateUniqueStudentAddress(usedStudentAddresses(), new Random(System.nanoTime()));
-        String generatedCnp = generateUniqueStudentCnp(usedStudentCnps(), new Random(System.nanoTime() ^ username.hashCode()), schoolClass.name());
+
+        if (referenceDataPersistenceService.emailUsedByAnotherProfile(normalizedEmail, normalizedUsername)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email folosit deja");
+        }
+
+        if (!(normalizedRole.equals("student")
+                || normalizedRole.equals("professor")
+                || normalizedRole.equals("secretariat")
+                || normalizedRole.equals("scheduler")
+                || normalizedRole.equals("admin")
+                || normalizedRole.equals("sysadmin"))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Rol invalid");
+        }
+
+        SchoolClass schoolClass = null;
+        String generatedAddress = null;
+        String generatedCnp = null;
+        List<String> normalizedSubjects = normalizeSubjectNames(subjectsTaught);
+
+        if ("student".equals(normalizedRole)) {
+            schoolClass = requireClass(classId);
+            generatedAddress = generateUniqueStudentAddress(usedStudentAddresses(), new Random(System.nanoTime()));
+            generatedCnp = generateUniqueStudentCnp(usedStudentCnps(), new Random(System.nanoTime() ^ normalizedUsername.hashCode()), schoolClass.name());
+            normalizedSubjects = List.of();
+        } else {
+            if (classId != null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Doar elevii pot avea clasa setata la creare");
+            }
+            if (!"professor".equals(normalizedRole)) {
+                normalizedSubjects = List.of();
+            } else if (normalizedSubjects.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Profesorii trebuie sa aiba cel putin o materie");
+            }
+        }
+
         UserProfile profile = new UserProfile(
                 profileIds.getAndIncrement(),
                 1,
-                username,
-                "student",
-                firstName,
-                lastName,
-                email,
+                normalizedUsername,
+                normalizedRole,
+                normalizedFirstName,
+                normalizedLastName,
+                normalizedEmail,
                 generatedAddress,
                 generatedCnp,
-                classId,
-                schoolClass.name(),
-                List.of()
+                schoolClass == null ? null : schoolClass.id(),
+                schoolClass == null ? null : schoolClass.name(),
+                normalizedSubjects
         );
-        profilesByUsername.put(username, profile);
+        profilesByUsername.put(normalizedUsername, profile);
         referenceDataPersistenceService.saveUserProfile(profile);
+        rebuildDerivedIndexes();
         return profileResponse(profile);
     }
 
@@ -1484,6 +1531,26 @@ public class SchoolDataService {
         }
         String normalized = value.trim();
         return normalized.isEmpty() ? null : normalized;
+    }
+
+    private List<String> normalizeSubjectNames(List<String> subjectsTaught) {
+        if (subjectsTaught == null || subjectsTaught.isEmpty()) {
+            return List.of();
+        }
+
+        List<String> normalized = subjectsTaught.stream()
+                .map(this::normalizeOptionalProfileField)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        for (String subjectName : normalized) {
+            if (!subjectIdsByName.containsKey(subjectName)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Materia " + subjectName + " nu exista");
+            }
+        }
+
+        return normalized;
     }
 
     private String displayName(UserProfile profile) {

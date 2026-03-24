@@ -37,7 +37,6 @@ export default function HomePage() {
           </div>
 
           <div className="landingActions">
-            <Link className="btn" to="/register">Creeaza cont</Link>
             <Link className="btn btn-primary" to="/login">Login</Link>
           </div>
         </div>
@@ -52,7 +51,6 @@ export default function HomePage() {
 
             <div className="landingActions landingActionsInline">
               <Link className="btn btn-primary" to="/login">Intra in platforma</Link>
-              <Link className="btn" to="/register">Cont nou</Link>
             </div>
           </div>
 

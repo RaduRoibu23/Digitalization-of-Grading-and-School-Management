@@ -14,7 +14,6 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
 import ro.timetable.web.dto.ApiDtos.ProfileResponse;
-import ro.timetable.web.dto.ApiDtos.RegistrationResponse;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,7 +24,7 @@ import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
 
 @Service
-public class RegistrationService {
+public class AccountProvisioningService {
 
     private final RestTemplate restTemplate;
     private final SchoolDataService schoolDataService;
@@ -42,38 +41,32 @@ public class RegistrationService {
     @Value("${keycloak.admin.password}")
     private String keycloakAdminPassword;
 
-    public RegistrationService(RestTemplate restTemplate, SchoolDataService schoolDataService) {
+    public AccountProvisioningService(RestTemplate restTemplate, SchoolDataService schoolDataService) {
         this.restTemplate = restTemplate;
         this.schoolDataService = schoolDataService;
     }
 
-    public RegistrationResponse registerStudent(String username, String password, String firstName, String lastName, String email, Long classId) {
-        if (schoolDataService.hasProfile(username)) {
-            throw new ResponseStatusException(CONFLICT, "Username folosit deja");
-        }
-
+    public ProfileResponse createManagedAccount(
+            String username,
+            String password,
+            String role,
+            String firstName,
+            String lastName,
+            String email,
+            Long classId,
+            List<String> subjectsTaught
+    ) {
         String accessToken = adminAccessToken();
         createKeycloakUser(accessToken, username, password, firstName, lastName, email);
         String userId = findUserId(accessToken, username);
-        assignStudentRole(accessToken, userId);
 
-        ProfileResponse profile = schoolDataService.registerStudentProfile(username, firstName, lastName, email, classId);
-        return new RegistrationResponse(
-                "Account created",
-                profile.id(),
-                profile.version(),
-                profile.username(),
-                profile.role(),
-                profile.first_name(),
-                profile.last_name(),
-                profile.email(),
-                profile.address(),
-                profile.cnp(),
-                profile.class_id(),
-                profile.class_name(),
-                profile.class_profile(),
-                profile.subjects_taught()
-        );
+        try {
+            assignRealmRole(accessToken, userId, role);
+            return schoolDataService.createManagedProfile(username, role, firstName, lastName, email, classId, subjectsTaught);
+        } catch (RuntimeException exception) {
+            deleteKeycloakUser(accessToken, userId);
+            throw exception;
+        }
     }
 
     private String adminAccessToken() {
@@ -125,7 +118,7 @@ public class RegistrationService {
             );
         } catch (HttpStatusCodeException exception) {
             if (exception.getStatusCode().value() == 409) {
-                throw new ResponseStatusException(CONFLICT, "Username folosit deja");
+                throw new ResponseStatusException(CONFLICT, "Username sau email folosit deja");
             }
             throw new ResponseStatusException(BAD_GATEWAY, "Could not create Keycloak user");
         }
@@ -151,17 +144,17 @@ public class RegistrationService {
         return String.valueOf(id);
     }
 
-    private void assignStudentRole(String accessToken, String userId) {
+    private void assignRealmRole(String accessToken, String userId, String roleName) {
         HttpHeaders headers = jsonHeaders(accessToken);
         ResponseEntity<Map> roleResponse = restTemplate.exchange(
-                keycloakBaseUrl + "/admin/realms/" + keycloakRealm + "/roles/student",
+                keycloakBaseUrl + "/admin/realms/" + keycloakRealm + "/roles/" + roleName,
                 HttpMethod.GET,
                 new HttpEntity<>(headers),
                 Map.class
         );
         Map<?, ?> role = roleResponse.getBody();
         if (role == null || role.get("id") == null || role.get("name") == null) {
-            throw new ResponseStatusException(INTERNAL_SERVER_ERROR, "Student role could not be loaded");
+            throw new ResponseStatusException(INTERNAL_SERVER_ERROR, "Role could not be loaded");
         }
 
         List<Map<String, Object>> payload = List.of(Map.of(
@@ -177,7 +170,19 @@ public class RegistrationService {
                     Void.class
             );
         } catch (HttpStatusCodeException exception) {
-            throw new ResponseStatusException(BAD_GATEWAY, "Could not assign student role");
+            throw new ResponseStatusException(BAD_GATEWAY, "Could not assign role");
+        }
+    }
+
+    private void deleteKeycloakUser(String accessToken, String userId) {
+        try {
+            restTemplate.exchange(
+                    keycloakBaseUrl + "/admin/realms/" + keycloakRealm + "/users/" + userId,
+                    HttpMethod.DELETE,
+                    new HttpEntity<>(jsonHeaders(accessToken)),
+                    Void.class
+            );
+        } catch (Exception ignored) {
         }
     }
 

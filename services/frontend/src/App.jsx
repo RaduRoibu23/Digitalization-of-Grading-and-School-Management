@@ -3,7 +3,6 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { loadSession, clearSession } from './services/authService'
 import HomePage from './components/HomePage'
 import Login from './components/Login'
-import Register from './components/Register'
 import Dashboard from './components/Dashboard'
 import Header from './components/Header'
 
@@ -49,7 +48,7 @@ function App() {
     setSession(tokens)
   }
 
-  const isCenteredPublicRoute = location.pathname === '/login' || location.pathname === '/register'
+  const isCenteredPublicRoute = location.pathname === '/login'
   const isLandingRoute = location.pathname === '/'
   const isPublicRoute = isCenteredPublicRoute || isLandingRoute
 
@@ -73,14 +72,6 @@ function App() {
               element={(
                 <GuestRoute session={session}>
                   <Login onLogin={handleLogin} />
-                </GuestRoute>
-              )}
-            />
-            <Route
-              path="/register"
-              element={(
-                <GuestRoute session={session}>
-                  <Register />
                 </GuestRoute>
               )}
             />

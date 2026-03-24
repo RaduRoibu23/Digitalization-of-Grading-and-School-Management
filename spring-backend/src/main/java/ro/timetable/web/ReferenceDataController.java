@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,6 +18,7 @@ import ro.timetable.model.Room;
 import ro.timetable.model.SchoolClass;
 import ro.timetable.model.Subject;
 import ro.timetable.model.UserProfile;
+import ro.timetable.service.AccountProvisioningService;
 import ro.timetable.service.CatalogService;
 import ro.timetable.service.SchoolDataService;
 import ro.timetable.web.dto.ApiDtos.ProfileResponse;
@@ -31,12 +33,26 @@ public class ReferenceDataController {
 
     private static final List<String> APP_ROLES = List.of("student", "professor", "secretariat", "scheduler", "admin", "sysadmin");
 
+    private final AccountProvisioningService accountProvisioningService;
     private final SchoolDataService schoolDataService;
     private final CatalogService catalogService;
 
-    public ReferenceDataController(SchoolDataService schoolDataService, CatalogService catalogService) {
+    public ReferenceDataController(AccountProvisioningService accountProvisioningService, SchoolDataService schoolDataService, CatalogService catalogService) {
+        this.accountProvisioningService = accountProvisioningService;
         this.schoolDataService = schoolDataService;
         this.catalogService = catalogService;
+    }
+
+    public record CreateProfileRequest(
+            @NotBlank String username,
+            @NotBlank String password,
+            @NotBlank String role,
+            @NotBlank String first_name,
+            @NotBlank String last_name,
+            @NotBlank @Email String email,
+            Long class_id,
+            List<String> subjects_taught
+    ) {
     }
 
     public record UpdateProfileRequest(
@@ -73,6 +89,24 @@ public class ReferenceDataController {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar secretariatul si sysadmin-ul pot vedea lista de profiluri");
         }
         return schoolDataService.getProfilesByRole(role, canManageProfiles(roles));
+    }
+
+    @PostMapping("/profiles")
+    public ProfileResponse createProfile(@Valid @RequestBody CreateProfileRequest request, JwtAuthenticationToken authentication) {
+        if (!roles(authentication).contains("sysadmin")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar sysadmin-ul poate crea conturi noi");
+        }
+
+        return accountProvisioningService.createManagedAccount(
+                request.username().trim(),
+                request.password(),
+                request.role().trim().toLowerCase(),
+                request.first_name().trim(),
+                request.last_name().trim(),
+                request.email().trim(),
+                request.class_id(),
+                request.subjects_taught() == null ? List.of() : request.subjects_taught()
+        );
     }
 
     @PutMapping("/profiles/{username}")
