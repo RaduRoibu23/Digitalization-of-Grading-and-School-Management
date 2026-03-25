@@ -31,7 +31,7 @@ function formatDate(value) {
   }
 }
 
-function previewText(value, limit = 140) {
+function previewText(value, limit = 180) {
   const normalized = String(value || '').replace(/\s+/g, ' ').trim()
   if (normalized.length <= limit) {
     return normalized || '-'
@@ -55,6 +55,31 @@ function statusLabel(entryOrStatus) {
     return STATUS_OPTIONS.find((option) => option.value === entryOrStatus)?.label || entryOrStatus
   }
   return entryOrStatus?.status_label || statusLabel(entryOrStatus?.status)
+}
+
+function ticketCode(id) {
+  return `FBK-${String(id || 0).padStart(5, '0')}`
+}
+
+function threadTitle(entry) {
+  if (!entry) return '-'
+  return ticketCode(entry.id)
+}
+
+function threadMeta(entry) {
+  if (!entry) return '-'
+  const parts = []
+  parts.push(entry.category_label || entry.category || '-')
+  parts.push(entry.satisfaction_label || entry.satisfaction || '-')
+  if (entry.wants_contact) {
+    parts.push('Solicita contact')
+  }
+  return parts.join(' / ')
+}
+
+function detailTitle(entry) {
+  if (!entry) return '-'
+  return ticketCode(entry.id)
 }
 
 function updateEntries(currentEntries, updatedEntry) {
@@ -250,6 +275,7 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
   const totalEntries = entries.length
   const contactRequests = entries.filter((entry) => entry.wants_contact).length
   const openEntries = entries.filter((entry) => entry.status !== 'RESOLVED').length
+  const resolvedEntries = entries.filter((entry) => entry.status === 'RESOLVED').length
   const canSubmit = form.message.trim().length > 0 && form.message.trim().length <= 2000
   const canSaveStatus = Boolean(
     activeEntry?.can_update_status && statusDraft && statusDraft !== activeEntry?.status && !saving
@@ -258,6 +284,7 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
     activeEntry?.can_reply && replyDraft.trim().length > 0 && replyDraft.trim().length <= 2000 && !saving
   )
   const selectedEntryId = feedbackId ? Number(feedbackId) : null
+  const scopeLabel = canReview ? 'Toate mesajele din platforma' : 'Mesajele mele'
 
   return (
     <section className="contentCard">
@@ -265,23 +292,53 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
         <div>
           <div className="title">Feedback</div>
           <div className="subtitle">
-            Inbox pentru feedback, statusuri si reply catre elevi. {canReview ? 'Vezi toate mesajele primite in platforma.' : 'Vezi mesajele trimise de tine si raspunsurile primite.'}
+            Inbox de lucru pentru feedback, statusuri si reply catre elevi.
           </div>
         </div>
       </div>
 
-      <div className="catalogStats studentStats">
-        <div className="statPill">Total feedback-uri: <strong>{totalEntries}</strong></div>
-        <div className="statPill">Cereri de contact: <strong>{contactRequests}</strong></div>
-        <div className="statPill">Nerezolvate: <strong>{openEntries}</strong></div>
-      </div>
-
       {banner && <div className={`banner ${banner.type}`}>{banner.text}</div>}
 
-      <div className="mutedBlock" style={{ marginBottom: 18 }}>
-        <div className="feedbackComposeGrid">
-          <div style={{ display: 'grid', gap: 14 }}>
-            <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+      <div className="feedbackWorkspaceShell">
+        <div className="feedbackIntroCard">
+          <div className="feedbackKicker">Flux feedback</div>
+          <div className="feedbackHeroTitle">Trimite un mesaj nou si urmareste raspunsul in acelasi loc.</div>
+          <div className="feedbackHeroText">
+            {canReview
+              ? 'Secretariatul si administratorii pot parcurge mesajele ca intr-un inbox, pot schimba statusul si pot raspunde direct elevului.'
+              : 'Mesajele tale apar in inbox cu ruta proprie, iar daca ai cerut contact, reply-ul primit apare direct in detaliul mesajului si in notificari.'}
+          </div>
+
+          <div className="feedbackHeroStats">
+            <div className="feedbackHeroStat">
+              <div className="feedbackHeroStatValue">{totalEntries}</div>
+              <div className="feedbackHeroStatLabel">Mesaje vizibile</div>
+            </div>
+            <div className="feedbackHeroStat">
+              <div className="feedbackHeroStatValue">{contactRequests}</div>
+              <div className="feedbackHeroStatLabel">Cereri de contact</div>
+            </div>
+            <div className="feedbackHeroStat">
+              <div className="feedbackHeroStatValue">{openEntries}</div>
+              <div className="feedbackHeroStatLabel">Active</div>
+            </div>
+            <div className="feedbackHeroStat">
+              <div className="feedbackHeroStatValue">{resolvedEntries}</div>
+              <div className="feedbackHeroStatLabel">Rezolvate</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="feedbackComposerCard">
+          <div className="feedbackComposerHeader">
+            <div>
+              <div className="feedbackPanelTitle">Mesaj nou</div>
+              <div className="mutedSmall">Completeaza feedback-ul si intra direct in conversatia lui.</div>
+            </div>
+          </div>
+
+          <div className="feedbackFormGrid">
+            <div className="feedbackFieldGrid">
               <div className="field">
                 <label className="label">Categorie</label>
                 <select
@@ -318,7 +375,7 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
               </div>
             </div>
 
-            <label className="feedbackInlineChoice">
+            <label className="feedbackInlineChoice feedbackContactChoice">
               <input
                 type="checkbox"
                 checked={form.wants_contact}
@@ -337,15 +394,16 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
                 maxLength={2000}
                 rows={6}
                 disabled={saving}
-                placeholder="Descrie pe scurt ce functioneaza bine sau ce ar trebui imbunatatit."
-                style={{ minHeight: 140, resize: 'vertical' }}
+                placeholder="Descrie clar ce functioneaza bine sau ce ar trebui imbunatatit."
+                style={{ minHeight: 150, resize: 'vertical' }}
               />
-              <div className="mutedSmall" style={{ marginTop: 6 }}>
-                {form.message.trim().length}/2000 caractere
+              <div className="feedbackTextareaMeta">
+                <span>Mesajele lungi vor fi afisate cu wrapping automat in inbox si in detaliu.</span>
+                <strong>{form.message.trim().length}/2000</strong>
               </div>
             </div>
 
-            <div>
+            <div className="feedbackComposerActions">
               <button className="btn primary" onClick={submitFeedback} disabled={!canSubmit || saving}>
                 {saving ? 'Se trimite...' : 'Trimite feedback'}
               </button>
@@ -359,9 +417,7 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
           <div className="feedbackPanelHeader">
             <div>
               <div className="feedbackPanelTitle">Inbox</div>
-              <div className="mutedSmall">
-                {canReview ? 'Selecteaza un mesaj pentru detalii si status.' : 'Selecteaza un mesaj pentru a vedea reply-ul primit.'}
-              </div>
+              <div className="mutedSmall">{scopeLabel}</div>
             </div>
           </div>
 
@@ -380,12 +436,8 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
                 >
                   <div className="feedbackThreadTop">
                     <div className="feedbackThreadPrimary">
-                      <div className="feedbackThreadTitle">
-                        {canReview ? entry.submitted_by_username : (entry.category_label || entry.category)}
-                      </div>
-                      <div className="feedbackThreadMetaLine">
-                        {canReview ? `${entry.category_label || entry.category} · ${entry.satisfaction_label || entry.satisfaction}` : (entry.satisfaction_label || entry.satisfaction)}
-                      </div>
+                      <div className="feedbackThreadTitle">{threadTitle(entry)}</div>
+                      <div className="feedbackThreadMetaLine">{threadMeta(entry)}</div>
                     </div>
                     <FeedbackStatusPill status={entry.status} label={statusLabel(entry)} />
                   </div>
@@ -407,7 +459,7 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
           <div className="feedbackPanelHeader">
             <div>
               <div className="feedbackPanelTitle">Detaliu mesaj</div>
-              <div className="mutedSmall">Ruta fiecarui mesaj este separata, ca intr-un inbox.</div>
+              <div className="mutedSmall">Deschide fiecare mesaj pe ruta lui si lucreaza direct din panoul din dreapta.</div>
             </div>
             <Link className="btn" to="/app/feedback">
               Inbox
@@ -416,7 +468,7 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
 
           {!feedbackId ? (
             <div className="mutedBlock">
-              Selecteaza un mesaj din lista pentru a vedea continutul complet.
+              Selecteaza un mesaj din inbox pentru a vedea continutul complet si eventualul reply.
               {entries[0] && (
                 <div style={{ marginTop: 12 }}>
                   <Link className="btn primary" to={`/app/feedback/${entries[0].id}`}>
@@ -436,8 +488,10 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
             <div className="feedbackDetailBody">
               <div className="feedbackDetailHeader">
                 <div>
-                  <div className="feedbackDetailTitle">
-                    {activeEntry.category_label || activeEntry.category} · {activeEntry.satisfaction_label || activeEntry.satisfaction}
+                  <div className="feedbackDetailEyebrow">Ticket</div>
+                  <div className="feedbackDetailTitle">{detailTitle(activeEntry)}</div>
+                  <div className="mutedSmall">
+                    {activeEntry.category_label || activeEntry.category} / {activeEntry.satisfaction_label || activeEntry.satisfaction}
                   </div>
                   <div className="mutedSmall">
                     Trimis la {formatDate(activeEntry.submitted_at)}
@@ -460,7 +514,7 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
                   <div className="feedbackMetaLabel">Status actualizat de</div>
                   <div className="feedbackMetaValue">
                     {activeEntry.status_updated_by_username
-                      ? `${activeEntry.status_updated_by_username} · ${formatDate(activeEntry.status_updated_at)}`
+                      ? `${activeEntry.status_updated_by_username} / ${formatDate(activeEntry.status_updated_at)}`
                       : '-'}
                   </div>
                 </div>
@@ -468,7 +522,7 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
                   <div className="feedbackMetaLabel">Ultimul reply</div>
                   <div className="feedbackMetaValue">
                     {activeEntry.reply_message
-                      ? `${activeEntry.replied_by_username || '-'} · ${formatDate(activeEntry.replied_at)}`
+                      ? `${activeEntry.replied_by_username || '-'} / ${formatDate(activeEntry.replied_at)}`
                       : 'Fara reply'}
                   </div>
                 </div>
@@ -483,7 +537,7 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
                 <div className="feedbackSectionBlock feedbackReplyBlock">
                   <div className="feedbackSectionTitle">Reply trimis elevului</div>
                   <div className="feedbackReplyMeta">
-                    {activeEntry.replied_by_username || '-'} · {formatDate(activeEntry.replied_at)}
+                    {activeEntry.replied_by_username || '-'} / {formatDate(activeEntry.replied_at)}
                   </div>
                   <div className="feedbackMessageBody">{activeEntry.reply_message}</div>
                 </div>
@@ -530,12 +584,13 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
                       rows={5}
                       disabled={saving}
                       placeholder="Scrie reply-ul care va fi trimis elevului."
-                      style={{ minHeight: 120, resize: 'vertical' }}
+                      style={{ minHeight: 130, resize: 'vertical' }}
                     />
-                    <div className="mutedSmall" style={{ marginTop: 6 }}>
-                      {replyDraft.trim().length}/2000 caractere
+                    <div className="feedbackTextareaMeta">
+                      <span>Reply-ul ramane asociat mesajului si este trimis si ca notificare.</span>
+                      <strong>{replyDraft.trim().length}/2000</strong>
                     </div>
-                    <div className="feedbackActionRow" style={{ marginTop: 12 }}>
+                    <div className="feedbackActionRow">
                       <button className="btn primary" onClick={sendReply} disabled={!canSendReply}>
                         {saving ? 'Se trimite...' : (activeEntry.reply_message ? 'Actualizeaza reply' : 'Trimite reply')}
                       </button>

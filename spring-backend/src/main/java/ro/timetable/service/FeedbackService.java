@@ -124,6 +124,9 @@ public class FeedbackService {
         if (!entity.isWantsContact()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Elevul nu a solicitat sa fie contactat pentru acest feedback");
         }
+        if ("RESOLVED".equals(entity.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Nu mai poti trimite reply pentru un feedback rezolvat");
+        }
 
         String normalizedReplyMessage = normalizeReplyMessage(replyMessage);
         Instant now = Instant.now();
@@ -279,7 +282,7 @@ public class FeedbackService {
                 entity.getCreatedAt() == null ? null : entity.getCreatedAt().toString(),
                 entity.getRepliedAt() == null ? null : entity.getRepliedAt().toString(),
                 entity.getStatusUpdatedAt() == null ? null : entity.getStatusUpdatedAt().toString(),
-                reviewer && entity.isWantsContact(),
+                reviewer && entity.isWantsContact() && !"RESOLVED".equals(entity.getStatus()),
                 reviewer
         );
     }

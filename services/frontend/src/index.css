@@ -2819,9 +2819,101 @@ body::after{
   }
 }
 
-.feedbackComposeGrid{
+.feedbackWorkspaceShell{
+  display: grid;
+  grid-template-columns: minmax(300px, 0.95fr) minmax(0, 1.35fr);
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.feedbackIntroCard,
+.feedbackComposerCard,
+.feedbackInboxPanel{
+  border: 1px solid rgba(255,255,255,0.1);
+  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.035));
+  border-radius: 24px;
+  padding: 20px;
+  min-width: 0;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+.feedbackIntroCard{
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.feedbackKicker{
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+}
+
+.feedbackHeroTitle{
+  font-size: clamp(24px, 2.4vw, 34px);
+  line-height: 1.15;
+  font-weight: 800;
+  max-width: 14ch;
+}
+
+.feedbackHeroText{
+  color: rgba(255,255,255,0.78);
+  line-height: 1.7;
+  max-width: 56ch;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.feedbackHeroStats{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin-top: auto;
+}
+
+.feedbackHeroStat{
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.035);
+  border-radius: 18px;
+  padding: 14px;
+}
+
+.feedbackHeroStatValue{
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.feedbackHeroStatLabel{
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.feedbackComposerCard{
+  display: grid;
+  gap: 16px;
+}
+
+.feedbackComposerHeader{
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.feedbackFormGrid{
   display: grid;
   gap: 14px;
+}
+
+.feedbackFieldGrid{
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .feedbackRadioWrap{
@@ -2837,25 +2929,48 @@ body::after{
   align-items: center;
 }
 
+.feedbackContactChoice{
+  width: fit-content;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.035);
+}
+
+.feedbackTextareaMeta{
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.feedbackTextareaMeta strong{
+  color: rgba(255,255,255,0.9);
+  white-space: nowrap;
+}
+
+.feedbackComposerActions{
+  display: flex;
+  justify-content: flex-start;
+}
+
 .feedbackInboxLayout{
   display: grid;
-  grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.35fr);
+  grid-template-columns: minmax(320px, 0.92fr) minmax(0, 1.38fr);
   gap: 18px;
   align-items: start;
 }
 
 .feedbackInboxPanel{
-  border: 1px solid var(--border);
-  background: rgba(255,255,255,0.035);
-  border-radius: 24px;
-  padding: 18px;
-  min-height: 620px;
+  min-height: 680px;
 }
 
 .feedbackPanelHeader{
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 14px;
   margin-bottom: 16px;
 }
@@ -2863,35 +2978,47 @@ body::after{
 .feedbackPanelTitle{
   font-size: 18px;
   font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.feedbackInboxTagRow{
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .feedbackThreadList{
   display: grid;
   gap: 12px;
+  max-height: 960px;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .feedbackThreadItem{
   width: 100%;
+  min-width: 0;
   border: 1px solid rgba(255,255,255,0.1);
-  background: rgba(255,255,255,0.04);
+  background: rgba(255,255,255,0.045);
   border-radius: 20px;
   padding: 16px;
   color: var(--text);
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease;
+  transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .feedbackThreadItem:hover{
-  border-color: rgba(110,168,254,0.45);
-  background: rgba(110,168,254,0.08);
+  border-color: rgba(110,168,254,0.4);
+  background: rgba(110,168,254,0.09);
   transform: translateY(-1px);
 }
 
 .feedbackThreadItem.active{
-  border-color: rgba(126,224,199,0.5);
-  background: rgba(126,224,199,0.12);
-  box-shadow: 0 14px 32px rgba(0,0,0,0.22);
+  border-color: rgba(126,224,199,0.48);
+  background: linear-gradient(180deg, rgba(126,224,199,0.14), rgba(110,168,254,0.1));
+  box-shadow: 0 14px 32px rgba(0,0,0,0.2);
 }
 
 .feedbackThreadTop{
@@ -2902,7 +3029,11 @@ body::after{
   margin-bottom: 10px;
 }
 
-.feedbackThreadPrimary{
+.feedbackThreadPrimary,
+.feedbackDetailBody,
+.feedbackDetailHeader > div,
+.feedbackMetaCard,
+.feedbackSectionBlock{
   min-width: 0;
 }
 
@@ -2910,12 +3041,16 @@ body::after{
   font-weight: 800;
   font-size: 15px;
   margin-bottom: 4px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .feedbackThreadMetaLine{
   color: var(--muted);
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .feedbackThreadBadges{
@@ -2926,10 +3061,11 @@ body::after{
 }
 
 .feedbackThreadPreview{
-  line-height: 1.55;
-  color: rgba(255,255,255,0.85);
+  line-height: 1.6;
+  color: rgba(255,255,255,0.84);
   margin-bottom: 10px;
-  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .feedbackThreadDate{
@@ -2949,6 +3085,7 @@ body::after{
   text-transform: uppercase;
   border: 1px solid transparent;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .feedbackStatusPill.is-unopened{
@@ -2985,15 +3122,27 @@ body::after{
   align-items: flex-start;
 }
 
+.feedbackDetailEyebrow{
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin-bottom: 8px;
+}
+
 .feedbackDetailTitle{
-  font-size: 22px;
+  font-size: clamp(22px, 2.2vw, 30px);
   font-weight: 800;
   margin-bottom: 6px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .feedbackDetailMetaGrid{
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 12px;
 }
 
@@ -3002,6 +3151,7 @@ body::after{
   background: rgba(255,255,255,0.04);
   border-radius: 18px;
   padding: 14px;
+  overflow: hidden;
 }
 
 .feedbackMetaLabel{
@@ -3014,7 +3164,10 @@ body::after{
 
 .feedbackMetaValue{
   font-weight: 700;
-  line-height: 1.5;
+  line-height: 1.6;
+  color: rgba(255,255,255,0.88);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .feedbackSectionBlock{
@@ -3022,6 +3175,7 @@ body::after{
   background: rgba(255,255,255,0.04);
   border-radius: 22px;
   padding: 18px;
+  overflow: hidden;
 }
 
 .feedbackSectionTitle{
@@ -3032,8 +3186,10 @@ body::after{
 
 .feedbackMessageBody{
   white-space: pre-wrap;
-  line-height: 1.7;
+  line-height: 1.75;
   color: rgba(255,255,255,0.9);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .feedbackReplyBlock{
@@ -3045,6 +3201,8 @@ body::after{
   color: var(--muted);
   font-size: 12px;
   margin-bottom: 10px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .feedbackActionBlock{
@@ -3063,7 +3221,8 @@ body::after{
   min-width: 240px;
 }
 
-@media (max-width: 1100px){
+@media (max-width: 1160px){
+  .feedbackWorkspaceShell,
   .feedbackInboxLayout{
     grid-template-columns: 1fr;
   }
@@ -3071,23 +3230,30 @@ body::after{
   .feedbackInboxPanel{
     min-height: 0;
   }
+
+  .feedbackThreadList{
+    max-height: none;
+  }
 }
 
-@media (max-width: 640px){
+@media (max-width: 680px){
   .feedbackPanelHeader,
+  .feedbackComposerHeader,
   .feedbackDetailHeader,
-  .feedbackThreadTop{
-    flex-direction: column;
-    align-items: stretch;
-  }
-
+  .feedbackThreadTop,
+  .feedbackTextareaMeta,
   .feedbackActionRow{
     flex-direction: column;
     align-items: stretch;
   }
 
   .feedbackActionRow .select,
-  .feedbackActionRow .btn{
+  .feedbackActionRow .btn,
+  .feedbackComposerActions .btn{
+    width: 100%;
+  }
+
+  .feedbackContactChoice{
     width: 100%;
   }
 }
