@@ -60,6 +60,9 @@ function formFromProfile(profile) {
     homeroom_class_id: profile?.homeroom_class_id ? String(profile.homeroom_class_id) : '',
     address: profile?.address || '',
     cnp: profile?.cnp || '',
+    series: profile?.series || '',
+    serial_number: profile?.serial_number || profile?.serialNumber || '',
+    father_initial: profile?.father_initial || profile?.fatherInitial || '',
   }
 }
 
@@ -121,7 +124,10 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
         const email = profile.email || ''
         const address = profile.address || ''
         const cnp = profile.cnp || ''
-        return `${username} ${buildProfileName(profile)} ${classLabel(profile)} ${role} ${email} ${address} ${cnp}`
+        const series = profile.series || ''
+        const serialNumber = profile.serial_number || profile.serialNumber || ''
+        const fatherInitial = profile.father_initial || profile.fatherInitial || ''
+        return `${username} ${buildProfileName(profile)} ${classLabel(profile)} ${role} ${email} ${address} ${cnp} ${series} ${serialNumber} ${fatherInitial}`
           .toLowerCase()
           .includes(query)
       })
@@ -338,6 +344,24 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
               <label className="label">CNP</label>
               <input className="input" value={form.cnp} onChange={(event) => updateField('cnp', event.target.value)} disabled={saving} />
             </div>
+            {editingProfile.role === 'student' && (
+              <div className="field">
+                <label className="label">Serie</label>
+                <input className="input" value={form.series} disabled readOnly />
+              </div>
+            )}
+            {editingProfile.role === 'student' && (
+              <div className="field">
+                <label className="label">Nr. serie</label>
+                <input className="input" value={form.serial_number} disabled readOnly />
+              </div>
+            )}
+            {editingProfile.role === 'student' && (
+              <div className="field">
+                <label className="label">Initiala prenumelui tatalui</label>
+                <input className="input" value={form.father_initial} disabled readOnly />
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -45,6 +45,15 @@ public class UserProfileEntity {
     @Column(name = "cnp", unique = true, length = 13)
     private String cnp;
 
+    @Column(name = "id_series", length = 2)
+    private String idSeries;
+
+    @Column(name = "serial_number", length = 6)
+    private String serialNumber;
+
+    @Column(name = "father_initial", length = 1)
+    private String fatherInitial;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "class_id")
     private SchoolClassEntity schoolClass;
@@ -136,6 +145,30 @@ public class UserProfileEntity {
 
     public void setCnp(String cnp) {
         this.cnp = cnp;
+    }
+
+    public String getIdSeries() {
+        return idSeries;
+    }
+
+    public void setIdSeries(String idSeries) {
+        this.idSeries = idSeries;
+    }
+
+    public String getSerialNumber() {
+        return serialNumber;
+    }
+
+    public void setSerialNumber(String serialNumber) {
+        this.serialNumber = serialNumber;
+    }
+
+    public String getFatherInitial() {
+        return fatherInitial;
+    }
+
+    public void setFatherInitial(String fatherInitial) {
+        this.fatherInitial = fatherInitial;
     }
 
     public SchoolClassEntity getSchoolClass() {

@@ -12,6 +12,9 @@ public record UserProfile(
         String email,
         String address,
         String cnp,
+        String idSeries,
+        String serialNumber,
+        String fatherInitial,
         Long classId,
         String className,
         List<String> subjectsTaught

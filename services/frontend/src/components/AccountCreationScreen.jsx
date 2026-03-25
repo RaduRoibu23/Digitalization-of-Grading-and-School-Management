@@ -190,7 +190,7 @@ export default function AccountCreationScreen({ accessToken, roles = [] }) {
       {banner && <div className={`banner ${banner.type}`}>{banner.text}</div>}
 
       <div className="mutedBlock" style={{ marginBottom: 18 }}>
-        Username-ul se salveaza automat cu litere mici pentru compatibilitate cu autentificarea. Pentru elevi, adresa si CNP-ul se genereaza automat la creare.
+        Username-ul se salveaza automat cu litere mici pentru compatibilitate cu autentificarea. Pentru elevi, adresa, CNP-ul, seria, numarul de serie si initiala prenumelui tatalui se genereaza automat la creare.
       </div>
 
       {loading ? (
@@ -270,6 +270,9 @@ export default function AccountCreationScreen({ accessToken, roles = [] }) {
             <div><strong>Rol:</strong> {roleLabel(createdProfile.role)}</div>
             <div><strong>Email:</strong> {createdProfile.email || '-'}</div>
             <div><strong>Clasa:</strong> {createdProfile.class_name || '-'}</div>
+            {createdProfile.role === 'student' && <div><strong>Serie:</strong> {createdProfile.series || '-'}</div>}
+            {createdProfile.role === 'student' && <div><strong>Nr. serie:</strong> {createdProfile.serial_number || '-'}</div>}
+            {createdProfile.role === 'student' && <div><strong>Initiala prenumelui tatalui:</strong> {createdProfile.father_initial || '-'}</div>}
           </div>
         </div>
       )}

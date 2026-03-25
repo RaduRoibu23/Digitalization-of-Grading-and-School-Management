@@ -38,6 +38,9 @@ public class SchoolDataService {
     private record TeacherSeed(String username, String firstName, String lastName, String subjectName) {
     }
 
+    private record StudentIdentityDocument(String series, String serialNumber) {
+    }
+
     private record Slot(int weekday, int indexInDay) {
     }
 
@@ -75,6 +78,7 @@ public class SchoolDataService {
     private static final int ARGES_COUNTY_CODE = 3;
     private static final long STUDENT_IDENTITY_RANDOM_SEED = 20260322L;
     private static final String CNP_CONTROL_KEY = "279146358279";
+    private static final String ID_SERIES_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     private static final String[] STREET_NAMES = {
             "Negru Voda", "Republicii", "Matei Basarab", "Plevnei", "Cuza Voda",
             "General Dragalina", "Victoriei", "Eroilor", "Ion Luca Caragiale", "Alexandru cel Bun",
@@ -189,12 +193,22 @@ public class SchoolDataService {
         SchoolClass schoolClass = null;
         String generatedAddress = null;
         String generatedCnp = null;
+        String generatedIdSeries = null;
+        String generatedSerialNumber = null;
+        String generatedFatherInitial = null;
         List<String> normalizedSubjects = normalizeSubjectNames(subjectsTaught);
 
         if ("student".equals(normalizedRole)) {
             schoolClass = requireClass(classId);
             generatedAddress = generateUniqueStudentAddress(usedStudentAddresses(), new Random(System.nanoTime()));
             generatedCnp = generateUniqueStudentCnp(usedStudentCnps(), new Random(System.nanoTime() ^ normalizedUsername.hashCode()), schoolClass.name());
+            StudentIdentityDocument generatedIdentityDocument = generateUniqueStudentIdentityDocument(
+                    usedStudentIdentityDocumentKeys(),
+                    new Random(System.nanoTime() ^ normalizedEmail.hashCode() ^ normalizedUsername.hashCode())
+            );
+            generatedIdSeries = generatedIdentityDocument.series();
+            generatedSerialNumber = generatedIdentityDocument.serialNumber();
+            generatedFatherInitial = generateStudentFatherInitial(new Random(System.nanoTime() ^ normalizedFirstName.hashCode() ^ normalizedLastName.hashCode()));
             normalizedSubjects = List.of();
         } else {
             if (classId != null) {
@@ -217,6 +231,9 @@ public class SchoolDataService {
                 normalizedEmail,
                 generatedAddress,
                 generatedCnp,
+                generatedIdSeries,
+                generatedSerialNumber,
+                generatedFatherInitial,
                 schoolClass == null ? null : schoolClass.id(),
                 schoolClass == null ? null : schoolClass.name(),
                 normalizedSubjects
@@ -277,6 +294,9 @@ public class SchoolDataService {
                 normalizedEmail,
                 normalizedAddress,
                 normalizedCnp,
+                existing.idSeries(),
+                existing.serialNumber(),
+                existing.fatherInitial(),
                 schoolClass == null ? null : schoolClass.id(),
                 schoolClass == null ? null : schoolClass.name(),
                 existing.subjectsTaught()
@@ -583,6 +603,9 @@ public class SchoolDataService {
                 profile.email(),
                 profile.address(),
                 profile.cnp(),
+                profile.idSeries(),
+                profile.serialNumber(),
+                profile.fatherInitial(),
                 profile.role(),
                 roles,
                 profile.classId(),
@@ -611,6 +634,9 @@ public class SchoolDataService {
                 profile.email(),
                 includeSensitive ? profile.address() : null,
                 includeSensitive ? profile.cnp() : null,
+                includeSensitive ? profile.idSeries() : null,
+                includeSensitive ? profile.serialNumber() : null,
+                includeSensitive ? profile.fatherInitial() : null,
                 profile.classId(),
                 profile.className(),
                 schoolClass == null ? null : schoolClass.profile(),
@@ -1211,6 +1237,7 @@ public class SchoolDataService {
         Random identityRandom = new Random(STUDENT_IDENTITY_RANDOM_SEED);
         Set<String> usedAddresses = new LinkedHashSet<>();
         Set<String> usedCnps = new LinkedHashSet<>();
+        Set<String> usedIdentityDocumentKeys = new LinkedHashSet<>();
 
         addStaffProfile("sysadmin01", "sysadmin", "Marius", "Stoica");
         addStaffProfile("admin01", "admin", "Roxana", "Marin");
@@ -1229,6 +1256,7 @@ public class SchoolDataService {
             String lastName = LAST_NAMES[((index - 1) * 3) % LAST_NAMES.length];
             String address = generateUniqueStudentAddress(usedAddresses, identityRandom);
             String cnp = generateUniqueStudentCnp(usedCnps, identityRandom, schoolClass.name());
+            StudentIdentityDocument identityDocument = generateUniqueStudentIdentityDocument(usedIdentityDocumentKeys, identityRandom);
             profilesByUsername.put(username, new UserProfile(
                     profileIds.getAndIncrement(),
                     1,
@@ -1239,6 +1267,9 @@ public class SchoolDataService {
                     username + "@timetable.local",
                     address,
                     cnp,
+                    identityDocument.series(),
+                    identityDocument.serialNumber(),
+                    generateStudentFatherInitial(identityRandom),
                     classId,
                     schoolClass.name(),
                     List.of()
@@ -1259,6 +1290,9 @@ public class SchoolDataService {
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
                 List.of()
         ));
     }
@@ -1272,6 +1306,9 @@ public class SchoolDataService {
                 teacher.firstName(),
                 teacher.lastName(),
                 teacher.username() + "@timetable.local",
+                null,
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -1330,12 +1367,16 @@ public class SchoolDataService {
     private void backfillMissingStudentIdentityData() {
         Set<String> usedAddresses = usedStudentAddresses();
         Set<String> usedCnps = usedStudentCnps();
+        Set<String> usedIdentityDocumentKeys = usedStudentIdentityDocumentKeys();
         Random identityRandom = new Random(STUDENT_IDENTITY_RANDOM_SEED);
         List<UserProfile> updates = new ArrayList<>();
 
         for (UserProfile profile : getUserProfilesByRole("student")) {
             String address = profile.address();
             String cnp = profile.cnp();
+            String idSeries = profile.idSeries();
+            String serialNumber = profile.serialNumber();
+            String fatherInitial = profile.fatherInitial();
             boolean changed = false;
 
             if (address == null || address.isBlank()) {
@@ -1344,6 +1385,16 @@ public class SchoolDataService {
             }
             if (cnp == null || cnp.isBlank() || !hasPreferredGeneratedStudentCnpFormat(cnp)) {
                 cnp = generateUniqueStudentCnp(usedCnps, identityRandom, profile.className());
+                changed = true;
+            }
+            if (!hasValidStudentIdentityDocument(idSeries, serialNumber)) {
+                StudentIdentityDocument identityDocument = generateUniqueStudentIdentityDocument(usedIdentityDocumentKeys, identityRandom);
+                idSeries = identityDocument.series();
+                serialNumber = identityDocument.serialNumber();
+                changed = true;
+            }
+            if (!hasValidStudentFatherInitial(fatherInitial)) {
+                fatherInitial = generateStudentFatherInitial(identityRandom);
                 changed = true;
             }
 
@@ -1358,6 +1409,9 @@ public class SchoolDataService {
                         profile.email(),
                         address,
                         cnp,
+                        idSeries,
+                        serialNumber,
+                        fatherInitial,
                         profile.classId(),
                         profile.className(),
                         profile.subjectsTaught()
@@ -1423,6 +1477,14 @@ public class SchoolDataService {
                 .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
     }
 
+    private Set<String> usedStudentIdentityDocumentKeys() {
+        return profilesByUsername.values().stream()
+                .filter(profile -> "student".equals(profile.role()))
+                .filter(profile -> hasValidStudentIdentityDocument(profile.idSeries(), profile.serialNumber()))
+                .map(profile -> identityDocumentKey(profile.idSeries(), profile.serialNumber()))
+                .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
+    }
+
     private String generateUniqueStudentAddress(Set<String> usedAddresses, Random random) {
         for (int attempt = 0; attempt < 2000; attempt++) {
             String street = STREET_NAMES[random.nextInt(STREET_NAMES.length)];
@@ -1459,8 +1521,41 @@ public class SchoolDataService {
         throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Nu s-a putut genera un CNP unic pentru elev");
     }
 
+    private StudentIdentityDocument generateUniqueStudentIdentityDocument(Set<String> usedIdentityDocumentKeys, Random random) {
+        for (int attempt = 0; attempt < 4000; attempt++) {
+            String series = ""
+                    + ID_SERIES_LETTERS.charAt(random.nextInt(ID_SERIES_LETTERS.length()))
+                    + ID_SERIES_LETTERS.charAt(random.nextInt(ID_SERIES_LETTERS.length()));
+            String serialNumber = String.format(Locale.ROOT, "%06d", random.nextInt(1_000_000));
+            String candidateKey = identityDocumentKey(series, serialNumber);
+            if (usedIdentityDocumentKeys.add(candidateKey)) {
+                return new StudentIdentityDocument(series, serialNumber);
+            }
+        }
+        throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Nu s-a putut genera o combinatie unica de serie si numar pentru elev");
+    }
+
+    private String generateStudentFatherInitial(Random random) {
+        return String.valueOf(ID_SERIES_LETTERS.charAt(random.nextInt(ID_SERIES_LETTERS.length())));
+    }
+
     private boolean hasPreferredGeneratedStudentCnpFormat(String cnp) {
         return cnp != null && cnp.matches("[56]\\d{6}0300\\d\\d");
+    }
+
+    private boolean hasValidStudentIdentityDocument(String idSeries, String serialNumber) {
+        return idSeries != null
+                && idSeries.matches("[A-Z]{2}")
+                && serialNumber != null
+                && serialNumber.matches("\\d{6}");
+    }
+
+    private boolean hasValidStudentFatherInitial(String fatherInitial) {
+        return fatherInitial != null && fatherInitial.matches("[A-Z]");
+    }
+
+    private String identityDocumentKey(String idSeries, String serialNumber) {
+        return idSeries + ":" + serialNumber;
     }
 
     private int birthYearForClass(String className) {

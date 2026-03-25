@@ -65,6 +65,9 @@ export default function ProfileScreen({ accessToken, roles }) {
   const email = pickFirst(tokenInfo?.email, me?.email);
   const address = pickFirst(me?.address);
   const cnp = pickFirst(me?.cnp);
+  const series = pickFirst(me?.series);
+  const serialNumber = pickFirst(me?.serial_number, me?.serialNumber);
+  const fatherInitial = pickFirst(me?.father_initial, me?.fatherInitial);
 
   const classId = me?.class_id ?? me?.classId ?? me?.class?.id ?? null;
   const className = me?.class_name ?? me?.className ?? me?.class?.name ?? me?.class?.class_name ?? "";
@@ -78,6 +81,7 @@ export default function ProfileScreen({ accessToken, roles }) {
   const subject = pickFirst(tokenInfo?.sub, me?.id, me?.user_id);
   const displayRoles = Array.isArray(roles) ? roles.filter(Boolean) : [];
   const roleText = displayRoles.length > 0 ? displayRoles.join(", ") : pickFirst(me?.role, "—");
+  const isStudent = displayRoles.includes("student") || me?.role === "student";
 
   return (
     <section className="contentCard">
@@ -101,6 +105,9 @@ export default function ProfileScreen({ accessToken, roles }) {
             <div><strong>Email:</strong> {email}</div>
             <div><strong>Adresa:</strong> {address}</div>
             <div><strong>CNP:</strong> {cnp}</div>
+            {isStudent && <div><strong>Serie:</strong> {series}</div>}
+            {isStudent && <div><strong>Nr. serie:</strong> {serialNumber}</div>}
+            {isStudent && <div><strong>Initiala prenumelui tatalui:</strong> {fatherInitial}</div>}
             <div><strong>Clasa:</strong> {classText}</div>
 
             {subjectsTaught.length > 0 && (

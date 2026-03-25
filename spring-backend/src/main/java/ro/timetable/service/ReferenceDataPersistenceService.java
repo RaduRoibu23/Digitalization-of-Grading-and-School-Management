@@ -123,6 +123,9 @@ public class ReferenceDataPersistenceService {
                 entity.getEmail(),
                 entity.getAddress(),
                 entity.getCnp(),
+                entity.getIdSeries(),
+                entity.getSerialNumber(),
+                entity.getFatherInitial(),
                 entity.getSchoolClass() == null ? null : entity.getSchoolClass().getId(),
                 entity.getSchoolClass() == null ? null : entity.getSchoolClass().getName(),
                 entity.getSubjectsTaught() == null ? List.of() : List.copyOf(entity.getSubjectsTaught())
@@ -165,6 +168,9 @@ public class ReferenceDataPersistenceService {
         entity.setEmail(profile.email());
         entity.setAddress(profile.address());
         entity.setCnp(profile.cnp());
+        entity.setIdSeries(profile.idSeries());
+        entity.setSerialNumber(profile.serialNumber());
+        entity.setFatherInitial(profile.fatherInitial());
         entity.setSubjectsTaught(profile.subjectsTaught());
         if (profile.classId() != null) {
             entity.setSchoolClass(schoolClassRepository.getReferenceById(profile.classId()));
