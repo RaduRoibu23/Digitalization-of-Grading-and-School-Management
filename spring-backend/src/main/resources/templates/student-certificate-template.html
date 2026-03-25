@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body {
+      font-family: "Times New Roman", serif;
+      margin: 0;
+      padding: 40px 56px;
+      color: #111;
+      background: #fff;
+      line-height: 1.5;
+    }
+
+    .document {
+      max-width: 780px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 26px;
+    }
+
+    .header p {
+      margin: 2px 0;
+      font-size: 14px;
+    }
+
+    .meta {
+      margin: 18px 0 30px;
+      font-size: 14px;
+    }
+
+    .meta table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .meta td:last-child {
+      text-align: right;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 24px;
+      letter-spacing: 1px;
+      margin: 0 0 28px;
+    }
+
+    .content {
+      font-size: 18px;
+      text-align: justify;
+    }
+
+    .content p {
+      margin: 14px 0;
+    }
+
+    .footer {
+      margin-top: 44px;
+      font-size: 14px;
+    }
+
+    .bold {
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="document">
+    <div class="header">
+      <p><strong>MINISTERUL EDUCATIEI</strong></p>
+      <p><strong>{{ inspectorate }}</strong></p>
+      <p><strong>{{ school_name }}</strong></p>
+      <p>{{ school_address }}</p>
+      <p>Telefon: {{ school_phone }} | E-mail: {{ school_email }}</p>
+    </div>
+
+    <div class="meta">
+      <table>
+        <tr>
+          <td>Seria/Nr.: <strong>{{ document_series }} {{ document_number }}</strong></td>
+          <td>Data emiterii: <strong>{{ issue_date }}</strong></td>
+        </tr>
+      </table>
+    </div>
+
+    <h1>ADEVERINTA DE ELEV</h1>
+
+    <div class="content">
+      <p>
+        Se adevereste prin prezenta ca elevul / eleva
+        <span class="bold">{{ student_name }}</span>,
+        avand CNP <span class="bold">{{ student_cnp }}</span>,
+        nascut(a) la data de <span class="bold">{{ birth_date }}</span>,
+        este inscris(a) in anul scolar <span class="bold">{{ school_year }}</span>
+        la <span class="bold">{{ school_name }}</span>,
+        in clasa <span class="bold">{{ class_name }}</span>,
+        profil / specializare <span class="bold">{{ class_profile }}</span>,
+        forma de invatamant <span class="bold">{{ study_form }}</span>.
+      </p>
+
+      <p>
+        Prezenta adeverinta se elibereaza la cerere, pentru a-i servi la
+        <span class="bold">{{ purpose }}</span>.
+      </p>
+    </div>
+
+    <div class="footer">
+      <p>Document generat automat din platforma scolii.</p>
+      <p>Cod verificare: {{ verification_code }}</p>
+    </div>
+  </div>
+</body>
+</html>

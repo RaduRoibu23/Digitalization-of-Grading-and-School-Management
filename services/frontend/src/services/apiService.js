@@ -93,3 +93,18 @@ export async function apiDelete(path, accessToken) {
   if (response.status === 204) return { detail: 'Deleted' };
   return response.json();
 }
+
+export async function apiDownload(path, accessToken) {
+  if (!accessToken) throw new Error('Nu esti autentificat.');
+  const url = `${API_BASE}${path}`;
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: response.statusText }));
+    const err = new Error(error.detail || `Error ${response.status}`);
+    err.status = response.status;
+    throw err;
+  }
+  return response;
+}

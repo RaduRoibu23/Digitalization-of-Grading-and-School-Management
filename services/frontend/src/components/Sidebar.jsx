@@ -8,6 +8,7 @@ export const NAV_ITEMS = [
   { id: 'users', path: 'utilizatori', label: 'Utilizatori', allowedRoles: ['secretariat', 'sysadmin'] },
   { id: 'create-account', path: 'creeaza-cont', label: 'Creeaza cont', allowedRoles: ['sysadmin'] },
   { id: 'catalog', path: 'catalog', label: 'Catalog', allowedRoles: ['student', 'professor', 'secretariat', 'admin', 'sysadmin'] },
+  { id: 'documents', path: 'documente', label: 'Documente', allowedRoles: ['student', 'secretariat', 'sysadmin'] },
   { id: 'profile', path: 'profil', label: 'Date personale', allowedRoles: [] },
 ]
 

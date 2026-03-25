@@ -10,6 +10,7 @@ import ProfileScreen from './ProfileScreen'
 import StudentsScreen from './StudentsScreen'
 import AccountCreationScreen from './AccountCreationScreen'
 import CatalogScreen from './CatalogScreen'
+import DocumentsScreen from './DocumentsScreen'
 
 function hasAnyRole(userRoles, allowedRoles) {
   if (!allowedRoles || allowedRoles.length === 0) return true
@@ -80,6 +81,9 @@ export default function Dashboard({ accessToken, onRefreshToken, onLogout }) {
           )}
           {visibleItems.some((item) => item.path === 'catalog') && (
             <Route path="catalog" element={<CatalogScreen accessToken={accessToken} roles={roles} />} />
+          )}
+          {visibleItems.some((item) => item.path === 'documente') && (
+            <Route path="documente" element={<DocumentsScreen accessToken={accessToken} roles={roles} />} />
           )}
           {visibleItems.some((item) => item.path === 'profil') && (
             <Route path="profil" element={<ProfileScreen accessToken={accessToken} roles={roles} />} />

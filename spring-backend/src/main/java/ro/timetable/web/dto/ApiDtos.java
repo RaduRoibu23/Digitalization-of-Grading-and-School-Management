@@ -116,6 +116,26 @@ public final class ApiDtos {
     ) {
     }
 
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record DocumentRequestResponse(
+            Long id,
+            String type,
+            String type_label,
+            String status,
+            String purpose,
+            String series,
+            Integer document_number,
+            String student_username,
+            String requested_by_username,
+            String reviewed_by_username,
+            String resolution_note,
+            String created_at,
+            String reviewed_at,
+            boolean can_approve,
+            boolean can_download
+    ) {
+    }
+
     public record GradeResponse(
             Long id,
             String student_username,
