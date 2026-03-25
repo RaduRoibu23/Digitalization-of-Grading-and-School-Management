@@ -136,6 +136,29 @@ public final class ApiDtos {
     ) {
     }
 
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record FeedbackEntryResponse(
+            Long id,
+            String category,
+            String category_label,
+            String satisfaction,
+            String satisfaction_label,
+            boolean wants_contact,
+            String status,
+            String status_label,
+            String message,
+            String reply_message,
+            String submitted_by_username,
+            String replied_by_username,
+            String status_updated_by_username,
+            String submitted_at,
+            String replied_at,
+            String status_updated_at,
+            boolean can_reply,
+            boolean can_update_status
+    ) {
+    }
+
     public record GradeResponse(
             Long id,
             String student_username,

@@ -35,7 +35,7 @@ public class DocumentController {
 
     public record CreateDocumentRequest(
             @NotBlank String type,
-            @NotBlank @Size(min = 10, max = 20) String purpose
+            @NotBlank @Size(max = 20) String purpose
     ) {
     }
 

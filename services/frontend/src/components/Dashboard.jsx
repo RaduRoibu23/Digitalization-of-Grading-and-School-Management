@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import { rolesFromToken, loadSession, refreshAccessToken } from '../services/authService'
 import Sidebar, { NAV_ITEMS } from './Sidebar'
 import TimetableScreen from './TimetableScreen'
@@ -11,6 +11,7 @@ import StudentsScreen from './StudentsScreen'
 import AccountCreationScreen from './AccountCreationScreen'
 import CatalogScreen from './CatalogScreen'
 import DocumentsScreen from './DocumentsScreen'
+import FeedbackScreen from './FeedbackScreen'
 
 function hasAnyRole(userRoles, allowedRoles) {
   if (!allowedRoles || allowedRoles.length === 0) return true
@@ -20,6 +21,25 @@ function hasAnyRole(userRoles, allowedRoles) {
 function defaultPathForRoles(roles, visibleItems) {
   const preferred = roles.includes('student') || roles.includes('professor') ? 'orarul-meu' : 'orar-pe-clasa'
   return visibleItems.some((item) => item.path === preferred) ? preferred : visibleItems[0]?.path || 'profil'
+}
+
+function RouteAccessNotice({ defaultPath }) {
+  return (
+    <section className="contentCard">
+      <div className="contentHeader">
+        <div>
+          <div className="title">Ruta indisponibila</div>
+          <div className="subtitle">Pagina ceruta nu exista pentru rolul tau sau nu este o ruta valida.</div>
+        </div>
+      </div>
+      <div className="banner error" style={{ marginBottom: 16 }}>
+        Nu ai acces la aceasta pagina.
+      </div>
+      <Link className="btn primary" to={`/app/${defaultPath}`}>
+        Inapoi la modulul meu
+      </Link>
+    </section>
+  )
 }
 
 export default function Dashboard({ accessToken, onRefreshToken, onLogout }) {
@@ -63,7 +83,7 @@ export default function Dashboard({ accessToken, onRefreshToken, onLogout }) {
         </section>
 
         <Routes>
-          <Route index element={<Navigate to={defaultPath} replace />} />
+          <Route index element={<Navigate to={`/app/${defaultPath}`} replace />} />
           {visibleItems.some((item) => item.path === 'orarul-meu') && (
             <Route path="orarul-meu" element={<TimetableScreen accessToken={accessToken} roles={roles} mode="my" />} />
           )}
@@ -85,11 +105,17 @@ export default function Dashboard({ accessToken, onRefreshToken, onLogout }) {
           {visibleItems.some((item) => item.path === 'documente') && (
             <Route path="documente" element={<DocumentsScreen accessToken={accessToken} roles={roles} />} />
           )}
+          {visibleItems.some((item) => item.path === 'feedback') && (
+            <Route path="feedback" element={<FeedbackScreen accessToken={accessToken} roles={roles} />} />
+          )}
+          {visibleItems.some((item) => item.path === 'feedback') && (
+            <Route path="feedback/:feedbackId" element={<FeedbackScreen accessToken={accessToken} roles={roles} />} />
+          )}
           {visibleItems.some((item) => item.path === 'profil') && (
             <Route path="profil" element={<ProfileScreen accessToken={accessToken} roles={roles} />} />
           )}
           <Route path="studenti" element={<Navigate to="/app/utilizatori" replace />} />
-          <Route path="*" element={<Navigate to={defaultPath} replace />} />
+          <Route path="*" element={<RouteAccessNotice defaultPath={defaultPath} />} />
         </Routes>
       </main>
     </div>

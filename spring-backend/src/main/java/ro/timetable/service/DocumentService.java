@@ -226,8 +226,11 @@ public class DocumentService {
 
     private String normalizePurpose(String purpose) {
         String normalized = purpose == null ? null : purpose.trim();
-        if (normalized == null || normalized.length() > 20) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Scopul trebuie sa aiba maximum 20 de caractere");
+        if (normalized == null || normalized.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Scopul este obligatoriu");
+        }
+        if (normalized.length() > 20) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Scopul poate avea maximum 20 de caractere");
         }
         return normalized;
     }

@@ -157,7 +157,7 @@ export default function DocumentsScreen({ accessToken, roles = [] }) {
     }
   }
 
-  const canSubmit = canRequest && purpose.trim().length >= 10 && purpose.trim().length <= 20
+  const canSubmit = canRequest && purpose.trim().length > 0 && purpose.trim().length <= 20
 
   if (!canRequest && !canReview) {
     return (
@@ -198,7 +198,7 @@ export default function DocumentsScreen({ accessToken, roles = [] }) {
               <div className="mutedSmall">Disponibil acum. Urmeaza: foaie matricola curenta si adeverinta de transport.</div>
             </div>
             <div className="field">
-              <label className="label">Scop (10-20 caractere)</label>
+              <label className="label">Scop (maxim 20 caractere)</label>
               <input
                 className="input"
                 value={purpose}

@@ -2818,3 +2818,276 @@ body::after{
     padding: 16px;
   }
 }
+
+.feedbackComposeGrid{
+  display: grid;
+  gap: 14px;
+}
+
+.feedbackRadioWrap{
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-top: 12px;
+}
+
+.feedbackInlineChoice{
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.feedbackInboxLayout{
+  display: grid;
+  grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.35fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.feedbackInboxPanel{
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.035);
+  border-radius: 24px;
+  padding: 18px;
+  min-height: 620px;
+}
+
+.feedbackPanelHeader{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.feedbackPanelTitle{
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.feedbackThreadList{
+  display: grid;
+  gap: 12px;
+}
+
+.feedbackThreadItem{
+  width: 100%;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  border-radius: 20px;
+  padding: 16px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease;
+}
+
+.feedbackThreadItem:hover{
+  border-color: rgba(110,168,254,0.45);
+  background: rgba(110,168,254,0.08);
+  transform: translateY(-1px);
+}
+
+.feedbackThreadItem.active{
+  border-color: rgba(126,224,199,0.5);
+  background: rgba(126,224,199,0.12);
+  box-shadow: 0 14px 32px rgba(0,0,0,0.22);
+}
+
+.feedbackThreadTop{
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.feedbackThreadPrimary{
+  min-width: 0;
+}
+
+.feedbackThreadTitle{
+  font-weight: 800;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.feedbackThreadMetaLine{
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.feedbackThreadBadges{
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.feedbackThreadPreview{
+  line-height: 1.55;
+  color: rgba(255,255,255,0.85);
+  margin-bottom: 10px;
+  white-space: normal;
+}
+
+.feedbackThreadDate{
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.feedbackStatusPill{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.feedbackStatusPill.is-unopened{
+  background: rgba(255,209,102,0.14);
+  border-color: rgba(255,209,102,0.28);
+  color: #ffe39a;
+}
+
+.feedbackStatusPill.is-progress{
+  background: rgba(110,168,254,0.16);
+  border-color: rgba(110,168,254,0.34);
+  color: #b8d2ff;
+}
+
+.feedbackStatusPill.is-resolved{
+  background: rgba(46,229,157,0.14);
+  border-color: rgba(46,229,157,0.3);
+  color: #b3f7d8;
+}
+
+.feedbackDetailPanel{
+  overflow: hidden;
+}
+
+.feedbackDetailBody{
+  display: grid;
+  gap: 16px;
+}
+
+.feedbackDetailHeader{
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.feedbackDetailTitle{
+  font-size: 22px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.feedbackDetailMetaGrid{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.feedbackMetaCard{
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  border-radius: 18px;
+  padding: 14px;
+}
+
+.feedbackMetaLabel{
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.feedbackMetaValue{
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.feedbackSectionBlock{
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  border-radius: 22px;
+  padding: 18px;
+}
+
+.feedbackSectionTitle{
+  font-size: 15px;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.feedbackMessageBody{
+  white-space: pre-wrap;
+  line-height: 1.7;
+  color: rgba(255,255,255,0.9);
+}
+
+.feedbackReplyBlock{
+  border-color: rgba(126,224,199,0.18);
+  background: rgba(126,224,199,0.08);
+}
+
+.feedbackReplyMeta{
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.feedbackActionBlock{
+  display: grid;
+  gap: 12px;
+}
+
+.feedbackActionRow{
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.feedbackActionRow .select{
+  min-width: 240px;
+}
+
+@media (max-width: 1100px){
+  .feedbackInboxLayout{
+    grid-template-columns: 1fr;
+  }
+
+  .feedbackInboxPanel{
+    min-height: 0;
+  }
+}
+
+@media (max-width: 640px){
+  .feedbackPanelHeader,
+  .feedbackDetailHeader,
+  .feedbackThreadTop{
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .feedbackActionRow{
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .feedbackActionRow .select,
+  .feedbackActionRow .btn{
+    width: 100%;
+  }
+}
