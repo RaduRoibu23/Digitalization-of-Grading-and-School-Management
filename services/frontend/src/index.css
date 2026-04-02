@@ -2988,6 +2988,16 @@ body::after{
   justify-content: flex-end;
 }
 
+.feedbackFilterControl{
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+}
+
+.feedbackFilterControl .select{
+  min-width: 240px;
+}
+
 .feedbackThreadList{
   display: grid;
   gap: 12px;
@@ -3247,6 +3257,11 @@ body::after{
     align-items: stretch;
   }
 
+  .feedbackFilterControl{
+    justify-items: stretch;
+  }
+
+  .feedbackFilterControl .select,
   .feedbackActionRow .select,
   .feedbackActionRow .btn,
   .feedbackComposerActions .btn{

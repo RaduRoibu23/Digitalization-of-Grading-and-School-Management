@@ -22,6 +22,13 @@ const STATUS_OPTIONS = [
   { value: 'RESOLVED', label: 'Rezolvat' },
 ]
 
+const STATUS_FILTER_OPTIONS = [
+  { value: 'ALL', label: 'Toate mesajele' },
+  { value: 'UNOPENED', label: 'Active' },
+  { value: 'IN_PROGRESS', label: 'In curs de rezolvare' },
+  { value: 'RESOLVED', label: 'Rezolvate' },
+]
+
 function formatDate(value) {
   if (!value) return '-'
   try {
@@ -55,6 +62,13 @@ function statusLabel(entryOrStatus) {
     return STATUS_OPTIONS.find((option) => option.value === entryOrStatus)?.label || entryOrStatus
   }
   return entryOrStatus?.status_label || statusLabel(entryOrStatus?.status)
+}
+
+function matchesStatusFilter(entry, filterValue) {
+  if (!entry) {
+    return false
+  }
+  return filterValue === 'ALL' || entry.status === filterValue
 }
 
 function ticketCode(id) {
@@ -119,6 +133,7 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
   const [detailError, setDetailError] = useState(null)
   const [entries, setEntries] = useState([])
   const [activeEntry, setActiveEntry] = useState(null)
+  const [statusFilter, setStatusFilter] = useState('ALL')
   const [statusDraft, setStatusDraft] = useState('UNOPENED')
   const [replyDraft, setReplyDraft] = useState('')
   const [form, setForm] = useState({
@@ -189,6 +204,26 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
       ignore = true
     }
   }, [accessToken, feedbackId])
+
+  const selectedEntryId = feedbackId ? Number(feedbackId) : null
+
+  useEffect(() => {
+    if (!selectedEntryId || listLoading || entries.length === 0) {
+      return
+    }
+
+    const entryExistsInInbox = entries.some((entry) => entry.id === selectedEntryId)
+    if (!entryExistsInInbox) {
+      return
+    }
+
+    const entryVisibleInFilter = entries.some(
+      (entry) => entry.id === selectedEntryId && matchesStatusFilter(entry, statusFilter)
+    )
+    if (!entryVisibleInFilter) {
+      navigate('/app/feedback', { replace: true })
+    }
+  }, [entries, listLoading, navigate, selectedEntryId, statusFilter])
 
   function updateField(field, value) {
     setForm((current) => ({
@@ -272,7 +307,8 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
     }
   }
 
-  const totalEntries = entries.length
+  const filteredEntries = entries.filter((entry) => matchesStatusFilter(entry, statusFilter))
+  const visibleEntries = filteredEntries.length
   const contactRequests = entries.filter((entry) => entry.wants_contact).length
   const openEntries = entries.filter((entry) => entry.status !== 'RESOLVED').length
   const resolvedEntries = entries.filter((entry) => entry.status === 'RESOLVED').length
@@ -283,8 +319,11 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
   const canSendReply = Boolean(
     activeEntry?.can_reply && replyDraft.trim().length > 0 && replyDraft.trim().length <= 2000 && !saving
   )
-  const selectedEntryId = feedbackId ? Number(feedbackId) : null
   const scopeLabel = canReview ? 'Toate mesajele din platforma' : 'Mesajele mele'
+  const emptyListMessage =
+    statusFilter === 'ALL'
+      ? 'Nu exista feedback trimis inca.'
+      : 'Nu exista mesaje pentru filtrul selectat.'
 
   return (
     <section className="contentCard">
@@ -311,7 +350,7 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
 
           <div className="feedbackHeroStats">
             <div className="feedbackHeroStat">
-              <div className="feedbackHeroStatValue">{totalEntries}</div>
+              <div className="feedbackHeroStatValue">{visibleEntries}</div>
               <div className="feedbackHeroStatLabel">Mesaje vizibile</div>
             </div>
             <div className="feedbackHeroStat">
@@ -419,15 +458,31 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
               <div className="feedbackPanelTitle">Inbox</div>
               <div className="mutedSmall">{scopeLabel}</div>
             </div>
+            <div className="feedbackFilterControl">
+              <div className="mutedSmall">Filtru status</div>
+              <select
+                className="select"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                disabled={listLoading}
+                aria-label="Filtreaza feedback-ul dupa status"
+              >
+                {STATUS_FILTER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {listLoading ? (
             <div className="mutedBlock">Se incarca mesajele...</div>
-          ) : totalEntries === 0 ? (
-            <div className="mutedBlock">Nu exista feedback trimis inca.</div>
+          ) : visibleEntries === 0 ? (
+            <div className="mutedBlock">{emptyListMessage}</div>
           ) : (
             <div className="feedbackThreadList">
-              {entries.map((entry) => (
+              {filteredEntries.map((entry) => (
                 <button
                   key={entry.id}
                   type="button"
@@ -468,10 +523,12 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
 
           {!feedbackId ? (
             <div className="mutedBlock">
-              Selecteaza un mesaj din inbox pentru a vedea continutul complet si eventualul reply.
-              {entries[0] && (
+              {visibleEntries > 0
+                ? 'Selecteaza un mesaj din inbox pentru a vedea continutul complet si eventualul reply.'
+                : emptyListMessage}
+              {filteredEntries[0] && (
                 <div style={{ marginTop: 12 }}>
-                  <Link className="btn primary" to={`/app/feedback/${entries[0].id}`}>
+                  <Link className="btn primary" to={`/app/feedback/${filteredEntries[0].id}`}>
                     Deschide primul mesaj
                   </Link>
                 </div>
