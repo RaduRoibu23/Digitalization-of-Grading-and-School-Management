@@ -1,0 +1,14 @@
+spring:
+  jpa:
+    show-sql: false
+
+logging:
+  level:
+    root: INFO
+    ro.timetable: INFO
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true

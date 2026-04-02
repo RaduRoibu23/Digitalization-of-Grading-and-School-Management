@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: digitalization-grading-backend
+    env: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: SPRING_DATASOURCE_URL
+        sync: false
+      - key: SPRING_DATASOURCE_USERNAME
+        sync: false
+      - key: SPRING_DATASOURCE_PASSWORD
+        sync: false
+      - key: KEYCLOAK_BASE_URL
+        sync: false
+      - key: KEYCLOAK_REALM
+        value: timetable-realm
+      - key: KEYCLOAK_ISSUER_URI
+        sync: false
+      - key: KEYCLOAK_TOKEN_URL
+        sync: false
+      - key: KEYCLOAK_CLIENT_ID
+        value: timetable-backend
+      - key: KEYCLOAK_ADMIN_USERNAME
+        sync: false
+      - key: KEYCLOAK_ADMIN_PASSWORD
+        sync: false

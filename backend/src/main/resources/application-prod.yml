@@ -1,0 +1,16 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+  datasource:
+    hikari:
+      maximum-pool-size: 10
+
+springdoc:
+  swagger-ui:
+    enabled: false
+
+logging:
+  level:
+    root: INFO

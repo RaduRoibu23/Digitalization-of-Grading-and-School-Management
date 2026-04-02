@@ -4,14 +4,16 @@ token-*.json
 
 # Environment files
 .env
-.env.*
 !.env.example
 
-# Local seed / fixture files
-keycloak/realms/
-spring-backend/src/test/
-services/frontend/src/**/*.test.*
-services/frontend/src/**/*.spec.*
+# Build outputs
+frontend/dist/
+backend/target/
+node_modules/
+
+# Tests / coverage
+frontend/src/**/*.test.*
+frontend/src/**/*.spec.*
 tests/
 
 # IDE
@@ -23,6 +25,6 @@ tests/
 # OS
 .DS_Store
 Thumbs.db
+
 ISSUES.md
 demos/
-scripts/
