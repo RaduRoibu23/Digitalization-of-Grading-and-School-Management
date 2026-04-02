@@ -65,6 +65,14 @@ public class PersistentStateService {
     }
 
     @Transactional
+    public void saveGrades(List<StudentGrade> grades) {
+        if (grades == null || grades.isEmpty()) {
+            return;
+        }
+        studentGradeRepository.saveAll(grades.stream().map(this::toEntity).toList());
+    }
+
+    @Transactional
     public void deleteGrade(Long gradeId) {
         studentGradeRepository.deleteById(gradeId);
     }
@@ -78,6 +86,14 @@ public class PersistentStateService {
     @Transactional
     public void saveAbsence(StudentAbsence absence) {
         studentAbsenceRepository.save(toEntity(absence));
+    }
+
+    @Transactional
+    public void saveAbsences(List<StudentAbsence> absences) {
+        if (absences == null || absences.isEmpty()) {
+            return;
+        }
+        studentAbsenceRepository.saveAll(absences.stream().map(this::toEntity).toList());
     }
 
     private TimetableEntry toModel(TimetableEntryEntity entity) {

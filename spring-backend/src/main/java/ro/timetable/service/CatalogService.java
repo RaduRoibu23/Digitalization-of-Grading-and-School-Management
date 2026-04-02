@@ -17,6 +17,7 @@ import ro.timetable.web.dto.ApiDtos.GradeResponse;
 import ro.timetable.web.dto.ApiDtos.ProfileResponse;
 
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -24,11 +25,17 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 public class CatalogService {
+
+    private record SeedTeacher(String username, String fullName) {
+    }
+
+    private static final long CATALOG_SEED = 20260402L;
 
     private final SchoolDataService schoolDataService;
     private final CurriculumPlanService curriculumPlanService;
@@ -58,6 +65,7 @@ public class CatalogService {
     void init() {
         loadPersistedGrades();
         loadPersistedAbsences();
+        seedDemoCatalogDataIfNeeded();
     }
 
     public List<ProfileResponse> getCatalogStudents(String requesterUsername, List<String> roles) {
@@ -379,10 +387,9 @@ public class CatalogService {
                     ? subjectGrades.stream().mapToInt(StudentGrade::gradeValue).average().orElse(0)
                     : null;
 
-            List<String> teacherNames = subjectGrades.stream().map(StudentGrade::teacherName).distinct().toList();
-            if (teacherNames.isEmpty() && teacherAssignment != null) {
-                teacherNames = List.of(teacherAssignment.teacherName());
-            }
+            List<String> teacherNames = teacherAssignment != null
+                    ? List.of(teacherAssignment.teacherName())
+                    : subjectGrades.stream().map(StudentGrade::teacherName).distinct().toList();
 
             subjectRows.add(new CatalogSubjectResponse(
                     subjectId,
@@ -749,6 +756,290 @@ public class CatalogService {
         }
 
         absencesByStudentUsername.values().forEach(this::sortAbsences);
+    }
+
+    private void seedDemoCatalogDataIfNeeded() {
+        List<UserProfile> students = schoolDataService.getUserProfilesByRole("student");
+        if (students.isEmpty()) {
+            return;
+        }
+
+        boolean shouldSeedGrades = totalGradeCount() < students.size() * 12;
+        boolean shouldSeedAbsences = totalAbsenceCount() < students.size() * 3;
+        if (!shouldSeedGrades && !shouldSeedAbsences) {
+            return;
+        }
+
+        LocalDate today = LocalDate.now();
+        LocalDate schoolYearStart = currentSchoolYearStart(today);
+        List<StudentGrade> generatedGrades = new ArrayList<>();
+        List<StudentAbsence> generatedAbsences = new ArrayList<>();
+
+        for (UserProfile student : students) {
+            if (student.classId() == null) {
+                continue;
+            }
+
+            SchoolClass schoolClass = schoolDataService.getClassById(student.classId());
+            LinkedHashMap<String, Integer> studyPlan = curriculumPlanService.hoursForClass(schoolClass.name(), schoolClass.profile());
+            Map<String, List<StudentGrade>> existingGradesBySubject = gradesBySubject(student.username());
+            Map<String, List<StudentAbsence>> existingAbsencesBySubject = absencesBySubject(student.username());
+
+            for (Map.Entry<String, Integer> subjectEntry : studyPlan.entrySet()) {
+                String subjectName = subjectEntry.getKey();
+                int weeklyHours = subjectEntry.getValue() == null ? 0 : subjectEntry.getValue();
+                Long subjectId = schoolDataService.subjectIdByName(subjectName);
+                SeedTeacher teacher = resolveSeedTeacher(student.classId(), subjectId, subjectName);
+                if (teacher == null) {
+                    continue;
+                }
+
+                Random random = new Random(seedFor(student.username(), subjectName));
+
+                if (shouldSeedGrades) {
+                    List<StudentGrade> subjectGrades = existingGradesBySubject.getOrDefault(subjectName, List.of());
+                    int targetGradeCount = targetGradeCount(weeklyHours, random);
+                    if (subjectGrades.size() < targetGradeCount) {
+                        List<StudentGrade> missingGrades = generateSeedGrades(
+                                student,
+                                subjectId,
+                                subjectName,
+                                teacher,
+                                schoolYearStart,
+                                today,
+                                targetGradeCount - subjectGrades.size(),
+                                weeklyHours,
+                                random
+                        );
+                        generatedGrades.addAll(missingGrades);
+                        existingGradesBySubject.computeIfAbsent(subjectName, ignored -> new ArrayList<>()).addAll(missingGrades);
+                    }
+                }
+
+                if (shouldSeedAbsences) {
+                    List<StudentAbsence> subjectAbsences = existingAbsencesBySubject.getOrDefault(subjectName, List.of());
+                    int targetAbsenceCount = targetAbsenceCount(weeklyHours, random);
+                    if (subjectAbsences.size() < targetAbsenceCount) {
+                        List<StudentAbsence> missingAbsences = generateSeedAbsences(
+                                student,
+                                schoolClass,
+                                subjectId,
+                                subjectName,
+                                teacher,
+                                schoolYearStart,
+                                today,
+                                targetAbsenceCount - subjectAbsences.size(),
+                                random,
+                                subjectAbsences
+                        );
+                        generatedAbsences.addAll(missingAbsences);
+                        existingAbsencesBySubject.computeIfAbsent(subjectName, ignored -> new ArrayList<>()).addAll(missingAbsences);
+                    }
+                }
+            }
+        }
+
+        if (!generatedGrades.isEmpty()) {
+            generatedGrades.forEach(grade -> gradesByStudentUsername
+                    .computeIfAbsent(grade.studentUsername(), ignored -> new ArrayList<>())
+                    .add(grade));
+            gradesByStudentUsername.values().forEach(this::sortGrades);
+            persistentStateService.saveGrades(generatedGrades);
+        }
+
+        if (!generatedAbsences.isEmpty()) {
+            generatedAbsences.forEach(absence -> absencesByStudentUsername
+                    .computeIfAbsent(absence.studentUsername(), ignored -> new ArrayList<>())
+                    .add(absence));
+            absencesByStudentUsername.values().forEach(this::sortAbsences);
+            persistentStateService.saveAbsences(generatedAbsences);
+        }
+    }
+
+    private int totalGradeCount() {
+        return gradesByStudentUsername.values().stream().mapToInt(List::size).sum();
+    }
+
+    private int totalAbsenceCount() {
+        return absencesByStudentUsername.values().stream().mapToInt(List::size).sum();
+    }
+
+    private Map<String, List<StudentGrade>> gradesBySubject(String studentUsername) {
+        Map<String, List<StudentGrade>> bySubject = new LinkedHashMap<>();
+        for (StudentGrade grade : gradesByStudentUsername.getOrDefault(studentUsername, List.of())) {
+            bySubject.computeIfAbsent(grade.subjectName(), ignored -> new ArrayList<>()).add(grade);
+        }
+        return bySubject;
+    }
+
+    private Map<String, List<StudentAbsence>> absencesBySubject(String studentUsername) {
+        Map<String, List<StudentAbsence>> bySubject = new LinkedHashMap<>();
+        for (StudentAbsence absence : absencesByStudentUsername.getOrDefault(studentUsername, List.of())) {
+            bySubject.computeIfAbsent(absence.subjectName(), ignored -> new ArrayList<>()).add(absence);
+        }
+        return bySubject;
+    }
+
+    private long seedFor(String studentUsername, String subjectName) {
+        long result = CATALOG_SEED;
+        result = 31 * result + studentUsername.hashCode();
+        result = 31 * result + subjectName.hashCode();
+        return result;
+    }
+
+    private LocalDate currentSchoolYearStart(LocalDate today) {
+        int year = today.getMonthValue() >= 9 ? today.getYear() : today.getYear() - 1;
+        return LocalDate.of(year, 9, 15);
+    }
+
+    private SeedTeacher resolveSeedTeacher(Long classId, Long subjectId, String subjectName) {
+        TimetableEntry assignment = assignedTeacherForClassSubject(classId, subjectId);
+        if (assignment != null) {
+            return new SeedTeacher(assignment.teacherUsername(), assignment.teacherName());
+        }
+
+        return schoolDataService.getUserProfilesByRole("professor").stream()
+                .filter(profile -> profile.subjectsTaught() != null && profile.subjectsTaught().contains(subjectName))
+                .findFirst()
+                .map(profile -> new SeedTeacher(profile.username(), profile.firstName() + " " + profile.lastName()))
+                .orElse(null);
+    }
+
+    private int targetGradeCount(int weeklyHours, Random random) {
+        int minimumForAverage = Math.max(2, weeklyHours + 1);
+        int extra = random.nextDouble() < 0.35 ? 1 : 0;
+        return minimumForAverage + extra;
+    }
+
+    private int targetAbsenceCount(int weeklyHours, Random random) {
+        if (random.nextDouble() < 0.22) {
+            return 0;
+        }
+        int base = weeklyHours >= 3 ? 2 : 1;
+        return base + (random.nextDouble() < 0.30 ? 1 : 0);
+    }
+
+    private List<StudentGrade> generateSeedGrades(
+            UserProfile student,
+            Long subjectId,
+            String subjectName,
+            SeedTeacher teacher,
+            LocalDate schoolYearStart,
+            LocalDate today,
+            int count,
+            int weeklyHours,
+            Random random
+    ) {
+        List<StudentGrade> grades = new ArrayList<>();
+        int spanDays = Math.max(45, (int) Math.max(1, ChronoUnit.DAYS.between(schoolYearStart, today)));
+        for (int index = 0; index < count; index++) {
+            int dayOffset = Math.min(spanDays, 12 + index * 18 + random.nextInt(18));
+            LocalDate gradeDate = schoolYearStart.plusDays(dayOffset);
+            if (gradeDate.isAfter(today)) {
+                gradeDate = today.minusDays(random.nextInt(5));
+            }
+
+            grades.add(new StudentGrade(
+                    gradeIds.incrementAndGet(),
+                    student.username(),
+                    student.firstName() + " " + student.lastName(),
+                    student.classId(),
+                    student.className(),
+                    subjectId,
+                    subjectName,
+                    seededGradeValue(random, weeklyHours),
+                    gradeDate.toString(),
+                    teacher.username(),
+                    teacher.fullName(),
+                    1
+            ));
+        }
+        return grades;
+    }
+
+    private int seededGradeValue(Random random, int weeklyHours) {
+        int roll = random.nextInt(100);
+        if (roll < 8) return 10;
+        if (roll < 24) return 9;
+        if (roll < 48) return 8;
+        if (roll < 70) return 7;
+        if (roll < 86) return 6;
+        if (roll < 95) return 5;
+        return weeklyHours >= 3 ? 4 : 5;
+    }
+
+    private List<StudentAbsence> generateSeedAbsences(
+            UserProfile student,
+            SchoolClass schoolClass,
+            Long subjectId,
+            String subjectName,
+            SeedTeacher teacher,
+            LocalDate schoolYearStart,
+            LocalDate today,
+            int count,
+            Random random,
+            List<StudentAbsence> existingAbsences
+    ) {
+        Set<String> usedDates = existingAbsences.stream()
+                .map(StudentAbsence::absenceDate)
+                .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
+
+        List<StudentAbsence> absences = new ArrayList<>();
+        int spanDays = Math.max(45, (int) Math.max(1, ChronoUnit.DAYS.between(schoolYearStart, today)));
+        for (int index = 0; index < count; index++) {
+            LocalDate absenceDate = null;
+            for (int attempt = 0; attempt < 20; attempt++) {
+                int dayOffset = Math.min(spanDays, 10 + index * 14 + random.nextInt(24));
+                LocalDate candidate = schoolYearStart.plusDays(dayOffset);
+                if (candidate.isAfter(today)) {
+                    candidate = today.minusDays(random.nextInt(7));
+                }
+                if (usedDates.add(candidate.toString())) {
+                    absenceDate = candidate;
+                    break;
+                }
+            }
+            if (absenceDate == null) {
+                continue;
+            }
+
+            boolean motivated = random.nextDouble() < 0.42;
+            String motivatedByUsername = null;
+            String motivatedByName = null;
+            String motivatedAt = null;
+            if (motivated) {
+                if (schoolClass.homeroomTeacherUsername() != null && random.nextDouble() < 0.55) {
+                    motivatedByUsername = schoolClass.homeroomTeacherUsername();
+                    motivatedByName = schoolClass.homeroomTeacherName();
+                } else {
+                    motivatedByUsername = teacher.username();
+                    motivatedByName = teacher.fullName();
+                }
+                motivatedAt = absenceDate.plusDays(Math.min(9, 1 + random.nextInt(7))).toString();
+                if (LocalDate.parse(motivatedAt).isAfter(today)) {
+                    motivatedAt = today.toString();
+                }
+            }
+
+            absences.add(new StudentAbsence(
+                    absenceIds.incrementAndGet(),
+                    student.username(),
+                    student.firstName() + " " + student.lastName(),
+                    student.classId(),
+                    student.className(),
+                    subjectId,
+                    subjectName,
+                    absenceDate.toString(),
+                    teacher.username(),
+                    teacher.fullName(),
+                    motivated,
+                    motivatedByUsername,
+                    motivatedByName,
+                    motivatedAt,
+                    1
+            ));
+        }
+        return absences;
     }
 
     private void sortGrades(List<StudentGrade> grades) {
