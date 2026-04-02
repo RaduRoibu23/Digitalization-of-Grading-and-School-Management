@@ -16,10 +16,14 @@ import ro.timetable.model.SchoolClass;
 import ro.timetable.model.UserProfile;
 import ro.timetable.persistence.DocumentRequestEntity;
 import ro.timetable.persistence.DocumentRequestRepository;
+import ro.timetable.web.dto.ApiDtos.CatalogResponse;
+import ro.timetable.web.dto.ApiDtos.CatalogSubjectResponse;
+import ro.timetable.web.dto.ApiDtos.GradeResponse;
 import ro.timetable.web.dto.ApiDtos.DocumentRequestResponse;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.text.Normalizer;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -36,12 +40,14 @@ import java.util.Objects;
 public class DocumentService {
 
     public static final String TYPE_STUDENT_CERTIFICATE = "student_certificate";
+    public static final String TYPE_TRANSCRIPT = "transcript";
 
     private static final String STATUS_PENDING = "PENDING";
     private static final String STATUS_APPROVED = "APPROVED";
     private static final String STATUS_REJECTED = "REJECTED";
 
     private static final String STUDENT_CERTIFICATE_SERIES = "ADE";
+    private static final String TRANSCRIPT_SERIES = "FMT";
     private static final String SCHOOL_INSPECTORATE = "Inspectoratul Scolar Judetean Arges";
     private static final String SCHOOL_NAME = "Colegiul National \"Dinicu Golescu\"";
     private static final String SCHOOL_ADDRESS = "Str. Negru Voda nr. 66, Campulung Muscel, jud. Arges";
@@ -49,11 +55,13 @@ public class DocumentService {
     private static final String SCHOOL_EMAIL = "cndgolescu@yahoo.com";
     private static final String STUDY_FORM = "zi";
     private static final String STUDENT_CERTIFICATE_TEMPLATE = "templates/student-certificate-template.html";
+    private static final String TRANSCRIPT_TEMPLATE = "templates/transcript-template.html";
     private static final DateTimeFormatter RO_DATE_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy", Locale.ROOT);
 
     private final AuditService auditService;
     private final NotificationService notificationService;
     private final SchoolDataService schoolDataService;
+    private final CatalogService catalogService;
     private final DocumentRequestRepository documentRequestRepository;
     private final ObjectMapper objectMapper;
 
@@ -61,12 +69,14 @@ public class DocumentService {
             AuditService auditService,
             NotificationService notificationService,
             SchoolDataService schoolDataService,
+            CatalogService catalogService,
             DocumentRequestRepository documentRequestRepository,
             ObjectMapper objectMapper
     ) {
         this.auditService = auditService;
         this.notificationService = notificationService;
         this.schoolDataService = schoolDataService;
+        this.catalogService = catalogService;
         this.documentRequestRepository = documentRequestRepository;
         this.objectMapper = objectMapper;
     }
@@ -189,9 +199,11 @@ public class DocumentService {
 
         Map<String, Object> snapshot = deserializeSnapshot(entity.getSnapshotJson());
         byte[] pdf = renderPdf(entity.getDocumentType(), snapshot);
+        String downloadFileName = fileName(entity, snapshot);
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName(entity) + "\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + downloadFileName + "\"")
+                .header("X-Download-Filename", downloadFileName)
                 .body(pdf);
     }
 
@@ -218,7 +230,7 @@ public class DocumentService {
 
     private String normalizeType(String type) {
         String normalized = type == null ? null : type.trim().toLowerCase(Locale.ROOT);
-        if (!TYPE_STUDENT_CERTIFICATE.equals(normalized)) {
+        if (!TYPE_STUDENT_CERTIFICATE.equals(normalized) && !TYPE_TRANSCRIPT.equals(normalized)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tipul de document nu este disponibil inca");
         }
         return normalized;
@@ -265,6 +277,7 @@ public class DocumentService {
     private String labelForType(String documentType) {
         return switch (documentType) {
             case TYPE_STUDENT_CERTIFICATE -> "Adeverinta de elev";
+            case TYPE_TRANSCRIPT -> "Foaie matricola";
             default -> documentType;
         };
     }
@@ -272,6 +285,7 @@ public class DocumentService {
     private String seriesForType(String documentType) {
         return switch (documentType) {
             case TYPE_STUDENT_CERTIFICATE -> STUDENT_CERTIFICATE_SERIES;
+            case TYPE_TRANSCRIPT -> TRANSCRIPT_SERIES;
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tip document invalid");
         };
     }
@@ -279,6 +293,7 @@ public class DocumentService {
     private Map<String, Object> buildSnapshot(DocumentRequestEntity entity) {
         return switch (entity.getDocumentType()) {
             case TYPE_STUDENT_CERTIFICATE -> buildStudentCertificateSnapshot(entity);
+            case TYPE_TRANSCRIPT -> buildTranscriptSnapshot(entity);
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tip document invalid");
         };
     }
@@ -308,6 +323,8 @@ public class DocumentService {
         snapshot.put("document_series", entity.getSeries());
         snapshot.put("document_number", formatDocumentNumber(entity.getDocumentNumber()));
         snapshot.put("issue_date", formatDate(issueInstant));
+        snapshot.put("student_first_name", student.firstName());
+        snapshot.put("student_last_name", student.lastName());
         snapshot.put("student_name", student.lastName() + " " + student.firstName());
         snapshot.put("student_cnp", student.cnp());
         snapshot.put("birth_date", birthDate.format(RO_DATE_FORMAT));
@@ -316,6 +333,62 @@ public class DocumentService {
         snapshot.put("class_profile", schoolClass.profile());
         snapshot.put("study_form", STUDY_FORM);
         snapshot.put("purpose", entity.getPurpose());
+        snapshot.put("verification_code", verificationCode(entity));
+        return snapshot;
+    }
+
+    private Map<String, Object> buildTranscriptSnapshot(DocumentRequestEntity entity) {
+        UserProfile student = schoolDataService.getProfile(entity.getStudentUsername());
+        if (!"student".equals(student.role())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Documentul poate fi emis doar pentru un elev");
+        }
+        if (student.classId() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Elevul nu are clasa setata");
+        }
+
+        SchoolClass schoolClass = schoolDataService.getClassById(student.classId());
+        Instant issueInstant = entity.getReviewedAt() == null ? Instant.now() : entity.getReviewedAt();
+        CatalogResponse catalog = catalogService.getCatalogForStudent(student.username(), List.of("student"), student.username());
+
+        List<Map<String, Object>> subjectSnapshots = new ArrayList<>();
+        int subjectsWithGrades = 0;
+        for (CatalogSubjectResponse row : catalog.subjects()) {
+            List<GradeResponse> grades = row.grades() == null ? List.of() : row.grades();
+            if (!grades.isEmpty()) {
+                subjectsWithGrades++;
+            }
+
+            List<String> gradeValues = grades.stream()
+                    .map(grade -> String.valueOf(grade.grade_value()))
+                    .toList();
+
+            Map<String, Object> subjectSnapshot = new LinkedHashMap<>();
+            subjectSnapshot.put("subject_name", row.subject_name());
+            subjectSnapshot.put("grade_values", gradeValues);
+            subjectSnapshot.put("grade_values_label", gradeValues.isEmpty() ? "-" : String.join(", ", gradeValues));
+            subjectSnapshot.put("average", formatAverage(row.average()));
+            subjectSnapshots.add(subjectSnapshot);
+        }
+
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("inspectorate", SCHOOL_INSPECTORATE);
+        snapshot.put("school_name", SCHOOL_NAME);
+        snapshot.put("school_address", SCHOOL_ADDRESS);
+        snapshot.put("school_phone", SCHOOL_PHONE);
+        snapshot.put("school_email", SCHOOL_EMAIL);
+        snapshot.put("document_series", entity.getSeries());
+        snapshot.put("document_number", formatDocumentNumber(entity.getDocumentNumber()));
+        snapshot.put("issue_date", formatDate(issueInstant));
+        snapshot.put("student_first_name", student.firstName());
+        snapshot.put("student_last_name", student.lastName());
+        snapshot.put("student_name", student.lastName() + " " + student.firstName());
+        snapshot.put("class_name", student.className());
+        snapshot.put("class_profile", schoolClass.profile());
+        snapshot.put("school_year", schoolYearFor(issueInstant));
+        snapshot.put("purpose", entity.getPurpose());
+        snapshot.put("subject_count", subjectSnapshots.size());
+        snapshot.put("subjects_with_grades", subjectsWithGrades);
+        snapshot.put("subjects", subjectSnapshots);
         snapshot.put("verification_code", verificationCode(entity));
         return snapshot;
     }
@@ -343,9 +416,13 @@ public class DocumentService {
     private byte[] renderPdf(String documentType, Map<String, Object> snapshot) {
         String template = switch (documentType) {
             case TYPE_STUDENT_CERTIFICATE -> readTemplate(STUDENT_CERTIFICATE_TEMPLATE);
+            case TYPE_TRANSCRIPT -> readTemplate(TRANSCRIPT_TEMPLATE);
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tipul de document nu este disponibil");
         };
-        String html = applyTemplate(template, snapshot);
+        String html = switch (documentType) {
+            case TYPE_TRANSCRIPT -> applyTemplate(template, snapshot, Map.of("subjects_rows", transcriptRows(snapshot)));
+            default -> applyTemplate(template, snapshot, Map.of());
+        };
 
         try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
             PdfRendererBuilder builder = new PdfRendererBuilder();
@@ -367,14 +444,38 @@ public class DocumentService {
         }
     }
 
-    private String applyTemplate(String template, Map<String, Object> snapshot) {
+    private String applyTemplate(String template, Map<String, Object> snapshot, Map<String, String> rawValues) {
         String html = template;
+        for (Map.Entry<String, String> entry : rawValues.entrySet()) {
+            html = html.replace("{{ " + entry.getKey() + " }}", entry.getValue());
+            html = html.replace("{{" + entry.getKey() + "}}", entry.getValue());
+        }
         for (Map.Entry<String, Object> entry : snapshot.entrySet()) {
             String value = escapeHtml(entry.getValue());
             html = html.replace("{{ " + entry.getKey() + " }}", value);
             html = html.replace("{{" + entry.getKey() + "}}", value);
         }
         return html;
+    }
+
+    private String transcriptRows(Map<String, Object> snapshot) {
+        List<Map<String, Object>> subjects = objectMapper.convertValue(
+                snapshot.getOrDefault("subjects", List.of()),
+                new TypeReference<>() {
+                }
+        );
+
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index < subjects.size(); index++) {
+            Map<String, Object> row = subjects.get(index);
+            builder.append("<tr>");
+            builder.append("<td>").append(index + 1).append("</td>");
+            builder.append("<td>").append(escapeHtml(row.get("subject_name"))).append("</td>");
+            builder.append("<td>").append(escapeHtml(row.get("grade_values_label"))).append("</td>");
+            builder.append("<td>").append(escapeHtml(row.get("average"))).append("</td>");
+            builder.append("</tr>");
+        }
+        return builder.toString();
     }
 
     private String escapeHtml(Object value) {
@@ -425,11 +526,56 @@ public class DocumentService {
         return seriesForType(entity.getDocumentType()) + "-" + formatDocumentNumber(entity.getDocumentNumber()) + "-" + entity.getId();
     }
 
-    private String fileName(DocumentRequestEntity entity) {
+    private String fileName(DocumentRequestEntity entity, Map<String, Object> snapshot) {
+        String studentPrefix = studentPrefix(snapshot, entity.getStudentUsername());
         return switch (entity.getDocumentType()) {
-            case TYPE_STUDENT_CERTIFICATE -> "adeverinta-elev-" + entity.getSeries() + "-" + formatDocumentNumber(entity.getDocumentNumber()) + ".pdf";
+            case TYPE_STUDENT_CERTIFICATE -> studentPrefix + "_Adeverinta_Student.pdf";
+            case TYPE_TRANSCRIPT -> studentPrefix + "_Foaie_Matricola.pdf";
             default -> "document.pdf";
         };
+    }
+
+    private String studentPrefix(Map<String, Object> snapshot, String studentUsername) {
+        String lastName = normalizeFileToken(snapshot.get("student_last_name"));
+        String firstName = normalizeFileToken(snapshot.get("student_first_name"));
+        if (lastName != null && firstName != null) {
+            return lastName + "_" + firstName;
+        }
+
+        String fullName = snapshot.get("student_name") == null ? null : String.valueOf(snapshot.get("student_name")).trim();
+        if (fullName != null && !fullName.isBlank()) {
+            String[] parts = fullName.split("\\s+", 2);
+            String fallbackLastName = normalizeFileToken(parts[0]);
+            String fallbackFirstName = normalizeFileToken(parts.length > 1 ? parts[1] : parts[0]);
+            if (fallbackLastName != null && fallbackFirstName != null) {
+                return fallbackLastName + "_" + fallbackFirstName;
+            }
+        }
+
+        UserProfile student = schoolDataService.getProfile(studentUsername);
+        return sanitizeFileToken(student.lastName()) + "_" + sanitizeFileToken(student.firstName());
+    }
+
+    private String normalizeFileToken(Object value) {
+        String sanitized = sanitizeFileToken(value);
+        return "Document".equals(sanitized) ? null : sanitized;
+    }
+
+    private String sanitizeFileToken(Object value) {
+        String text = value == null ? "" : String.valueOf(value).trim();
+        String normalized = Normalizer.normalize(text, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "")
+                .replaceAll("[^A-Za-z0-9]+", "_")
+                .replaceAll("_+", "_")
+                .replaceAll("^_|_$", "");
+        return normalized.isBlank() ? "Document" : normalized;
+    }
+
+    private String formatAverage(Double value) {
+        if (value == null) {
+            return "-";
+        }
+        return String.format(Locale.ROOT, "%.2f", value);
     }
 
     private DocumentRequestResponse toResponse(DocumentRequestEntity entity, String actorUsername, List<String> roles) {

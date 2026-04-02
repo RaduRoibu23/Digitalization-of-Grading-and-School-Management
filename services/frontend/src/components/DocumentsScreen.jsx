@@ -1,7 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { apiDownload, apiGet, apiPatch, apiPost } from '../services/apiService'
 
-const DOCUMENT_TYPE = 'student_certificate'
+const DOCUMENT_TYPES = [
+  {
+    value: 'student_certificate',
+    label: 'Adeverinta de elev',
+    helper: 'PDF oficial pentru statutul de elev. Descarcarea foloseste numele elevului in fisier.',
+  },
+  {
+    value: 'transcript',
+    label: 'Foaie matricola',
+    helper: 'PDF cu materiile si notele elevului existente in momentul aprobarii documentului.',
+  },
+]
 
 function statusLabel(status) {
   switch (status) {
@@ -30,9 +41,17 @@ function formatDate(value) {
 }
 
 function extractFilename(response) {
+  const directHeader = response.headers.get('x-download-filename')
+  if (directHeader) {
+    return directHeader
+  }
   const contentDisposition = response.headers.get('content-disposition') || ''
-  const match = contentDisposition.match(/filename="([^"]+)"/i)
-  return match?.[1] || 'document.pdf'
+  const quotedMatch = contentDisposition.match(/filename="([^"]+)"/i)
+  if (quotedMatch?.[1]) {
+    return quotedMatch[1]
+  }
+  const plainMatch = contentDisposition.match(/filename=([^;]+)/i)
+  return plainMatch?.[1]?.trim() || 'document.pdf'
 }
 
 export default function DocumentsScreen({ accessToken, roles = [] }) {
@@ -42,6 +61,7 @@ export default function DocumentsScreen({ accessToken, roles = [] }) {
   const [saving, setSaving] = useState(false)
   const [banner, setBanner] = useState(null)
   const [requests, setRequests] = useState([])
+  const [documentType, setDocumentType] = useState(DOCUMENT_TYPES[0].value)
   const [purpose, setPurpose] = useState('')
 
   useEffect(() => {
@@ -71,6 +91,7 @@ export default function DocumentsScreen({ accessToken, roles = [] }) {
     () => requests.filter((request) => request.status === 'APPROVED'),
     [requests]
   )
+  const selectedDocument = DOCUMENT_TYPES.find((option) => option.value === documentType) || DOCUMENT_TYPES[0]
 
   async function refreshRequests(nextBanner = null) {
     setLoading(true)
@@ -93,7 +114,7 @@ export default function DocumentsScreen({ accessToken, roles = [] }) {
     try {
       await apiPost(
         '/documents/requests',
-        { type: DOCUMENT_TYPE, purpose: purpose.trim() },
+        { type: documentType, purpose: purpose.trim() },
         accessToken
       )
       setPurpose('')
@@ -194,8 +215,23 @@ export default function DocumentsScreen({ accessToken, roles = [] }) {
         <div className="mutedBlock" style={{ marginBottom: 18 }}>
           <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', alignItems: 'end' }}>
             <div>
-              <div style={{ fontWeight: 700, marginBottom: 6 }}>Adeverinta de elev</div>
-              <div className="mutedSmall">Disponibil acum. Urmeaza: foaie matricola curenta si adeverinta de transport.</div>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>Solicita un document</div>
+              <div className="mutedSmall">{selectedDocument.helper}</div>
+            </div>
+            <div className="field">
+              <label className="label">Tip document</label>
+              <select
+                className="select"
+                value={documentType}
+                onChange={(event) => setDocumentType(event.target.value)}
+                disabled={saving}
+              >
+                {DOCUMENT_TYPES.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="field">
               <label className="label">Scop (maxim 20 caractere)</label>
@@ -210,7 +246,7 @@ export default function DocumentsScreen({ accessToken, roles = [] }) {
             </div>
             <div>
               <button className="btn primary" onClick={submitRequest} disabled={!canSubmit || saving}>
-                {saving ? 'Se trimite...' : 'Solicita document'}
+                {saving ? 'Se trimite...' : `Solicita ${selectedDocument.label}`}
               </button>
             </div>
           </div>
