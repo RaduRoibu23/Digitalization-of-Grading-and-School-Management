@@ -244,7 +244,20 @@ public class SchoolDataService {
         return profileResponse(profile);
     }
 
-    public UserProfile updateProfile(String username, Integer version, String firstName, String lastName, String email, Long classId, String address, String cnp, Long homeroomClassId) {
+    public UserProfile updateProfile(
+            String username,
+            Integer version,
+            String firstName,
+            String lastName,
+            String email,
+            Long classId,
+            String address,
+            String cnp,
+            String series,
+            String serialNumber,
+            String fatherInitial,
+            Long homeroomClassId
+    ) {
         UserProfile existing = getProfile(username);
         int existingVersion = existing.version() == null ? 1 : existing.version();
         if (!Objects.equals(existingVersion, version)) {
@@ -255,6 +268,9 @@ public class SchoolDataService {
         String normalizedEmail = normalizeRequiredProfileField(email, "Email-ul este obligatoriu");
         String normalizedAddress = normalizeOptionalProfileField(address);
         String normalizedCnp = normalizeOptionalProfileField(cnp);
+        String normalizedSeries = normalizeStudentIdentitySeries(series);
+        String normalizedSerialNumber = normalizeStudentIdentitySerialNumber(serialNumber);
+        String normalizedFatherInitial = normalizeStudentFatherInitial(fatherInitial);
         SchoolClass schoolClass = classId == null ? null : requireClass(classId);
 
         if (referenceDataPersistenceService.emailUsedByAnotherProfile(normalizedEmail, existing.username())) {
@@ -271,6 +287,12 @@ public class SchoolDataService {
             if (normalizedCnp == null) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CNP-ul este obligatoriu pentru elevi");
             }
+            if (!hasValidStudentIdentityDocument(normalizedSeries, normalizedSerialNumber)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Seria si numarul actului de identitate sunt invalide");
+            }
+            if (!hasValidStudentFatherInitial(normalizedFatherInitial)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Initiala tatalui este invalida");
+            }
         }
 
         if (normalizedCnp != null) {
@@ -278,6 +300,15 @@ public class SchoolDataService {
             if (referenceDataPersistenceService.cnpUsedByAnotherProfile(normalizedCnp, existing.username())) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "CNP folosit deja");
             }
+        }
+
+        if ("student".equals(existing.role())
+                && referenceDataPersistenceService.studentIdentityDocumentUsedByAnotherProfile(
+                normalizedSeries,
+                normalizedSerialNumber,
+                existing.username()
+        )) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Seria si numarul actului de identitate sunt deja folosite");
         }
 
         if (!"professor".equals(existing.role()) && homeroomClassId != null) {
@@ -294,9 +325,9 @@ public class SchoolDataService {
                 normalizedEmail,
                 normalizedAddress,
                 normalizedCnp,
-                existing.idSeries(),
-                existing.serialNumber(),
-                existing.fatherInitial(),
+                "student".equals(existing.role()) ? normalizedSeries : existing.idSeries(),
+                "student".equals(existing.role()) ? normalizedSerialNumber : existing.serialNumber(),
+                "student".equals(existing.role()) ? normalizedFatherInitial : existing.fatherInitial(),
                 schoolClass == null ? null : schoolClass.id(),
                 schoolClass == null ? null : schoolClass.name(),
                 existing.subjectsTaught()
@@ -1640,6 +1671,20 @@ public class SchoolDataService {
         }
         String normalized = value.trim();
         return normalized.isEmpty() ? null : normalized;
+    }
+
+    private String normalizeStudentIdentitySeries(String value) {
+        String normalized = normalizeOptionalProfileField(value);
+        return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
+    }
+
+    private String normalizeStudentIdentitySerialNumber(String value) {
+        return normalizeOptionalProfileField(value);
+    }
+
+    private String normalizeStudentFatherInitial(String value) {
+        String normalized = normalizeOptionalProfileField(value);
+        return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
     }
 
     private List<String> normalizeSubjectNames(List<String> subjectsTaught) {

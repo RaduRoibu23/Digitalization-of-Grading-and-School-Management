@@ -192,6 +192,9 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
           homeroom_class_id: editingProfile.role === 'professor' && form.homeroom_class_id ? Number(form.homeroom_class_id) : null,
           address: form.address.trim() || null,
           cnp: form.cnp.trim() || null,
+          series: editingProfile.role === 'student' ? (form.series.trim().toUpperCase() || null) : null,
+          serial_number: editingProfile.role === 'student' ? (form.serial_number.trim() || null) : null,
+          father_initial: editingProfile.role === 'student' ? (form.father_initial.trim().toUpperCase() || null) : null,
         },
         accessToken
       )
@@ -347,19 +350,37 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
             {editingProfile.role === 'student' && (
               <div className="field">
                 <label className="label">Serie</label>
-                <input className="input" value={form.series} disabled readOnly />
+                <input
+                  className="input"
+                  value={form.series}
+                  onChange={(event) => updateField('series', event.target.value)}
+                  disabled={saving}
+                  maxLength={2}
+                />
               </div>
             )}
             {editingProfile.role === 'student' && (
               <div className="field">
                 <label className="label">Nr. serie</label>
-                <input className="input" value={form.serial_number} disabled readOnly />
+                <input
+                  className="input"
+                  value={form.serial_number}
+                  onChange={(event) => updateField('serial_number', event.target.value)}
+                  disabled={saving}
+                  maxLength={6}
+                />
               </div>
             )}
             {editingProfile.role === 'student' && (
               <div className="field">
                 <label className="label">Initiala prenumelui tatalui</label>
-                <input className="input" value={form.father_initial} disabled readOnly />
+                <input
+                  className="input"
+                  value={form.father_initial}
+                  onChange={(event) => updateField('father_initial', event.target.value)}
+                  disabled={saving}
+                  maxLength={1}
+                />
               </div>
             )}
           </div>

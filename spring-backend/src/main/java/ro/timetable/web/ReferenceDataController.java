@@ -71,7 +71,10 @@ public class ReferenceDataController {
             Long class_id,
             Long homeroom_class_id,
             String address,
-            String cnp
+            String cnp,
+            String series,
+            String serial_number,
+            String father_initial
     ) {
     }
 
@@ -146,6 +149,9 @@ public class ReferenceDataController {
                 request.class_id(),
                 request.address(),
                 request.cnp(),
+                request.series(),
+                request.serial_number(),
+                request.father_initial(),
                 request.homeroom_class_id()
         );
         catalogService.syncProfileData(previousProfile, updatedProfile);

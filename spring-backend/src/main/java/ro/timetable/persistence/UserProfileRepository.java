@@ -9,4 +9,5 @@ public interface UserProfileRepository extends JpaRepository<UserProfileEntity, 
     Optional<UserProfileEntity> findByUsername(String username);
     boolean existsByEmailAndUsernameNot(String email, String username);
     boolean existsByCnpAndUsernameNot(String cnp, String username);
+    boolean existsByIdSeriesAndSerialNumberAndUsernameNot(String idSeries, String serialNumber, String username);
 }

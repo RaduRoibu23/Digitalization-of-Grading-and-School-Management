@@ -56,6 +56,15 @@ public class ReferenceDataPersistenceService {
         return cnp != null && !cnp.isBlank() && userProfileRepository.existsByCnpAndUsernameNot(cnp, username);
     }
 
+    @Transactional(readOnly = true)
+    public boolean studentIdentityDocumentUsedByAnotherProfile(String idSeries, String serialNumber, String username) {
+        return idSeries != null
+                && !idSeries.isBlank()
+                && serialNumber != null
+                && !serialNumber.isBlank()
+                && userProfileRepository.existsByIdSeriesAndSerialNumberAndUsernameNot(idSeries, serialNumber, username);
+    }
+
     @Transactional
     public void saveReferenceData(List<SchoolClass> classes, List<Subject> subjects, List<Room> rooms, List<UserProfile> profiles) {
         schoolClassRepository.saveAll(classes.stream().map(this::toEntity).toList());
