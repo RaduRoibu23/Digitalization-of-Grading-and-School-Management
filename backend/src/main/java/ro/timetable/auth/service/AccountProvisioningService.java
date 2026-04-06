@@ -63,7 +63,15 @@ public class AccountProvisioningService {
 
         try {
             assignRealmRole(accessToken, userId, role);
-            return schoolDataService.createManagedProfile(normalizedUsername, role, firstName, lastName, email, classId, subjectsTaught);
+            return schoolDataService.createManagedProfile(
+                    normalizedUsername,
+                    role,
+                    firstName,
+                    lastName,
+                    email,
+                    classId,
+                    subjectsTaught
+            );
         } catch (RuntimeException exception) {
             deleteKeycloakUser(accessToken, userId);
             throw exception;

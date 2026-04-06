@@ -48,10 +48,14 @@ public class SchoolDataService {
     private record SlotAssignment(Slot slot, Long subjectId, String teacherUsername, Long roomId) {
     }
 
+    private record AssignmentCandidate(List<SlotAssignment> assignments, int score) {
+    }
+
     private static final int CLASS_COUNT = 10;
     private static final int STUDENTS_PER_CLASS = 20;
     private static final int WEEK_DAYS = 5;
     private static final int SLOTS_PER_DAY = 7;
+    private static final int TIMETABLE_GENERATION_ATTEMPTS = 60;
     private static final String[] CLASS_NAMES = {
             "IX A", "IX B", "IX C", "X A", "X B",
             "X C", "XI A", "XI B", "XII A", "XII B"
@@ -136,10 +140,6 @@ public class SchoolDataService {
         return new ArrayList<>(rooms.values());
     }
 
-    public List<SchoolClass> getPublicClasses() {
-        return getClasses();
-    }
-
     public UserProfile getProfile(String username) {
         return findProfileByUsername(username)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User profile not found"));
@@ -200,9 +200,16 @@ public class SchoolDataService {
         List<String> normalizedSubjects = normalizeSubjectNames(subjectsTaught);
 
         if ("student".equals(normalizedRole)) {
+            if (classId == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Clasa este obligatorie pentru elevi");
+            }
             schoolClass = requireClass(classId);
             generatedAddress = generateUniqueStudentAddress(usedStudentAddresses(), new Random(System.nanoTime()));
-            generatedCnp = generateUniqueStudentCnp(usedStudentCnps(), new Random(System.nanoTime() ^ normalizedUsername.hashCode()), schoolClass.name());
+            generatedCnp = generateUniqueStudentCnp(
+                    usedStudentCnps(),
+                    new Random(System.nanoTime() ^ normalizedUsername.hashCode()),
+                    schoolClass.name()
+            );
             StudentIdentityDocument generatedIdentityDocument = generateUniqueStudentIdentityDocument(
                     usedStudentIdentityDocumentKeys(),
                     new Random(System.nanoTime() ^ normalizedEmail.hashCode() ^ normalizedUsername.hashCode())
@@ -718,8 +725,9 @@ public class SchoolDataService {
                 .thenComparing(String::compareTo));
 
         List<Slot> baseSlots = buildSlotsForClass(plan.values().stream().mapToInt(Integer::intValue).sum());
+        AssignmentCandidate bestCandidate = null;
         ResponseStatusException lastFailure = null;
-        for (int attempt = 0; attempt < 30; attempt++) {
+        for (int attempt = 0; attempt < TIMETABLE_GENERATION_ATTEMPTS; attempt++) {
             List<String> occurrences = new ArrayList<>(baseOccurrences);
             List<Slot> slots = new ArrayList<>(baseSlots);
             if (attempt > 0) {
@@ -727,22 +735,37 @@ public class SchoolDataService {
                 Collections.shuffle(slots, new Random(classId * 211 + attempt));
             }
             try {
-                return tryBuildAssignments(schoolClass, classId, occurrences, slots);
+                List<SlotAssignment> candidateAssignments = tryBuildAssignments(schoolClass, classId, occurrences, slots, plan);
+                // Keep the best valid timetable instead of stopping at the first schedulable one.
+                int candidateScore = evaluateScheduleQuality(classId, plan, candidateAssignments);
+                if (bestCandidate == null || candidateScore > bestCandidate.score()) {
+                    bestCandidate = new AssignmentCandidate(candidateAssignments, candidateScore);
+                }
             } catch (ResponseStatusException exception) {
                 lastFailure = exception;
             }
         }
 
+        if (bestCandidate != null) {
+            return bestCandidate.assignments();
+        }
         if (lastFailure != null) {
             throw lastFailure;
         }
         throw new ResponseStatusException(HttpStatus.CONFLICT, "Nu am putut genera un orar valid pentru " + schoolClass.name() + ".");
     }
 
-    private List<SlotAssignment> tryBuildAssignments(SchoolClass schoolClass, Long classId, List<String> occurrences, List<Slot> slots) {
+    private List<SlotAssignment> tryBuildAssignments(
+            SchoolClass schoolClass,
+            Long classId,
+            List<String> occurrences,
+            List<Slot> slots,
+            Map<String, Integer> subjectTargets
+    ) {
         Map<String, String> occupiedTeachers = occupiedTeachers(classId);
         Map<String, String> occupiedRooms = occupiedRooms(classId);
         Map<String, Integer> daySubjectCounts = new LinkedHashMap<>();
+        Map<String, Integer> assignedSubjectCounts = new LinkedHashMap<>();
         Map<Long, String> teacherBySubjectId = new LinkedHashMap<>();
         List<SlotAssignment> assignments = new ArrayList<>();
         Set<String> usedSlots = new HashSet<>();
@@ -754,7 +777,21 @@ public class SchoolDataService {
             }
             String fixedTeacherUsername = teacherBySubjectId.get(subjectId);
             String preferredTeacherUsername = fixedTeacherUsername != null ? fixedTeacherUsername : preferredTeacherForClassSubject(classId, subjectId);
-            SlotAssignment best = pickBestAssignment(classId, subjectId, subjectName, fixedTeacherUsername, preferredTeacherUsername, slots, assignments, usedSlots, daySubjectCounts, occupiedTeachers, occupiedRooms);
+            SlotAssignment best = pickBestAssignment(
+                    classId,
+                    subjectId,
+                    subjectName,
+                    fixedTeacherUsername,
+                    preferredTeacherUsername,
+                    slots,
+                    assignments,
+                    usedSlots,
+                    daySubjectCounts,
+                    assignedSubjectCounts,
+                    subjectTargets,
+                    occupiedTeachers,
+                    occupiedRooms
+            );
             if (best == null) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Nu am putut genera un orar valid pentru " + schoolClass.name() + ".");
             }
@@ -764,14 +801,27 @@ public class SchoolDataService {
             occupiedTeachers.put(slotKey(best.slot().weekday(), best.slot().indexInDay(), best.teacherUsername()), schoolClass.name());
             occupiedRooms.put(slotKey(best.slot().weekday(), best.slot().indexInDay(), best.roomId()), schoolClass.name());
             daySubjectCounts.merge(daySubjectKey(best.slot().weekday(), subjectName), 1, Integer::sum);
+            assignedSubjectCounts.merge(subjectName, 1, Integer::sum);
         }
 
         return assignments;
     }
 
-    private SlotAssignment pickBestAssignment(Long classId, Long subjectId, String subjectName, String fixedTeacherUsername, String preferredTeacherUsername, List<Slot> slots,
-                                              List<SlotAssignment> assignments, Set<String> usedSlots, Map<String, Integer> daySubjectCounts,
-                                              Map<String, String> occupiedTeachers, Map<String, String> occupiedRooms) {
+    private SlotAssignment pickBestAssignment(
+            Long classId,
+            Long subjectId,
+            String subjectName,
+            String fixedTeacherUsername,
+            String preferredTeacherUsername,
+            List<Slot> slots,
+            List<SlotAssignment> assignments,
+            Set<String> usedSlots,
+            Map<String, Integer> daySubjectCounts,
+            Map<String, Integer> assignedSubjectCounts,
+            Map<String, Integer> subjectTargets,
+            Map<String, String> occupiedTeachers,
+            Map<String, String> occupiedRooms
+    ) {
         List<String> candidateTeachers = teachersBySubjectId.getOrDefault(subjectId, List.of());
         if (candidateTeachers.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "No teachers configured for subject " + subjectName);
@@ -799,7 +849,17 @@ public class SchoolDataService {
                 continue;
             }
 
-            int score = computeAssignmentScore(subjectName, slot, assignments, sameDayCount, teacherUsername, roomId);
+            int score = computeAssignmentScore(
+                    classId,
+                    subjectName,
+                    slot,
+                    assignments,
+                    sameDayCount,
+                    assignedSubjectCounts,
+                    subjectTargets,
+                    teacherUsername,
+                    roomId
+            );
             if (best == null || score > bestScore) {
                 best = new SlotAssignment(slot, subjectId, teacherUsername, roomId);
                 bestScore = score;
@@ -808,19 +868,56 @@ public class SchoolDataService {
         return best;
     }
 
-    private int computeAssignmentScore(String subjectName, Slot slot, List<SlotAssignment> assignments, int sameDayCount,
-                                       String teacherUsername, Long roomId) {
+    private int computeAssignmentScore(
+            Long classId,
+            String subjectName,
+            Slot slot,
+            List<SlotAssignment> assignments,
+            int sameDayCount,
+            Map<String, Integer> assignedSubjectCounts,
+            Map<String, Integer> subjectTargets,
+            String teacherUsername,
+            Long roomId
+    ) {
         int score = 100;
+        int totalOccurrences = subjectTargets.getOrDefault(subjectName, 1);
+        int assignedOccurrences = assignedSubjectCounts.getOrDefault(subjectName, 0);
+        int remainingOccurrencesAfterThis = Math.max(0, totalOccurrences - assignedOccurrences - 1);
+        long distinctDaysUsed = countDistinctDaysForSubject(assignments, subjectName);
+        long distinctDaysAfterThis = distinctDaysUsed + (sameDayCount == 0 ? 1 : 0);
+        int remainingDistinctDays = Math.max(0, WEEK_DAYS - (int) distinctDaysAfterThis);
         if (isHeavySubject(subjectName)) {
-            score += Math.max(0, 6 - slot.indexInDay()) * 5;
+            if (slot.indexInDay() <= 2) {
+                score += 18;
+            } else if (slot.indexInDay() <= 4) {
+                score += 10;
+            } else {
+                score -= (slot.indexInDay() - 4) * 12;
+            }
         } else {
             score += Math.max(0, 5 - slot.indexInDay()) * 2;
+            if (slot.indexInDay() >= 6) {
+                score -= (slot.indexInDay() - 5) * 4;
+            }
         }
-        score -= sameDayCount * 20;
+        if (sameDayCount > 0) {
+            score -= totalOccurrences <= WEEK_DAYS ? 42 : 24;
+            if (remainingOccurrencesAfterThis <= remainingDistinctDays) {
+                score -= 18;
+            }
+        }
+        if (hasAdjacentAssignmentWithSubject(assignments, slot, subjectName)) {
+            score -= 28;
+        }
         score -= teacherLoad(assignments, teacherUsername) * 6;
+        score -= teacherLoadForDay(assignments, teacherUsername, slot.weekday()) * 5;
         score -= existingTeacherLoad(teacherUsername) * 2;
+        score -= existingTeacherLoadForDay(teacherUsername, slot.weekday()) * 3;
         score -= assignments.stream().mapToInt(entry -> Objects.equals(entry.roomId(), roomId) ? 1 : 0).sum();
         score -= countAssignmentsForDay(assignments, slot.weekday()) * 3;
+        if (usesPreferredHomeRoom(classId, subjectName, roomId)) {
+            score += 8;
+        }
         return score;
     }
 
@@ -861,6 +958,8 @@ public class SchoolDataService {
                         && entry.slot().indexInDay() == slot.indexInDay()))
                 .min(Comparator.comparingInt((String username) -> preferredTeacherUsername != null && preferredTeacherUsername.equals(username) ? 0 : 1)
                         .thenComparingInt(username -> teacherLoad(assignments, username))
+                        .thenComparingInt(username -> teacherLoadForDay(assignments, username, slot.weekday()))
+                        .thenComparingInt(username -> existingTeacherLoadForDay(username, slot.weekday()))
                         .thenComparingInt(this::existingTeacherLoad)
                         .thenComparing(String::compareTo))
                 .orElse(null);
@@ -903,8 +1002,38 @@ public class SchoolDataService {
     private int countAssignmentsForDay(List<SlotAssignment> assignments, int weekday) {
         return (int) assignments.stream().filter(entry -> entry.slot().weekday() == weekday).count();
     }
+
+    private int countAssignmentsForSubjectOnDay(List<SlotAssignment> assignments, int weekday, String subjectName) {
+        return (int) assignments.stream()
+                .filter(entry -> entry.slot().weekday() == weekday)
+                .filter(entry -> subjectName.equals(subjectName(entry)))
+                .count();
+    }
+
+    private long countDistinctDaysForSubject(List<SlotAssignment> assignments, String subjectName) {
+        return assignments.stream()
+                .filter(entry -> subjectName.equals(subjectName(entry)))
+                .map(entry -> entry.slot().weekday())
+                .distinct()
+                .count();
+    }
+
+    private boolean hasAdjacentAssignmentWithSubject(List<SlotAssignment> assignments, Slot slot, String subjectName) {
+        return assignments.stream()
+                .filter(entry -> entry.slot().weekday() == slot.weekday())
+                .filter(entry -> Math.abs(entry.slot().indexInDay() - slot.indexInDay()) == 1)
+                .anyMatch(entry -> subjectName.equals(subjectName(entry)));
+    }
+
     private int teacherLoad(List<SlotAssignment> assignments, String username) {
         return (int) assignments.stream().filter(entry -> username.equals(entry.teacherUsername())).count();
+    }
+
+    private int teacherLoadForDay(List<SlotAssignment> assignments, String username, int weekday) {
+        return (int) assignments.stream()
+                .filter(entry -> username.equals(entry.teacherUsername()))
+                .filter(entry -> entry.slot().weekday() == weekday)
+                .count();
     }
 
     private int existingTeacherLoad(String username) {
@@ -912,6 +1041,56 @@ public class SchoolDataService {
                 .flatMap(Collection::stream)
                 .filter(entry -> username.equals(entry.teacherUsername()))
                 .count();
+    }
+
+    private int existingTeacherLoadForDay(String username, int weekday) {
+        return (int) timetablesByClassId.values().stream()
+                .flatMap(Collection::stream)
+                .filter(entry -> username.equals(entry.teacherUsername()))
+                .filter(entry -> Objects.equals(entry.weekday(), weekday))
+                .count();
+    }
+
+    private int evaluateScheduleQuality(Long classId, Map<String, Integer> subjectTargets, List<SlotAssignment> assignments) {
+        // Favor timetables that spread repeated subjects across the week and keep demanding classes earlier.
+        int score = 0;
+        for (int weekday = 1; weekday <= WEEK_DAYS; weekday++) {
+            int day = weekday;
+            List<SlotAssignment> dayAssignments = assignments.stream()
+                    .filter(entry -> entry.slot().weekday() == day)
+                    .sorted(Comparator.comparingInt(entry -> entry.slot().indexInDay()))
+                    .toList();
+
+            for (int index = 0; index < dayAssignments.size(); index++) {
+                SlotAssignment current = dayAssignments.get(index);
+                String subjectName = subjectName(current);
+                if (isHeavySubject(subjectName) && current.slot().indexInDay() >= 5) {
+                    score -= (current.slot().indexInDay() - 4) * 8;
+                }
+                if (usesPreferredHomeRoom(classId, subjectName, current.roomId())) {
+                    score += 2;
+                }
+                if (index > 0 && Objects.equals(dayAssignments.get(index - 1).subjectId(), current.subjectId())) {
+                    score -= 40;
+                }
+            }
+        }
+
+        for (Map.Entry<String, Integer> subjectTarget : subjectTargets.entrySet()) {
+            String subjectName = subjectTarget.getKey();
+            int totalOccurrences = subjectTarget.getValue();
+            long distinctDays = countDistinctDaysForSubject(assignments, subjectName);
+            if (totalOccurrences <= WEEK_DAYS) {
+                score += (int) distinctDays * 10;
+            }
+            for (int weekday = 1; weekday <= WEEK_DAYS; weekday++) {
+                int occurrencesPerDay = countAssignmentsForSubjectOnDay(assignments, weekday, subjectName);
+                if (occurrencesPerDay > 1 && totalOccurrences <= WEEK_DAYS) {
+                    score -= (occurrencesPerDay - 1) * 30;
+                }
+            }
+        }
+        return score;
     }
 
     private String assignedTeacherForClassSubject(Long classId, Long subjectId, Long ignoredEntryId) {
@@ -1027,6 +1206,18 @@ public class SchoolDataService {
 
     private boolean isHeavySubject(String subjectName) {
         return Set.of("Limba si literatura romana", "Matematica", "Informatica", "Informatica intensiv", "Fizica", "Limba engleza").contains(subjectName);
+    }
+
+    private boolean usesPreferredHomeRoom(Long classId, String subjectName, Long roomId) {
+        return !requiresSpecialRoom(subjectName) && Objects.equals(homeRoomIdsByClassId.get(classId), roomId);
+    }
+
+    private boolean requiresSpecialRoom(String subjectName) {
+        return Set.of("Informatica", "Informatica intensiv", "TIC", "Fizica", "Chimie", "Educatie fizica").contains(subjectName);
+    }
+
+    private String subjectName(SlotAssignment assignment) {
+        return requireSubject(assignment.subjectId()).name();
     }
 
     private int specialRoomPriority(String subjectName, Room room) {

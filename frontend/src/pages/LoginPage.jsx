@@ -1,19 +1,11 @@
-import { useMemo, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { CONFIG } from '../config/config'
 import { login } from '../services/authService'
 import AuthShowcasePage from './AuthShowcasePage'
 
 export default function LoginPage({ onLogin }) {
-  const location = useLocation()
-  const successMessage = useMemo(() => {
-    if (!location.state?.registered) {
-      return ''
-    }
-    return location.state.username ? `Contul ${location.state.username} a fost creat. Te poti autentifica acum.` : 'Contul a fost creat. Te poti autentifica acum.'
-  }, [location.state])
-
-  const [username, setUsername] = useState(location.state?.username || '')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -120,7 +112,6 @@ export default function LoginPage({ onLogin }) {
               <Link className="linkBtn" to="/">Prima pagina</Link>
             </div>
 
-            {successMessage && <div className="banner ok">{successMessage}</div>}
             {error && <div className="alert">{error}</div>}
           </form>
         </div>

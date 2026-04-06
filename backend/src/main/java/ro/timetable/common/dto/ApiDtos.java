@@ -17,6 +17,7 @@ import ro.timetable.common.dto.ApiDtos.GradeResponse;
 import ro.timetable.common.dto.ApiDtos.HealthResponse;
 import ro.timetable.common.dto.ApiDtos.LoginResponse;
 import ro.timetable.common.dto.ApiDtos.MeResponse;
+import ro.timetable.common.dto.ApiDtos.MailStatusResponse;
 import ro.timetable.common.dto.ApiDtos.NotificationDispatchResponse;
 import ro.timetable.common.dto.ApiDtos.NotificationResponse;
 import ro.timetable.common.dto.ApiDtos.ProfileResponse;
@@ -113,6 +114,17 @@ public final class ApiDtos {
             String message,
             boolean read,
             String created_at
+    ) {
+    }
+
+    public record MailStatusResponse(
+            boolean enabled,
+            boolean configured,
+            String smtp_host,
+            Integer smtp_port,
+            String delivery_mode,
+            String from_address,
+            String detail
     ) {
     }
 

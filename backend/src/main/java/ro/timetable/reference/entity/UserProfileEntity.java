@@ -1,21 +1,22 @@
 package ro.timetable.reference.entity;
 
-import jakarta.persistence.CollectionTable;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
-import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import java.util.ArrayList;
 import java.util.List;
+import ro.timetable.timetable.entity.TimetableEntryEntity;
 import ro.timetable.catalog.entity.StudentGradeEntity;
 import ro.timetable.notifications.entity.NotificationEntity;
-import ro.timetable.reference.model.SchoolClass;
-import ro.timetable.timetable.entity.TimetableEntryEntity;
 
 @Entity
 @Table(name = "user_profiles")
@@ -61,10 +62,18 @@ public class UserProfileEntity {
     @JoinColumn(name = "class_id")
     private SchoolClassEntity schoolClass;
 
-    @ElementCollection
-    @CollectionTable(name = "user_profile_subjects", joinColumns = @JoinColumn(name = "profile_id"))
-    @Column(name = "subject_name")
-    private List<String> subjectsTaught = new ArrayList<>();
+    // #manytomany Profesorii pot preda mai multe materii, iar o materie poate fi predata de mai multi profesori.
+    @ManyToMany
+    @JoinTable(
+            name = "user_profile_subject_links",
+            joinColumns = @JoinColumn(name = "profile_id"),
+            inverseJoinColumns = @JoinColumn(name = "subject_id")
+    )
+    private List<SubjectEntity> teachingSubjects = new ArrayList<>();
+
+    // #onetoone Fiecare profil are un singur set de preferinte, folosit acum si pentru email notifications.
+    @OneToOne(mappedBy = "profile", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private UserProfileSettingsEntity settings;
 
     @OneToMany(mappedBy = "recipient")
     private List<NotificationEntity> notifications = new ArrayList<>();
@@ -182,11 +191,22 @@ public class UserProfileEntity {
         this.schoolClass = schoolClass;
     }
 
-    public List<String> getSubjectsTaught() {
-        return subjectsTaught;
+    public List<SubjectEntity> getTeachingSubjects() {
+        return teachingSubjects;
     }
 
-    public void setSubjectsTaught(List<String> subjectsTaught) {
-        this.subjectsTaught = subjectsTaught;
+    public void setTeachingSubjects(List<SubjectEntity> teachingSubjects) {
+        this.teachingSubjects = teachingSubjects == null ? new ArrayList<>() : new ArrayList<>(teachingSubjects);
+    }
+
+    public UserProfileSettingsEntity getSettings() {
+        return settings;
+    }
+
+    public void setSettings(UserProfileSettingsEntity settings) {
+        this.settings = settings;
+        if (settings != null) {
+            settings.setProfile(this);
+        }
     }
 }

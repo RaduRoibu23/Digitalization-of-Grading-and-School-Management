@@ -20,6 +20,7 @@ public class FeedbackService {
 
     private static final int MAX_MESSAGE_LENGTH = 2000;
     private static final int NOTIFICATION_REPLY_PREVIEW_LENGTH = 180;
+    private static final String SOURCE_HELP = "HELP";
 
     private final AuditService auditService;
     private final FeedbackEntryRepository feedbackEntryRepository;
@@ -46,6 +47,7 @@ public class FeedbackService {
                 : feedbackEntryRepository.findBySubmittedByUsernameOrderByCreatedAtDescIdDesc(actorUsername);
 
         return entities.stream()
+                .filter(this::isHelpEntry)
                 .map(entity -> toResponse(entity, reviewer))
                 .toList();
     }
@@ -71,7 +73,7 @@ public class FeedbackService {
 
         schoolDataService.getProfile(actorUsername);
 
-        String normalizedCategory = normalizeCategory(category);
+        String normalizedCategory = normalizeHelpCategory(category);
         String normalizedSatisfaction = normalizeSatisfaction(satisfaction);
         String normalizedMessage = normalizeMessage(message);
 
@@ -79,6 +81,7 @@ public class FeedbackService {
         entity.setSubmittedByUsername(actorUsername);
         entity.setCategory(normalizedCategory);
         entity.setSatisfaction(normalizedSatisfaction);
+        entity.setSource(SOURCE_HELP);
         entity.setWantsContact(wantsContact);
         entity.setMessage(normalizedMessage);
         entity.setStatus("UNOPENED");
@@ -87,12 +90,12 @@ public class FeedbackService {
         FeedbackEntryEntity saved = feedbackEntryRepository.save(entity);
         notificationService.createNotifications(
                 reviewerUsernames(),
-                "Feedback nou de la " + actorUsername + " pentru categoria " + labelForCategory(normalizedCategory)
+                "Cerere Help noua de la " + actorUsername + " pentru categoria " + labelForCategory(normalizedCategory, SOURCE_HELP)
         );
         auditService.record(
-                "Trimitere feedback",
+                "Trimitere Help",
                 actorUsername,
-                "A fost trimis feedback pentru categoria " + labelForCategory(normalizedCategory)
+                "A fost trimisa o cerere Help pentru categoria " + labelForCategory(normalizedCategory, SOURCE_HELP)
         );
         return toResponse(saved, canReview(roles));
     }
@@ -123,6 +126,10 @@ public class FeedbackService {
         ensureReviewer(roles);
 
         FeedbackEntryEntity entity = accessibleEntry(feedbackId, actorUsername, true);
+        String source = entity.getSource() == null || entity.getSource().isBlank() ? SOURCE_HELP : entity.getSource();
+        if (!SOURCE_HELP.equals(source)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Feedback-ul anonim nu accepta reply");
+        }
         if (!entity.isWantsContact()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Elevul nu a solicitat sa fie contactat pentru acest feedback");
         }
@@ -163,18 +170,22 @@ public class FeedbackService {
     }
 
     private FeedbackEntryEntity accessibleEntry(Long feedbackId, String actorUsername, boolean reviewer) {
-        return reviewer
+        FeedbackEntryEntity entity = reviewer
                 ? feedbackEntryRepository.findById(feedbackId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Feedback-ul nu a fost gasit"))
                 : feedbackEntryRepository.findByIdAndSubmittedByUsername(feedbackId, actorUsername)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Feedback-ul nu a fost gasit"));
+        if (!isHelpEntry(entity)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Feedback-ul nu a fost gasit");
+        }
+        return entity;
     }
 
     private boolean canReview(List<String> roles) {
         return roles.contains("secretariat") || roles.contains("admin") || roles.contains("sysadmin");
     }
 
-    private String normalizeCategory(String category) {
+    private String normalizeHelpCategory(String category) {
         String normalized = category == null ? null : category.trim().toLowerCase(Locale.ROOT);
         return switch (normalized) {
             case "general", "orar", "catalog", "documente", "cont" -> normalized;
@@ -228,7 +239,12 @@ public class FeedbackService {
         return usernames.stream().distinct().toList();
     }
 
-    private String labelForCategory(String category) {
+    private boolean isHelpEntry(FeedbackEntryEntity entity) {
+        String source = entity.getSource();
+        return source == null || source.isBlank() || SOURCE_HELP.equals(source);
+    }
+
+    private String labelForCategory(String category, String source) {
         return switch (category) {
             case "orar" -> "Orar";
             case "catalog" -> "Catalog";
@@ -258,7 +274,7 @@ public class FeedbackService {
     }
 
     private String buildReplyNotificationMessage(String category, String replyMessage) {
-        String prefix = "Raspuns la feedback-ul tau (" + labelForCategory(category) + "): ";
+        String prefix = "Raspuns la cererea ta Help (" + labelForCategory(category, SOURCE_HELP) + "): ";
         String normalizedReplyMessage = replyMessage.replaceAll("\\s+", " ").trim();
         if (normalizedReplyMessage.length() <= NOTIFICATION_REPLY_PREVIEW_LENGTH) {
             return prefix + normalizedReplyMessage;
@@ -270,7 +286,7 @@ public class FeedbackService {
         return new FeedbackEntryResponse(
                 entity.getId(),
                 entity.getCategory(),
-                labelForCategory(entity.getCategory()),
+                labelForCategory(entity.getCategory(), SOURCE_HELP),
                 entity.getSatisfaction(),
                 labelForSatisfaction(entity.getSatisfaction()),
                 entity.isWantsContact(),

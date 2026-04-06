@@ -36,7 +36,14 @@ function buildBody(body) {
 async function createHttpError(response) {
   const text = await response.text()
   const data = parseJsonSafely(text)
-  const message = data?.error_description || data?.error || data?.message || data?.detail || response.statusText || `Error ${response.status}`
+  const firstFieldError = data?.field_errors ? Object.values(data.field_errors)[0] : null
+  const message = data?.error_description
+    || data?.detail
+    || data?.message
+    || firstFieldError
+    || data?.error
+    || response.statusText
+    || `Error ${response.status}`
   const error = new Error(message)
   error.status = response.status
   error.payload = data

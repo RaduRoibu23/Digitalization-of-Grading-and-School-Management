@@ -3116,6 +3116,31 @@ body::after{
   color: #b3f7d8;
 }
 
+.feedbackSourcePill{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.feedbackSourcePill.is-help{
+  background: rgba(126,224,199,0.14);
+  border-color: rgba(126,224,199,0.28);
+  color: #c6fff0;
+}
+
+.feedbackSourcePill.is-app-feedback{
+  background: rgba(110,168,254,0.16);
+  border-color: rgba(110,168,254,0.3);
+  color: #cfe2ff;
+}
+
 .feedbackDetailPanel{
   overflow: hidden;
 }
@@ -3271,4 +3296,8 @@ body::after{
   .feedbackContactChoice{
     width: 100%;
   }
+}
+
+.publicFormCard{
+  text-align: left;
 }

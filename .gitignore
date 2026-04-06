@@ -4,7 +4,6 @@ token-*.json
 
 # Environment files
 .env
-!.env.example
 
 # Build outputs
 frontend/dist/

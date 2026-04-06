@@ -20,7 +20,7 @@ public class FeedbackEntryEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "submitted_by_username", nullable = false, length = 100)
+    @Column(name = "submitted_by_username", length = 100)
     private String submittedByUsername;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -32,6 +32,9 @@ public class FeedbackEntryEntity {
 
     @Column(nullable = false, length = 20)
     private String satisfaction;
+
+    @Column(nullable = false, length = 30)
+    private String source;
 
     @Column(name = "wants_contact", nullable = false)
     private boolean wantsContact;
@@ -98,6 +101,14 @@ public class FeedbackEntryEntity {
 
     public void setSatisfaction(String satisfaction) {
         this.satisfaction = satisfaction;
+    }
+
+    public String getSource() {
+        return source;
+    }
+
+    public void setSource(String source) {
+        this.source = source;
     }
 
     public boolean isWantsContact() {

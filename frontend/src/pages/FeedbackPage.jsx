@@ -253,7 +253,7 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
         wants_contact: false,
         message: '',
       })
-      await loadEntries({ type: 'ok', text: 'Feedback-ul a fost trimis.' })
+      await loadEntries({ type: 'ok', text: 'Cererea Help a fost trimisa.' })
       navigate(`/app/feedback/${created.id}`)
     } catch (error) {
       setBanner({ type: 'error', text: String(error?.message || error) })
@@ -274,7 +274,7 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
       setActiveEntry(updated)
       setStatusDraft(updated.status || 'UNOPENED')
       setEntries((current) => updateEntries(current, updated))
-      setBanner({ type: 'ok', text: 'Statusul feedback-ului a fost actualizat.' })
+      setBanner({ type: 'ok', text: 'Statusul cererii Help a fost actualizat.' })
     } catch (error) {
       setBanner({ type: 'error', text: String(error?.message || error) })
     } finally {
@@ -299,7 +299,7 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
       setReplyDraft(updated.reply_message || '')
       setStatusDraft(updated.status || 'UNOPENED')
       setEntries((current) => updateEntries(current, updated))
-      setBanner({ type: 'ok', text: 'Reply-ul a fost trimis catre elev.' })
+      setBanner({ type: 'ok', text: 'Reply-ul a fost trimis.' })
     } catch (error) {
       setBanner({ type: 'error', text: String(error?.message || error) })
     } finally {
@@ -319,19 +319,19 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
   const canSendReply = Boolean(
     activeEntry?.can_reply && replyDraft.trim().length > 0 && replyDraft.trim().length <= 2000 && !saving
   )
-  const scopeLabel = canReview ? 'Toate mesajele din platforma' : 'Mesajele mele'
+  const scopeLabel = canReview ? 'Toate cererile Help din platforma' : 'Cererile Help trimise de mine'
   const emptyListMessage =
     statusFilter === 'ALL'
-      ? 'Nu exista feedback trimis inca.'
+      ? 'Nu exista cereri Help trimise inca.'
       : 'Nu exista mesaje pentru filtrul selectat.'
 
   return (
     <section className="contentCard">
       <div className="contentHeader">
         <div>
-          <div className="title">Feedback</div>
+          <div className="title">Help</div>
           <div className="subtitle">
-            Inbox de lucru pentru feedback, statusuri si reply catre elevi.
+            Inbox de lucru pentru cereri Help, statusuri si reply catre utilizatori.
           </div>
         </div>
       </div>
@@ -340,12 +340,12 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
 
       <div className="feedbackWorkspaceShell">
         <div className="feedbackIntroCard">
-          <div className="feedbackKicker">Flux feedback</div>
-          <div className="feedbackHeroTitle">Trimite un mesaj nou si urmareste raspunsul in acelasi loc.</div>
+          <div className="feedbackKicker">Flux Help</div>
+          <div className="feedbackHeroTitle">Trimite o cerere Help si urmareste raspunsul in acelasi loc.</div>
           <div className="feedbackHeroText">
             {canReview
-              ? 'Secretariatul si administratorii pot parcurge mesajele ca intr-un inbox, pot schimba statusul si pot raspunde direct elevului.'
-              : 'Mesajele tale apar in inbox cu ruta proprie, iar daca ai cerut contact, reply-ul primit apare direct in detaliul mesajului si in notificari.'}
+              ? 'Secretariatul si administratorii pot parcurge cererile Help ca intr-un inbox, pot schimba statusul si pot raspunde direct din panoul dedicat.'
+              : 'Cererea ta ramane pe ruta proprie, iar daca ai cerut contact, reply-ul primit apare direct in detaliu, in notificari si pe email.'}
           </div>
 
           <div className="feedbackHeroStats">
@@ -371,8 +371,8 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
         <div className="feedbackComposerCard">
           <div className="feedbackComposerHeader">
             <div>
-              <div className="feedbackPanelTitle">Mesaj nou</div>
-              <div className="mutedSmall">Completeaza feedback-ul si intra direct in conversatia lui.</div>
+              <div className="feedbackPanelTitle">Cerere noua in Help</div>
+              <div className="mutedSmall">Completeaza cererea si urmareste statusul sau reply-ul in acelasi loc.</div>
             </div>
           </div>
 
@@ -395,7 +395,7 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
               </div>
 
               <div className="field">
-                <label className="label">Tip feedback</label>
+                <label className="label">Tip mesaj</label>
                 <div className="feedbackRadioWrap">
                   {SATISFACTION_OPTIONS.map((option) => (
                     <label key={option.value} className="feedbackInlineChoice">
@@ -421,7 +421,7 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
                 onChange={(event) => updateField('wants_contact', event.target.checked)}
                 disabled={saving}
               />
-              <span>Doresc sa fiu contactat pentru acest feedback</span>
+              <span>Doresc sa fiu contactat pentru aceasta cerere Help</span>
             </label>
 
             <div className="field">
@@ -433,7 +433,7 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
                 maxLength={2000}
                 rows={6}
                 disabled={saving}
-                placeholder="Descrie clar ce functioneaza bine sau ce ar trebui imbunatatit."
+                placeholder="Descrie clar ce ai nevoie sau ce ar trebui verificat."
                 style={{ minHeight: 150, resize: 'vertical' }}
               />
               <div className="feedbackTextareaMeta">
@@ -444,7 +444,7 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
 
             <div className="feedbackComposerActions">
               <button className="btn primary" onClick={submitFeedback} disabled={!canSubmit || saving}>
-                {saving ? 'Se trimite...' : 'Trimite feedback'}
+                {saving ? 'Se trimite...' : 'Trimite cerere Help'}
               </button>
             </div>
           </div>
@@ -465,7 +465,7 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
                 value={statusFilter}
                 onChange={(event) => setStatusFilter(event.target.value)}
                 disabled={listLoading}
-                aria-label="Filtreaza feedback-ul dupa status"
+                aria-label="Filtreaza mesajele dupa status"
               >
                 {STATUS_FILTER_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -586,13 +586,13 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
               </div>
 
               <div className="feedbackSectionBlock">
-                <div className="feedbackSectionTitle">Mesajul trimis</div>
+                <div className="feedbackSectionTitle">Cererea Help trimisa</div>
                 <div className="feedbackMessageBody">{activeEntry.message}</div>
               </div>
 
               {activeEntry.reply_message && (
                 <div className="feedbackSectionBlock feedbackReplyBlock">
-                  <div className="feedbackSectionTitle">Reply trimis elevului</div>
+                  <div className="feedbackSectionTitle">Reply trimis</div>
                   <div className="feedbackReplyMeta">
                     {activeEntry.replied_by_username || '-'} / {formatDate(activeEntry.replied_at)}
                   </div>
@@ -627,8 +627,8 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
                 <div className="feedbackSectionTitle">Optiuni de contact</div>
                 <div className="mutedSmall" style={{ marginBottom: activeEntry.can_reply ? 12 : 0 }}>
                   {activeEntry.wants_contact
-                    ? 'Elevul a cerut sa fie contactat. Reply-ul trimis aici ajunge si in notificari.'
-                    : 'Elevul nu a cerut contact pentru acest mesaj.'}
+                    ? 'Utilizatorul a cerut sa fie contactat. Reply-ul trimis aici ajunge in notificari si pe email.'
+                    : 'Utilizatorul nu a cerut contact pentru acest mesaj.'}
                 </div>
 
                 {activeEntry.can_reply && (
@@ -640,11 +640,11 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
                       maxLength={2000}
                       rows={5}
                       disabled={saving}
-                      placeholder="Scrie reply-ul care va fi trimis elevului."
+                      placeholder="Scrie reply-ul care va fi trimis utilizatorului."
                       style={{ minHeight: 130, resize: 'vertical' }}
                     />
                     <div className="feedbackTextareaMeta">
-                      <span>Reply-ul ramane asociat mesajului si este trimis si ca notificare.</span>
+                      <span>Reply-ul ramane asociat cererii Help si este trimis si ca notificare.</span>
                       <strong>{replyDraft.trim().length}/2000</strong>
                     </div>
                     <div className="feedbackActionRow">

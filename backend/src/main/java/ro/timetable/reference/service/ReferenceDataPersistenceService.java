@@ -1,13 +1,16 @@
 package ro.timetable.reference.service;
 
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ro.timetable.reference.entity.RoomEntity;
 import ro.timetable.reference.entity.SchoolClassEntity;
 import ro.timetable.reference.entity.SubjectEntity;
 import ro.timetable.reference.entity.UserProfileEntity;
+import ro.timetable.reference.entity.UserProfileSettingsEntity;
 import ro.timetable.reference.model.Room;
 import ro.timetable.reference.model.SchoolClass;
 import ro.timetable.reference.model.Subject;
@@ -69,7 +72,7 @@ public class ReferenceDataPersistenceService {
         schoolClassRepository.saveAll(classes.stream().map(this::toEntity).toList());
         subjectRepository.saveAll(subjects.stream().map(this::toEntity).toList());
         roomRepository.saveAll(rooms.stream().map(this::toEntity).toList());
-        userProfileRepository.saveAll(profiles.stream().map(this::toEntity).toList());
+        userProfileRepository.saveAll(profiles.stream().map(profile -> toEntity(profile, false)).toList());
     }
 
     @Transactional(readOnly = true)
@@ -117,7 +120,7 @@ public class ReferenceDataPersistenceService {
 
     @Transactional
     public void saveUserProfile(UserProfile profile) {
-        userProfileRepository.save(toEntity(profile));
+        userProfileRepository.save(toEntity(profile, true));
     }
 
     private UserProfile toModel(UserProfileEntity entity) {
@@ -136,7 +139,7 @@ public class ReferenceDataPersistenceService {
                 entity.getFatherInitial(),
                 entity.getSchoolClass() == null ? null : entity.getSchoolClass().getId(),
                 entity.getSchoolClass() == null ? null : entity.getSchoolClass().getName(),
-                entity.getSubjectsTaught() == null ? List.of() : List.copyOf(entity.getSubjectsTaught())
+                toSortedSubjectNames(entity)
         );
     }
 
@@ -165,7 +168,7 @@ public class ReferenceDataPersistenceService {
         return entity;
     }
 
-    private UserProfileEntity toEntity(UserProfile profile) {
+    private UserProfileEntity toEntity(UserProfile profile, boolean preserveExistingSettings) {
         UserProfileEntity entity = new UserProfileEntity();
         entity.setId(profile.id());
         entity.setVersion(profile.version());
@@ -179,10 +182,57 @@ public class ReferenceDataPersistenceService {
         entity.setIdSeries(profile.idSeries());
         entity.setSerialNumber(profile.serialNumber());
         entity.setFatherInitial(profile.fatherInitial());
-        entity.setSubjectsTaught(profile.subjectsTaught());
+        entity.setTeachingSubjects(resolveTeachingSubjects(profile.subjectsTaught()));
+        entity.setSettings(resolveSettings(profile.id(), preserveExistingSettings));
         if (profile.classId() != null) {
             entity.setSchoolClass(schoolClassRepository.getReferenceById(profile.classId()));
         }
         return entity;
+    }
+
+    // #manytomany Mapam relatia ORM many-to-many inapoi la lista de nume folosita de API-uri si de serviciile existente.
+    private List<String> toSortedSubjectNames(UserProfileEntity entity) {
+        return entity.getTeachingSubjects() == null
+                ? List.of()
+                : entity.getTeachingSubjects().stream()
+                .map(SubjectEntity::getName)
+                .sorted()
+                .toList();
+    }
+
+    private List<SubjectEntity> resolveTeachingSubjects(List<String> subjectNames) {
+        if (subjectNames == null || subjectNames.isEmpty()) {
+            return List.of();
+        }
+
+        List<SubjectEntity> loadedSubjects = subjectRepository.findByNameIn(subjectNames);
+        Map<String, SubjectEntity> subjectsByName = new LinkedHashMap<>();
+        for (SubjectEntity subject : loadedSubjects) {
+            subjectsByName.put(subject.getName(), subject);
+        }
+
+        return subjectNames.stream()
+                .distinct()
+                .map(subjectName -> {
+                    SubjectEntity subject = subjectsByName.get(subjectName);
+                    if (subject == null) {
+                        throw new IllegalArgumentException("Materia nu exista in persistenta: " + subjectName);
+                    }
+                    return subject;
+                })
+                .toList();
+    }
+
+    private UserProfileSettingsEntity resolveSettings(Long profileId, boolean preserveExistingSettings) {
+        UserProfileSettingsEntity settings = new UserProfileSettingsEntity();
+        boolean emailNotificationsEnabled = true;
+        if (preserveExistingSettings && profileId != null) {
+            emailNotificationsEnabled = userProfileRepository.findById(profileId)
+                    .map(UserProfileEntity::getSettings)
+                    .map(UserProfileSettingsEntity::isEmailNotificationsEnabled)
+                    .orElse(true);
+        }
+        settings.setEmailNotificationsEnabled(emailNotificationsEnabled);
+        return settings;
     }
 }

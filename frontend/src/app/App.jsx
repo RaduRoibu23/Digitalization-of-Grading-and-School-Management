@@ -31,7 +31,7 @@ function App() {
     setSession(tokens)
   }
 
-  const isCenteredPublicRoute = location.pathname === '/login'
+  const isCenteredPublicRoute = ['/login'].includes(location.pathname)
   const isLandingRoute = location.pathname === '/'
   const isPublicRoute = isCenteredPublicRoute || isLandingRoute
 

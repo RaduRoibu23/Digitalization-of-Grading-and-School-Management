@@ -3,6 +3,8 @@ package ro.timetable.common.exception;
 import jakarta.validation.ConstraintViolationException;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +17,8 @@ import ro.timetable.common.dto.ApiDtos.ApiErrorResponse;
 
 @RestControllerAdvice
 public class RestExceptionHandler {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(RestExceptionHandler.class);
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
@@ -71,6 +75,7 @@ public class RestExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleUnexpected(Exception ex) {
+        LOGGER.error("Unexpected server error", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ApiErrorResponse(
                 "internal_error",
                 "Unexpected server error",

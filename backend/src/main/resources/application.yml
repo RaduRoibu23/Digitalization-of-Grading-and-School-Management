@@ -20,6 +20,18 @@ spring:
     baseline-on-migrate: true
     locations: classpath:db/migration
 
+  mail:
+    host: ${SPRING_MAIL_HOST:sandbox.smtp.mailtrap.io}
+    port: ${SPRING_MAIL_PORT:2525}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SPRING_MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${SPRING_MAIL_SMTP_STARTTLS_ENABLE:true}
+
   security:
     oauth2:
       resourceserver:
@@ -34,6 +46,12 @@ keycloak:
   admin:
     username: ${KEYCLOAK_ADMIN_USERNAME:admin}
     password: ${KEYCLOAK_ADMIN_PASSWORD:change-me-admin-password}
+
+app:
+  mail:
+    enabled: ${APP_MAIL_ENABLED:false}
+    from-address: ${APP_MAIL_FROM_ADDRESS:no-reply@timetable.local}
+    from-name: ${APP_MAIL_FROM_NAME:Digitalization of Grading and School Management}
 
 springdoc:
   api-docs:

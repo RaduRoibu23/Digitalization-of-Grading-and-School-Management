@@ -9,7 +9,7 @@ export const NAV_ITEMS = [
   { id: 'create-account', path: 'creeaza-cont', label: 'Creeaza cont', allowedRoles: ['sysadmin'] },
   { id: 'catalog', path: 'catalog', label: 'Catalog', allowedRoles: ['student', 'professor', 'secretariat', 'admin', 'sysadmin'] },
   { id: 'documents', path: 'documente', label: 'Documente', allowedRoles: ['student', 'secretariat', 'sysadmin'] },
-  { id: 'feedback', path: 'feedback', label: 'Feedback', allowedRoles: [] },
+  { id: 'feedback', path: 'feedback', label: 'Help', allowedRoles: [] },
   { id: 'profile', path: 'profil', label: 'Date personale', allowedRoles: [] },
 ]
 
