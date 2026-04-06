@@ -12,7 +12,6 @@ Monorepo pentru o platforma scolara care reuneste catalogul digital, generarea o
 |-- docs/
 |-- scripts/
 |-- .github/workflows/
-|-- render.yaml
 |-- README.md
 `-- LICENSE
 ```
@@ -62,6 +61,5 @@ Sau foloseste scripturile helper:
 
 - `.github/workflows/frontend-ci.yml` construieste frontend-ul cu Node.js.
 - `.github/workflows/backend-ci.yml` construieste backend-ul cu Maven si Java 17.
-- `render.yaml` ofera un punct de plecare pentru publicarea backend-ului pe Render.
 
 Documentatia suplimentara se afla in `docs/architecture.md`, `docs/api.md` si `docs/database.md`.

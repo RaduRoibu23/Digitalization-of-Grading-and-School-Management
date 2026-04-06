@@ -25,6 +25,9 @@ public class MailService {
     private static final Logger LOGGER = LoggerFactory.getLogger(MailService.class);
     private static final String AUTOMATED_FOOTER = "Acest email a fost generat automat. Do not reply.";
     private static final String MAILTRAP_SANDBOX_HOST = "sandbox.smtp.mailtrap.io";
+    private static final long MAILTRAP_SANDBOX_MIN_INTERVAL_MS = 1200L;
+    private static final long MAILTRAP_SANDBOX_RETRY_DELAY_MS = 5000L;
+    private static final String MAILTRAP_RATE_LIMIT_MESSAGE = "Too many emails per second";
 
     private record MailConfigurationStatus(boolean enabled, boolean configured, boolean sandbox, String detail) {
     }
@@ -33,6 +36,8 @@ public class MailService {
     private final AtomicBoolean disabledWarningLogged = new AtomicBoolean(false);
     private final AtomicBoolean missingCredentialsWarningLogged = new AtomicBoolean(false);
     private final AtomicBoolean sandboxWarningLogged = new AtomicBoolean(false);
+    private final Object sandboxRateLock = new Object();
+    private long lastSandboxSendAt = 0L;
 
     @Value("${app.mail.enabled:false}")
     private boolean mailEnabled;
@@ -123,7 +128,13 @@ public class MailService {
         }
 
         try {
-            sendHtmlEmail(normalizedEmail, "Email de test din platforma scolara", "Test email pentru " + fallbackRecipientName(recipientName), detailLines);
+            sendHtmlEmailWithSandboxProtection(
+                    normalizedEmail,
+                    "Email de test din platforma scolara",
+                    "Test email pentru " + fallbackRecipientName(recipientName),
+                    detailLines,
+                    status.sandbox()
+            );
         } catch (Exception exception) {
             throw new ResponseStatusException(BAD_GATEWAY, "Emailul de test nu a putut fi trimis. Verifica setarile SMTP.");
         }
@@ -155,7 +166,7 @@ public class MailService {
         }
 
         try {
-            sendHtmlEmail(normalizedEmail, subject, headline, detailLines);
+            sendHtmlEmailWithSandboxProtection(normalizedEmail, subject, headline, detailLines, status.sandbox());
         } catch (Exception exception) {
             LOGGER.warn("Could not send email to {}", normalizedEmail, exception);
         }
@@ -195,6 +206,76 @@ public class MailService {
         }
 
         return new MailConfigurationStatus(true, true, false, "Trimiterea emailurilor este activa.");
+    }
+
+    private void sendHtmlEmailWithSandboxProtection(
+            String normalizedEmail,
+            String subject,
+            String headline,
+            List<String> detailLines,
+            boolean sandbox
+    ) throws Exception {
+        throttleSandboxIfNeeded(sandbox);
+        try {
+            sendHtmlEmail(normalizedEmail, subject, headline, detailLines);
+        } catch (Exception exception) {
+            if (!sandbox || !isSandboxRateLimit(exception)) {
+                throw exception;
+            }
+
+            waitForSandboxRetry();
+            sendHtmlEmail(normalizedEmail, subject, headline, detailLines);
+        }
+    }
+
+    private void throttleSandboxIfNeeded(boolean sandbox) {
+        if (!sandbox) {
+            return;
+        }
+
+        synchronized (sandboxRateLock) {
+            long now = System.currentTimeMillis();
+            long waitTime = MAILTRAP_SANDBOX_MIN_INTERVAL_MS - (now - lastSandboxSendAt);
+            if (waitTime > 0) {
+                try {
+                    // Mailtrap Sandbox limiteaza trimiterea rapida, asa ca spatiem mailurile automate.
+                    Thread.sleep(waitTime);
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("Trimiterea emailului a fost intrerupta", exception);
+                }
+            }
+            lastSandboxSendAt = System.currentTimeMillis();
+        }
+    }
+
+    private void waitForSandboxRetry() {
+        synchronized (sandboxRateLock) {
+            sleepSafely(MAILTRAP_SANDBOX_RETRY_DELAY_MS);
+            lastSandboxSendAt = System.currentTimeMillis();
+        }
+    }
+
+    private boolean isSandboxRateLimit(Exception exception) {
+        Throwable current = exception;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null && message.contains(MAILTRAP_RATE_LIMIT_MESSAGE)) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private void sleepSafely(long waitTime) {
+        try {
+            // Mailtrap Sandbox limiteaza trimiterea rapida, asa ca spatiem mailurile automate si re-incercam la nevoie.
+            Thread.sleep(waitTime);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Trimiterea emailului a fost intrerupta", exception);
+        }
     }
 
     private void sendHtmlEmail(String normalizedEmail, String subject, String headline, List<String> detailLines) throws Exception {

@@ -41,28 +41,28 @@ export default function ProfileScreen({ accessToken, roles }) {
   }, [accessToken]);
 
   const username = pickFirst(
+    me?.username,
     tokenInfo?.preferred_username,
     tokenInfo?.username,
-    me?.username,
     me?.user,
     me?.email
   );
 
   const firstName = pickFirst(
-    tokenInfo?.given_name,
     me?.first_name,
     me?.firstName,
-    me?.given_name
+    me?.given_name,
+    tokenInfo?.given_name
   );
 
   const lastName = pickFirst(
-    tokenInfo?.family_name,
     me?.last_name,
     me?.lastName,
-    me?.family_name
+    me?.family_name,
+    tokenInfo?.family_name
   );
 
-  const email = pickFirst(tokenInfo?.email, me?.email);
+  const email = pickFirst(me?.email, tokenInfo?.email);
   const address = pickFirst(me?.address);
   const cnp = pickFirst(me?.cnp);
   const series = pickFirst(me?.series);
@@ -88,7 +88,7 @@ export default function ProfileScreen({ accessToken, roles }) {
       <div className="contentHeader">
         <div>
           <div className="title">Date personale</div>
-          <div className="subtitle">Profil utilizator (din /me + token).</div>
+          <div className="subtitle">Profil utilizator din aplicatie, cu fallback la datele din token doar daca lipsesc.</div>
         </div>
       </div>
 

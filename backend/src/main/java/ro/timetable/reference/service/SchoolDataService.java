@@ -26,7 +26,6 @@ import ro.timetable.common.dto.ApiDtos.ProfileResponse;
 import ro.timetable.common.dto.ApiDtos.TimetableGenerationResponse;
 import ro.timetable.common.dto.ApiDtos;
 import ro.timetable.common.util.PersistentStateService;
-import ro.timetable.notifications.service.NotificationService;
 import ro.timetable.reference.model.Room;
 import ro.timetable.reference.model.SchoolClass;
 import ro.timetable.reference.model.Subject;
@@ -95,7 +94,6 @@ public class SchoolDataService {
 
     private final CurriculumPlanService curriculumPlanService;
     private final PersistentStateService persistentStateService;
-    private final NotificationService notificationService;
     private final ReferenceDataPersistenceService referenceDataPersistenceService;
     private final Map<Long, SchoolClass> classes = new LinkedHashMap<>();
     private final Map<Long, Subject> subjects = new LinkedHashMap<>();
@@ -112,12 +110,10 @@ public class SchoolDataService {
     public SchoolDataService(
             CurriculumPlanService curriculumPlanService,
             PersistentStateService persistentStateService,
-            NotificationService notificationService,
             ReferenceDataPersistenceService referenceDataPersistenceService
     ) {
         this.curriculumPlanService = curriculumPlanService;
         this.persistentStateService = persistentStateService;
-        this.notificationService = notificationService;
         this.referenceDataPersistenceService = referenceDataPersistenceService;
     }
 
@@ -492,35 +488,14 @@ public class SchoolDataService {
                         existing.weekday(),
                         existing.indexInDay(),
                         existing.version() + 1
-                );
-                entries.set(index, updated);
-                persistentStateService.saveTimetableEntry(updated);
-                notifyStudentsAboutTimetableChange(updated);
-                return updated;
-            }
-        }
-        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Timetable entry not found");
-    }
-
-    private void notifyStudentsAboutTimetableChange(TimetableEntry entry) {
-        List<String> recipients = getStudentUsernamesForClass(entry.classId());
-        if (recipients.isEmpty()) {
-            return;
-        }
-        notificationService.createNotifications(recipients, buildTimetableChangeMessage(entry));
-    }
-
-    private String buildTimetableChangeMessage(TimetableEntry entry) {
-        return "Orarul tau a fost modificat: "
-                + weekdayLabel(entry.weekday())
-                + ", "
-                + slotTimeLabel(entry.indexInDay())
-                + " - "
-                + entry.subjectName()
-                + " in sala "
-                + entry.roomName()
-                + ".";
-    }
+                  );
+                  entries.set(index, updated);
+                  persistentStateService.saveTimetableEntry(updated);
+                  return updated;
+              }
+          }
+          throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Timetable entry not found");
+      }
 
     private String weekdayLabel(Integer weekday) {
         return switch (weekday == null ? 0 : weekday) {

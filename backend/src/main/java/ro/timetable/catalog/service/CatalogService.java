@@ -199,6 +199,10 @@ public class CatalogService {
                 grades.set(index, updated);
                 sortGrades(grades);
                 persistentStateService.saveGrade(updated);
+                notificationService.createNotifications(
+                        List.of(existing.studentUsername()),
+                        "Nota la materia " + existing.subjectName() + " a fost actualizata. Valoarea curenta este " + gradeValue + "."
+                );
                 auditService.record(
                         "Actualizare nota",
                         requesterUsername,
@@ -228,6 +232,10 @@ public class CatalogService {
                 }
                 grades.remove(index);
                 persistentStateService.deleteGrade(gradeId);
+                notificationService.createNotifications(
+                        List.of(existing.studentUsername()),
+                        "O nota la materia " + existing.subjectName() + " a fost stearsa."
+                );
                 auditService.record(
                         "Stergere nota",
                         requesterUsername,

@@ -115,21 +115,6 @@ public class NotificationController {
         }
 
         String targetType = request.target_type().trim().toLowerCase();
-        if ("class".equals(targetType)) {
-            if (request.target_id() == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "target_id is required for class notifications");
-            }
-            List<String> recipients = schoolDataService.getStudentUsernamesForClass(request.target_id());
-            notificationService.createNotifications(recipients, request.message());
-            auditService.record(
-                    "Trimitere notificare",
-                    username(authentication),
-                    "A fost trimisa o notificare catre clasa " + schoolDataService.getClassById(request.target_id()).name()
-                            + " pentru " + recipients.size() + " destinatari"
-            );
-            return new NotificationDispatchResponse("Notifications sent", recipients.size(), null);
-        }
-
         if ("user".equals(targetType)) {
             if (request.target_username() == null || request.target_username().isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "target_username is required for user notifications");
@@ -144,7 +129,7 @@ public class NotificationController {
             return new NotificationDispatchResponse("Notification sent", null, notification);
         }
 
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported notification target");
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sunt permise doar notificarile trimise catre un singur utilizator");
     }
 
     private UserProfile resolveTestRecipient(TestEmailRequest request, String requesterUsername) {
