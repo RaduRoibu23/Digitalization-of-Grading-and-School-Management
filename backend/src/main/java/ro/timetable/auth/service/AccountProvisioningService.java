@@ -18,6 +18,7 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
 import ro.timetable.common.dto.ApiDtos.ProfileResponse;
+import ro.timetable.reference.model.UserProfile;
 import ro.timetable.reference.service.SchoolDataService;
 import static org.springframework.http.HttpStatus.BAD_GATEWAY;
 import static org.springframework.http.HttpStatus.CONFLICT;
@@ -25,6 +26,9 @@ import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
 
 @Service
 public class AccountProvisioningService {
+
+    public record IdentitySyncResult(int synchronizedCount, int skippedCount) {
+    }
 
     private final RestTemplate restTemplate;
     private final SchoolDataService schoolDataService;
@@ -76,6 +80,41 @@ public class AccountProvisioningService {
             deleteKeycloakUser(accessToken, userId);
             throw exception;
         }
+    }
+
+    public void syncManagedAccountProfile(String username, String firstName, String lastName, String email) {
+        String normalizedUsername = username == null ? null : username.trim().toLowerCase(Locale.ROOT);
+        String accessToken = adminAccessToken();
+        String userId = findUserIdOrNull(accessToken, normalizedUsername);
+        if (userId == null) {
+            throw new ResponseStatusException(BAD_GATEWAY, "Managed account not found in Keycloak");
+        }
+        updateKeycloakUser(accessToken, userId, normalizedUsername, firstName, lastName, email);
+    }
+
+    public IdentitySyncResult syncManagedAccounts() {
+        String accessToken = adminAccessToken();
+        int synchronizedAccounts = 0;
+        int skippedAccounts = 0;
+
+        for (UserProfile profile : schoolDataService.getUserProfilesByRole(null)) {
+            String userId = findUserIdOrNull(accessToken, profile.username());
+            if (userId == null) {
+                skippedAccounts++;
+                continue;
+            }
+            updateKeycloakUser(
+                    accessToken,
+                    userId,
+                    profile.username(),
+                    profile.firstName(),
+                    profile.lastName(),
+                    profile.email()
+            );
+            synchronizedAccounts++;
+        }
+
+        return new IdentitySyncResult(synchronizedAccounts, skippedAccounts);
     }
 
     private String adminAccessToken() {
@@ -134,6 +173,14 @@ public class AccountProvisioningService {
     }
 
     private String findUserId(String accessToken, String username) {
+        String userId = findUserIdOrNull(accessToken, username);
+        if (userId == null) {
+            throw new ResponseStatusException(INTERNAL_SERVER_ERROR, "Created user could not be loaded");
+        }
+        return userId;
+    }
+
+    private String findUserIdOrNull(String accessToken, String username) {
         HttpHeaders headers = jsonHeaders(accessToken);
         String url = UriComponentsBuilder
                 .fromHttpUrl(keycloakBaseUrl + "/admin/realms/" + keycloakRealm + "/users")
@@ -144,11 +191,11 @@ public class AccountProvisioningService {
         ResponseEntity<List> response = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(headers), List.class);
         List<?> users = response.getBody();
         if (users == null || users.isEmpty() || !(users.get(0) instanceof Map<?, ?> user)) {
-            throw new ResponseStatusException(INTERNAL_SERVER_ERROR, "Created user could not be loaded");
+            return null;
         }
         Object id = user.get("id");
         if (id == null) {
-            throw new ResponseStatusException(INTERNAL_SERVER_ERROR, "Created user has no id");
+            return null;
         }
         return String.valueOf(id);
     }
@@ -180,6 +227,53 @@ public class AccountProvisioningService {
             );
         } catch (HttpStatusCodeException exception) {
             throw new ResponseStatusException(BAD_GATEWAY, "Could not assign role");
+        }
+    }
+
+    private void updateKeycloakUser(String accessToken, String userId, String username, String firstName, String lastName, String email) {
+        HttpHeaders headers = jsonHeaders(accessToken);
+        Map<String, Object> existing = loadKeycloakUser(accessToken, userId);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("id", userId);
+        body.put("username", username);
+        body.put("enabled", existing.getOrDefault("enabled", true));
+        body.put("emailVerified", existing.getOrDefault("emailVerified", true));
+        body.put("firstName", firstName);
+        body.put("lastName", lastName);
+        body.put("email", email);
+
+        try {
+            restTemplate.exchange(
+                    keycloakBaseUrl + "/admin/realms/" + keycloakRealm + "/users/" + userId,
+                    HttpMethod.PUT,
+                    new HttpEntity<>(body, headers),
+                    Void.class
+            );
+        } catch (HttpStatusCodeException exception) {
+            if (exception.getStatusCode().value() == 409) {
+                throw new ResponseStatusException(CONFLICT, "Username sau email folosit deja");
+            }
+            throw new ResponseStatusException(BAD_GATEWAY, "Could not update Keycloak user");
+        }
+    }
+
+    private Map<String, Object> loadKeycloakUser(String accessToken, String userId) {
+        HttpHeaders headers = jsonHeaders(accessToken);
+
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    keycloakBaseUrl + "/admin/realms/" + keycloakRealm + "/users/" + userId,
+                    HttpMethod.GET,
+                    new HttpEntity<>(headers),
+                    Map.class
+            );
+            Map body = response.getBody();
+            if (body == null) {
+                throw new ResponseStatusException(INTERNAL_SERVER_ERROR, "Keycloak user could not be loaded");
+            }
+            return new LinkedHashMap<>(body);
+        } catch (HttpStatusCodeException exception) {
+            throw new ResponseStatusException(BAD_GATEWAY, "Could not load Keycloak user");
         }
     }
 

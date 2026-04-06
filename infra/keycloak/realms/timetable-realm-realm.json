@@ -95,16 +95,16 @@
                                      ]
                   },
                   {
-                      "username":  "professor01",
+                      "username":  "romana01",
                       "enabled":  true,
                       "emailVerified":  true,
-                      "firstName":  "Bogdan",
-                      "lastName":  "Mocanu",
-                      "email":  "professor01@timetable.local",
+                      "firstName":  "Mihaela",
+                      "lastName":  "Ionescu",
+                      "email":  "romana01@timetable.local",
                       "credentials":  [
                                           {
                                               "type":  "password",
-                                              "value":  "professor01",
+                                              "value":  "romana01",
                                               "temporary":  false
                                           }
                                       ],
@@ -4289,16 +4289,16 @@
                                      ]
                   },
                   {
-                      "username":  "arte01",
+                      "username":  "artistica01",
                       "enabled":  true,
                       "emailVerified":  true,
-                      "firstName":  "Otilia",
-                      "lastName":  "Rusu",
-                      "email":  "arte01@timetable.local",
+                      "firstName":  "Diana",
+                      "lastName":  "Rosu",
+                      "email":  "artistica01@timetable.local",
                       "credentials":  [
                                           {
                                               "type":  "password",
-                                              "value":  "arte01",
+                                              "value":  "artistica01",
                                               "temporary":  false
                                           }
                                       ],

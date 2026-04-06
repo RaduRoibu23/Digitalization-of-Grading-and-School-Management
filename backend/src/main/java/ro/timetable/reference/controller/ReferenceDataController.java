@@ -20,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 import ro.timetable.audit.service.AuditService;
 import ro.timetable.auth.service.AccountProvisioningService;
 import ro.timetable.catalog.service.CatalogService;
+import ro.timetable.common.dto.ApiDtos.ActionResponse;
 import ro.timetable.common.dto.ApiDtos.ProfileResponse;
 import ro.timetable.reference.model.Room;
 import ro.timetable.reference.model.SchoolClass;
@@ -154,12 +155,37 @@ public class ReferenceDataController {
                 request.homeroom_class_id()
         );
         catalogService.syncProfileData(previousProfile, updatedProfile);
+        accountProvisioningService.syncManagedAccountProfile(
+                updatedProfile.username(),
+                updatedProfile.firstName(),
+                updatedProfile.lastName(),
+                updatedProfile.email()
+        );
         auditService.record(
                 "Actualizare profil",
                 username(authentication),
                 "Profilul utilizatorului " + updatedProfile.username() + " a fost actualizat"
         );
         return schoolDataService.toProfileResponse(updatedProfile, true);
+    }
+
+    @PostMapping("/profiles/sync-identities")
+    public ActionResponse syncManagedIdentities(JwtAuthenticationToken authentication) {
+        if (!roles(authentication).contains("sysadmin")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar sysadmin-ul poate sincroniza identitatile cu Keycloak");
+        }
+
+        AccountProvisioningService.IdentitySyncResult result = accountProvisioningService.syncManagedAccounts();
+        auditService.record(
+                "Sincronizare identitati",
+                username(authentication),
+                "Au fost sincronizate " + result.synchronizedCount() + " conturi cu Keycloak"
+                        + (result.skippedCount() > 0 ? ". Au fost omise " + result.skippedCount() + " conturi fara corespondent direct." : "")
+        );
+        String detail = result.skippedCount() > 0
+                ? "Identitatile au fost sincronizate cu Keycloak. Au fost omise " + result.skippedCount() + " conturi fara corespondent direct."
+                : "Identitatile au fost sincronizate cu Keycloak.";
+        return new ActionResponse(detail, null, result.synchronizedCount());
     }
 
     private boolean canManageProfiles(List<String> roles) {
