@@ -5,7 +5,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.Valid;
 import java.util.List;
-import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,6 +21,7 @@ import ro.timetable.auth.service.AccountProvisioningService;
 import ro.timetable.catalog.service.CatalogService;
 import ro.timetable.common.dto.ApiDtos.ActionResponse;
 import ro.timetable.common.dto.ApiDtos.ProfileResponse;
+import ro.timetable.common.security.AuthenticatedRequestService;
 import ro.timetable.reference.model.Room;
 import ro.timetable.reference.model.SchoolClass;
 import ro.timetable.reference.model.Subject;
@@ -32,20 +32,21 @@ import ro.timetable.reference.service.SchoolDataService;
 @RequestMapping("/api")
 public class ReferenceDataController {
 
-    private static final List<String> APP_ROLES = List.of("student", "professor", "secretariat", "scheduler", "admin", "sysadmin");
-
     private final AccountProvisioningService accountProvisioningService;
+    private final AuthenticatedRequestService authenticatedRequestService;
     private final AuditService auditService;
     private final SchoolDataService schoolDataService;
     private final CatalogService catalogService;
 
     public ReferenceDataController(
             AccountProvisioningService accountProvisioningService,
+            AuthenticatedRequestService authenticatedRequestService,
             AuditService auditService,
             SchoolDataService schoolDataService,
             CatalogService catalogService
     ) {
         this.accountProvisioningService = accountProvisioningService;
+        this.authenticatedRequestService = authenticatedRequestService;
         this.auditService = auditService;
         this.schoolDataService = schoolDataService;
         this.catalogService = catalogService;
@@ -95,7 +96,7 @@ public class ReferenceDataController {
 
     @GetMapping("/profiles")
     public List<ProfileResponse> profiles(@RequestParam(required = false) String role, JwtAuthenticationToken authentication) {
-        List<String> roles = roles(authentication);
+        List<String> roles = authenticatedRequestService.roles(authentication);
         if (!canManageProfiles(roles)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar secretariatul si sysadmin-ul pot vedea lista de profiluri");
         }
@@ -104,8 +105,8 @@ public class ReferenceDataController {
 
     @PostMapping("/profiles")
     public ProfileResponse createProfile(@Valid @RequestBody CreateProfileRequest request, JwtAuthenticationToken authentication) {
-        String actorUsername = username(authentication);
-        if (!roles(authentication).contains("sysadmin")) {
+        String actorUsername = authenticatedRequestService.username(authentication);
+        if (!authenticatedRequestService.roles(authentication).contains("sysadmin")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar sysadmin-ul poate crea conturi noi");
         }
 
@@ -134,7 +135,7 @@ public class ReferenceDataController {
             @Valid @RequestBody UpdateProfileRequest request,
             JwtAuthenticationToken authentication
     ) {
-        List<String> roles = roles(authentication);
+        List<String> roles = authenticatedRequestService.roles(authentication);
         if (!canManageProfiles(roles)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar secretariatul si sysadmin-ul pot modifica profiluri");
         }
@@ -163,7 +164,7 @@ public class ReferenceDataController {
         );
         auditService.record(
                 "Actualizare profil",
-                username(authentication),
+                authenticatedRequestService.username(authentication),
                 "Profilul utilizatorului " + updatedProfile.username() + " a fost actualizat"
         );
         return schoolDataService.toProfileResponse(updatedProfile, true);
@@ -171,14 +172,14 @@ public class ReferenceDataController {
 
     @PostMapping("/profiles/sync-identities")
     public ActionResponse syncManagedIdentities(JwtAuthenticationToken authentication) {
-        if (!roles(authentication).contains("sysadmin")) {
+        if (!authenticatedRequestService.roles(authentication).contains("sysadmin")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar sysadmin-ul poate sincroniza identitatile cu Keycloak");
         }
 
         AccountProvisioningService.IdentitySyncResult result = accountProvisioningService.syncManagedAccounts();
         auditService.record(
                 "Sincronizare identitati",
-                username(authentication),
+                authenticatedRequestService.username(authentication),
                 "Au fost sincronizate " + result.synchronizedCount() + " conturi cu Keycloak"
                         + (result.skippedCount() > 0 ? ". Au fost omise " + result.skippedCount() + " conturi fara corespondent direct." : "")
         );
@@ -190,26 +191,5 @@ public class ReferenceDataController {
 
     private boolean canManageProfiles(List<String> roles) {
         return roles.contains("secretariat") || roles.contains("sysadmin");
-    }
-
-    private List<String> roles(JwtAuthenticationToken authentication) {
-        Object realmAccess = authentication.getToken().getClaims().get("realm_access");
-        if (realmAccess instanceof Map<?, ?> realmAccessMap) {
-            Object roleValues = realmAccessMap.get("roles");
-            if (roleValues instanceof List<?> roleList) {
-                return roleList.stream()
-                        .map(String::valueOf)
-                        .filter(APP_ROLES::contains)
-                        .toList();
-            }
-        }
-        return List.of();
-    }
-
-    private String username(JwtAuthenticationToken authentication) {
-        return schoolDataService.resolveAuthenticatedUsername(
-                (String) authentication.getToken().getClaims().getOrDefault("preferred_username", authentication.getName()),
-                (String) authentication.getToken().getClaims().get("email")
-        );
     }
 }

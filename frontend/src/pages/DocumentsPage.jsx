@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import TextPromptDialog from '../components/ui/TextPromptDialog'
 import { apiDownload, apiGet, apiPatch, apiPost } from '../services/apiService'
 
 const DOCUMENT_TYPES = [
@@ -63,6 +64,7 @@ export default function DocumentsScreen({ accessToken, roles = [] }) {
   const [requests, setRequests] = useState([])
   const [documentType, setDocumentType] = useState(DOCUMENT_TYPES[0].value)
   const [purpose, setPurpose] = useState('')
+  const [rejectDialog, setRejectDialog] = useState({ open: false, requestId: null, reason: '' })
 
   useEffect(() => {
     if (!canRequest && !canReview) {
@@ -139,16 +141,12 @@ export default function DocumentsScreen({ accessToken, roles = [] }) {
     }
   }
 
-  async function rejectRequest(requestId) {
-    const reason = window.prompt('Motivul respingerii:', '')
-    if (reason == null) {
-      return
-    }
-
+  async function rejectRequest(requestId, reason) {
     setSaving(true)
     setBanner(null)
     try {
       await apiPatch(`/documents/requests/${requestId}/reject`, { reason: reason.trim() }, accessToken)
+      setRejectDialog({ open: false, requestId: null, reason: '' })
       await refreshRequests({ type: 'ok', text: 'Cererea a fost respinsa.' })
     } catch (error) {
       setBanner({ type: 'error', text: String(error?.message || error) })
@@ -282,7 +280,11 @@ export default function DocumentsScreen({ accessToken, roles = [] }) {
                           <button className="btn primary" onClick={() => approveRequest(request.id)} disabled={saving}>
                             Aproba
                           </button>
-                          <button className="btn danger" onClick={() => rejectRequest(request.id)} disabled={saving}>
+                          <button
+                            className="btn danger"
+                            onClick={() => setRejectDialog({ open: true, requestId: request.id, reason: '' })}
+                            disabled={saving}
+                          >
                             Respinge
                           </button>
                         </div>
@@ -340,6 +342,20 @@ export default function DocumentsScreen({ accessToken, roles = [] }) {
           </table>
         </div>
       )}
+
+      <TextPromptDialog
+        open={rejectDialog.open}
+        title="Respinge cererea"
+        description="Introdu motivul respingerii. Acesta va fi salvat in istoric si afisat pentru cererea procesata."
+        label="Motiv"
+        placeholder="ex: lipsesc datele necesare pentru procesare"
+        confirmLabel="Respinge cererea"
+        value={rejectDialog.reason}
+        onValueChange={(reason) => setRejectDialog((current) => ({ ...current, reason }))}
+        loading={saving}
+        onCancel={() => setRejectDialog({ open: false, requestId: null, reason: '' })}
+        onConfirm={(reason) => rejectRequest(rejectDialog.requestId, reason)}
+      />
     </section>
   )
 }

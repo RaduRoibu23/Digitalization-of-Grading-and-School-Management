@@ -27,11 +27,23 @@ public class NotificationEntity {
     @JoinColumn(name = "recipient_username", referencedColumnName = "username", insertable = false, updatable = false)
     private UserProfileEntity recipient;
 
+    @Column(nullable = false, length = 160)
+    private String title;
+
+    @Column(nullable = false, length = 40)
+    private String category;
+
+    @Column(name = "action_path", length = 255)
+    private String actionPath;
+
     @Column(nullable = false, length = 500)
     private String message;
 
     @Column(name = "is_read", nullable = false)
     private boolean read;
+
+    @Column(name = "read_at")
+    private Instant readAt;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -68,12 +80,44 @@ public class NotificationEntity {
         this.message = message;
     }
 
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
+    }
+
+    public String getActionPath() {
+        return actionPath;
+    }
+
+    public void setActionPath(String actionPath) {
+        this.actionPath = actionPath;
+    }
+
     public boolean isRead() {
         return read;
     }
 
     public void setRead(boolean read) {
         this.read = read;
+    }
+
+    public Instant getReadAt() {
+        return readAt;
+    }
+
+    public void setReadAt(Instant readAt) {
+        this.readAt = readAt;
     }
 
     public Instant getCreatedAt() {

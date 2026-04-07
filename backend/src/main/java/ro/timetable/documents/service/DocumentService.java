@@ -122,9 +122,23 @@ public class DocumentService {
         entity.setCreatedAt(Instant.now());
 
         DocumentRequestEntity saved = documentRequestRepository.save(entity);
+        notificationService.sendToUser(
+                actorUsername,
+                new NotificationService.NotificationPayload(
+                        "Cerere document inregistrata",
+                        "Cererea pentru " + labelForType(normalizedType) + " a fost inregistrata si trimisa spre procesare.",
+                        "documents",
+                        "/app/documente"
+                )
+        );
         notificationService.createNotifications(
                 reviewerUsernames(),
-                "Solicitare noua: " + labelForType(normalizedType) + " pentru elevul " + actorUsername
+                new NotificationService.NotificationPayload(
+                        "Cerere document noua",
+                        "Solicitare noua: " + labelForType(normalizedType) + " pentru elevul " + actorUsername,
+                        "documents",
+                        "/app/documente"
+                )
         );
         auditService.record(
                 "Solicitare document",
@@ -153,7 +167,12 @@ public class DocumentService {
         DocumentRequestEntity saved = documentRequestRepository.save(entity);
         notificationService.sendToUser(
                 saved.getStudentUsername(),
-                "Cererea pentru " + labelForType(saved.getDocumentType()) + " a fost aprobata."
+                new NotificationService.NotificationPayload(
+                        "Cerere document procesata",
+                        "Cererea pentru " + labelForType(saved.getDocumentType()) + " a fost aprobata.",
+                        "documents",
+                        "/app/documente"
+                )
         );
         auditService.record(
                 "Aprobare document",
@@ -180,7 +199,12 @@ public class DocumentService {
         DocumentRequestEntity saved = documentRequestRepository.save(entity);
         notificationService.sendToUser(
                 saved.getStudentUsername(),
-                "Cererea pentru " + labelForType(saved.getDocumentType()) + " a fost respinsa: " + normalizedReason
+                new NotificationService.NotificationPayload(
+                        "Cerere document procesata",
+                        "Cererea pentru " + labelForType(saved.getDocumentType()) + " a fost respinsa: " + normalizedReason,
+                        "documents",
+                        "/app/documente"
+                )
         );
         auditService.record(
                 "Respingere document",

@@ -14,6 +14,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    defaults:
+      run:
+        working-directory: backend
+
     steps:
       - uses: actions/checkout@v4
 
@@ -23,5 +27,11 @@ jobs:
           java-version: "17"
           cache: maven
 
-      - name: Build backend
-        run: mvn -B -f backend/pom.xml package -DskipTests
+      - name: Prepare Maven wrapper
+        run: chmod +x mvnw
+
+      - name: Test backend
+        run: ./mvnw -B test
+
+      - name: Package backend
+        run: ./mvnw -B package

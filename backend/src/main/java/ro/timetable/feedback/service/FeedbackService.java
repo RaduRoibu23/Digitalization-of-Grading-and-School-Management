@@ -90,7 +90,12 @@ public class FeedbackService {
         FeedbackEntryEntity saved = feedbackEntryRepository.save(entity);
         notificationService.createNotifications(
                 reviewerUsernames(),
-                "Cerere Help noua de la " + actorUsername + " pentru categoria " + labelForCategory(normalizedCategory, SOURCE_HELP)
+                new NotificationService.NotificationPayload(
+                        "Cerere Help noua",
+                        "Cerere Help noua de la " + actorUsername + " pentru categoria " + labelForCategory(normalizedCategory, SOURCE_HELP),
+                        "feedback",
+                        "/app/feedback"
+                )
         );
         auditService.record(
                 "Trimitere Help",
@@ -153,7 +158,12 @@ public class FeedbackService {
         FeedbackEntryEntity saved = feedbackEntryRepository.save(entity);
         notificationService.sendToUser(
                 entity.getSubmittedByUsername(),
-                buildReplyNotificationMessage(saved.getCategory(), normalizedReplyMessage)
+                new NotificationService.NotificationPayload(
+                        "Raspuns la solicitarea ta",
+                        buildReplyNotificationMessage(saved.getCategory(), normalizedReplyMessage),
+                        "feedback",
+                        "/app/feedback/" + saved.getId()
+                )
         );
         auditService.record(
                 "Raspuns feedback",

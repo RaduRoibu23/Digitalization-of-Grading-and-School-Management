@@ -1,10 +1,9 @@
 package ro.timetable.notifications.controller;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.Valid;
 import java.util.List;
-import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,13 +15,16 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import ro.timetable.audit.service.AuditService;
 import ro.timetable.common.dto.ApiDtos.ActionResponse;
 import ro.timetable.common.dto.ApiDtos.MailStatusResponse;
-import ro.timetable.audit.service.AuditService;
 import ro.timetable.common.dto.ApiDtos.NotificationDispatchResponse;
 import ro.timetable.common.dto.ApiDtos.NotificationResponse;
+import ro.timetable.common.dto.ApiDtos.UnreadNotificationCountResponse;
+import ro.timetable.common.security.AuthenticatedRequestService;
 import ro.timetable.notifications.service.MailService;
 import ro.timetable.notifications.service.NotificationService;
+import ro.timetable.notifications.service.NotificationService.NotificationPayload;
 import ro.timetable.reference.model.UserProfile;
 import ro.timetable.reference.service.SchoolDataService;
 
@@ -30,20 +32,21 @@ import ro.timetable.reference.service.SchoolDataService;
 @RequestMapping("/api/notifications")
 public class NotificationController {
 
-    private static final List<String> APP_ROLES = List.of("student", "professor", "secretariat", "scheduler", "admin", "sysadmin");
-
     private final AuditService auditService;
+    private final AuthenticatedRequestService authenticatedRequestService;
     private final MailService mailService;
     private final NotificationService notificationService;
     private final SchoolDataService schoolDataService;
 
     public NotificationController(
             AuditService auditService,
+            AuthenticatedRequestService authenticatedRequestService,
             MailService mailService,
             NotificationService notificationService,
             SchoolDataService schoolDataService
     ) {
         this.auditService = auditService;
+        this.authenticatedRequestService = authenticatedRequestService;
         this.mailService = mailService;
         this.notificationService = notificationService;
         this.schoolDataService = schoolDataService;
@@ -53,6 +56,9 @@ public class NotificationController {
             @NotBlank String target_type,
             Long target_id,
             String target_username,
+            String title,
+            String category,
+            String action_path,
             @NotBlank String message
     ) {
     }
@@ -67,19 +73,30 @@ public class NotificationController {
     @GetMapping("/me")
     public List<NotificationResponse> myNotifications(
             @RequestParam(name = "unread_only", defaultValue = "false") boolean unreadOnly,
+            @RequestParam(name = "limit", required = false) Integer limit,
             JwtAuthenticationToken authentication
     ) {
-        return notificationService.getNotificationsForUser(username(authentication), unreadOnly);
+        return notificationService.getNotificationsForUser(authenticatedRequestService.username(authentication), unreadOnly, limit);
+    }
+
+    @GetMapping("/unread-count")
+    public UnreadNotificationCountResponse unreadCount(JwtAuthenticationToken authentication) {
+        return notificationService.getUnreadCount(authenticatedRequestService.username(authentication));
     }
 
     @PatchMapping("/{notificationId}/read")
     public NotificationResponse markRead(@PathVariable Long notificationId, JwtAuthenticationToken authentication) {
-        return notificationService.markAsRead(username(authentication), notificationId);
+        return notificationService.markAsRead(authenticatedRequestService.username(authentication), notificationId);
+    }
+
+    @PatchMapping("/read-all")
+    public ActionResponse markAllRead(JwtAuthenticationToken authentication) {
+        return notificationService.markAllAsRead(authenticatedRequestService.username(authentication));
     }
 
     @GetMapping("/mail-status")
     public MailStatusResponse mailStatus(JwtAuthenticationToken authentication) {
-        if (!canManageMail(roles(authentication))) {
+        if (!canManageMail(authenticatedRequestService.roles(authentication))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar adminul si sysadminul pot verifica statusul emailului");
         }
         return mailService.getStatus();
@@ -87,12 +104,12 @@ public class NotificationController {
 
     @PostMapping("/test-email")
     public ActionResponse sendTestEmail(@Valid @RequestBody TestEmailRequest request, JwtAuthenticationToken authentication) {
-        List<String> roles = roles(authentication);
+        List<String> roles = authenticatedRequestService.roles(authentication);
         if (!canManageMail(roles)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar adminul si sysadminul pot trimite emailuri de test");
         }
 
-        String requesterUsername = username(authentication);
+        String requesterUsername = authenticatedRequestService.username(authentication);
         UserProfile recipient = resolveTestRecipient(request, requesterUsername);
         mailService.sendTestEmailOrThrow(
                 request.target_email() == null || request.target_email().isBlank() ? recipient.email() : request.target_email().trim(),
@@ -109,7 +126,7 @@ public class NotificationController {
 
     @PostMapping("/send")
     public NotificationDispatchResponse sendNotification(@Valid @RequestBody SendNotificationRequest request, JwtAuthenticationToken authentication) {
-        List<String> roles = roles(authentication);
+        List<String> roles = authenticatedRequestService.roles(authentication);
         if (!(roles.contains("professor") || roles.contains("secretariat") || roles.contains("admin") || roles.contains("sysadmin"))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not allowed to send notifications");
         }
@@ -119,12 +136,15 @@ public class NotificationController {
             if (request.target_username() == null || request.target_username().isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "target_username is required for user notifications");
             }
-            schoolDataService.getProfile(request.target_username());
-            NotificationResponse notification = notificationService.sendToUser(request.target_username(), request.message());
+            schoolDataService.getProfile(request.target_username().trim());
+            NotificationResponse notification = notificationService.sendToUser(
+                    request.target_username().trim(),
+                    new NotificationPayload(request.title(), request.message(), request.category(), request.action_path())
+            );
             auditService.record(
                     "Trimitere notificare",
-                    username(authentication),
-                    "A fost trimisa o notificare catre utilizatorul " + request.target_username()
+                    authenticatedRequestService.username(authentication),
+                    "A fost trimisa o notificare catre utilizatorul " + request.target_username().trim()
             );
             return new NotificationDispatchResponse("Notification sent", null, notification);
         }
@@ -141,26 +161,5 @@ public class NotificationController {
 
     private boolean canManageMail(List<String> roles) {
         return roles.contains("admin") || roles.contains("sysadmin");
-    }
-
-    private String username(JwtAuthenticationToken authentication) {
-        return schoolDataService.resolveAuthenticatedUsername(
-                (String) authentication.getToken().getClaims().getOrDefault("preferred_username", authentication.getName()),
-                (String) authentication.getToken().getClaims().get("email")
-        );
-    }
-
-    private List<String> roles(JwtAuthenticationToken authentication) {
-        Object realmAccess = authentication.getToken().getClaims().get("realm_access");
-        if (realmAccess instanceof Map<?, ?> realmAccessMap) {
-            Object roleValues = realmAccessMap.get("roles");
-            if (roleValues instanceof List<?> roleList) {
-                return roleList.stream()
-                        .map(String::valueOf)
-                        .filter(APP_ROLES::contains)
-                        .toList();
-            }
-        }
-        return List.of();
     }
 }

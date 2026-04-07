@@ -1,3 +1,5 @@
+import { createPortal } from 'react-dom'
+
 export default function ConfirmDialog({
   open,
   title,
@@ -13,7 +15,7 @@ export default function ConfirmDialog({
     return null
   }
 
-  return (
+  return createPortal(
     <div className="modalOverlay" role="presentation">
       <div className="modalCard" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title">
         <div className="modalTitle" id="confirm-dialog-title">{title}</div>
@@ -23,6 +25,7 @@ export default function ConfirmDialog({
           <button className={`btn ${tone}`} onClick={onConfirm} disabled={loading}>{confirmLabel}</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

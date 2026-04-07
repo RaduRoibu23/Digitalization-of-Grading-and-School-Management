@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ro.timetable.common.dto.ApiDtos.ProfileSettingsResponse;
 import ro.timetable.reference.entity.RoomEntity;
 import ro.timetable.reference.entity.SchoolClassEntity;
 import ro.timetable.reference.entity.SubjectEntity;
@@ -123,6 +124,33 @@ public class ReferenceDataPersistenceService {
         userProfileRepository.save(toEntity(profile, true));
     }
 
+    @Transactional(readOnly = true)
+    public ProfileSettingsResponse loadProfileSettings(String username) {
+        return userProfileRepository.findByUsername(username)
+                .map(UserProfileEntity::getSettings)
+                .map(settings -> new ProfileSettingsResponse(
+                        settings.isEmailNotificationsEnabled(),
+                        settings.isInAppNotificationsEnabled()
+                ))
+                .orElse(new ProfileSettingsResponse(true, true));
+    }
+
+    @Transactional
+    public void updateProfileSettings(String username, boolean emailNotificationsEnabled, boolean inAppNotificationsEnabled) {
+        UserProfileEntity entity = userProfileRepository.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("Profilul nu exista: " + username));
+
+        UserProfileSettingsEntity settings = entity.getSettings();
+        if (settings == null) {
+            settings = new UserProfileSettingsEntity();
+            entity.setSettings(settings);
+        }
+
+        settings.setEmailNotificationsEnabled(emailNotificationsEnabled);
+        settings.setInAppNotificationsEnabled(inAppNotificationsEnabled);
+        userProfileRepository.save(entity);
+    }
+
     private UserProfile toModel(UserProfileEntity entity) {
         return new UserProfile(
                 entity.getId(),
@@ -226,13 +254,18 @@ public class ReferenceDataPersistenceService {
     private UserProfileSettingsEntity resolveSettings(Long profileId, boolean preserveExistingSettings) {
         UserProfileSettingsEntity settings = new UserProfileSettingsEntity();
         boolean emailNotificationsEnabled = true;
+        boolean inAppNotificationsEnabled = true;
         if (preserveExistingSettings && profileId != null) {
-            emailNotificationsEnabled = userProfileRepository.findById(profileId)
+            UserProfileSettingsEntity existingSettings = userProfileRepository.findById(profileId)
                     .map(UserProfileEntity::getSettings)
-                    .map(UserProfileSettingsEntity::isEmailNotificationsEnabled)
-                    .orElse(true);
+                    .orElse(null);
+            if (existingSettings != null) {
+                emailNotificationsEnabled = existingSettings.isEmailNotificationsEnabled();
+                inAppNotificationsEnabled = existingSettings.isInAppNotificationsEnabled();
+            }
         }
         settings.setEmailNotificationsEnabled(emailNotificationsEnabled);
+        settings.setInAppNotificationsEnabled(inAppNotificationsEnabled);
         return settings;
     }
 }

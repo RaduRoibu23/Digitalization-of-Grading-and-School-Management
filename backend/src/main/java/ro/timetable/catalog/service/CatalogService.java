@@ -151,7 +151,15 @@ public class CatalogService {
         studentGrades.add(created);
         sortGrades(studentGrades);
         persistentStateService.saveGrade(created);
-        notificationService.createNotifications(List.of(student.username()), "Ai primit nota " + gradeValue + " la materia " + subjectName + ".");
+        notificationService.createNotifications(
+                List.of(student.username()),
+                new NotificationService.NotificationPayload(
+                        "Catalog actualizat",
+                        "Ai primit nota " + gradeValue + " la materia " + subjectName + ".",
+                        "catalog",
+                        "/app/catalog"
+                )
+        );
         auditService.record(
                 "Adaugare nota",
                 requesterUsername,
@@ -201,7 +209,12 @@ public class CatalogService {
                 persistentStateService.saveGrade(updated);
                 notificationService.createNotifications(
                         List.of(existing.studentUsername()),
-                        "Nota la materia " + existing.subjectName() + " a fost actualizata. Valoarea curenta este " + gradeValue + "."
+                        new NotificationService.NotificationPayload(
+                                "Catalog actualizat",
+                                "Nota la materia " + existing.subjectName() + " a fost actualizata. Valoarea curenta este " + gradeValue + ".",
+                                "catalog",
+                                "/app/catalog"
+                        )
                 );
                 auditService.record(
                         "Actualizare nota",
@@ -234,7 +247,12 @@ public class CatalogService {
                 persistentStateService.deleteGrade(gradeId);
                 notificationService.createNotifications(
                         List.of(existing.studentUsername()),
-                        "O nota la materia " + existing.subjectName() + " a fost stearsa."
+                        new NotificationService.NotificationPayload(
+                                "Catalog actualizat",
+                                "O nota la materia " + existing.subjectName() + " a fost stearsa.",
+                                "catalog",
+                                "/app/catalog"
+                        )
                 );
                 auditService.record(
                         "Stergere nota",
@@ -293,7 +311,15 @@ public class CatalogService {
         studentAbsences.add(created);
         sortAbsences(studentAbsences);
         persistentStateService.saveAbsence(created);
-        notificationService.createNotifications(List.of(student.username()), "Ai primit o absenta la materia " + subjectName + ".");
+        notificationService.createNotifications(
+                List.of(student.username()),
+                new NotificationService.NotificationPayload(
+                        "Catalog actualizat",
+                        "Ai primit o absenta la materia " + subjectName + ".",
+                        "catalog",
+                        "/app/catalog"
+                )
+        );
         auditService.record(
                 "Adaugare absenta",
                 requesterUsername,
@@ -341,7 +367,15 @@ public class CatalogService {
                 absences.set(index, updated);
                 sortAbsences(absences);
                 persistentStateService.saveAbsence(updated);
-                notificationService.createNotifications(List.of(existing.studentUsername()), "O absenta la materia " + existing.subjectName() + " a fost motivata.");
+                notificationService.createNotifications(
+                        List.of(existing.studentUsername()),
+                        new NotificationService.NotificationPayload(
+                                "Catalog actualizat",
+                                "O absenta la materia " + existing.subjectName() + " a fost motivata.",
+                                "catalog",
+                                "/app/catalog"
+                        )
+                );
                 auditService.record(
                         "Motivare absenta",
                         requesterUsername,

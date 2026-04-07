@@ -6,7 +6,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.Valid;
 import java.util.List;
-import java.util.Map;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,20 +21,21 @@ import ro.timetable.common.dto.ApiDtos.ActionResponse;
 import ro.timetable.common.dto.ApiDtos.CatalogResponse;
 import ro.timetable.common.dto.ApiDtos.GradeResponse;
 import ro.timetable.common.dto.ApiDtos.ProfileResponse;
-import ro.timetable.reference.service.SchoolDataService;
+import ro.timetable.common.security.AuthenticatedRequestService;
 
 @RestController
 @RequestMapping("/api/catalog")
 public class CatalogController {
 
-    private static final List<String> APP_ROLES = List.of("student", "professor", "secretariat", "scheduler", "admin", "sysadmin");
-
+    private final AuthenticatedRequestService authenticatedRequestService;
     private final CatalogService catalogService;
-    private final SchoolDataService schoolDataService;
 
-    public CatalogController(CatalogService catalogService, SchoolDataService schoolDataService) {
+    public CatalogController(
+            AuthenticatedRequestService authenticatedRequestService,
+            CatalogService catalogService
+    ) {
+        this.authenticatedRequestService = authenticatedRequestService;
         this.catalogService = catalogService;
-        this.schoolDataService = schoolDataService;
     }
 
     public record CreateGradeRequest(
@@ -67,24 +67,34 @@ public class CatalogController {
 
     @GetMapping("/students")
     public List<ProfileResponse> catalogStudents(JwtAuthenticationToken authentication) {
-        return catalogService.getCatalogStudents(username(authentication), roles(authentication));
+        return catalogService.getCatalogStudents(
+                authenticatedRequestService.username(authentication),
+                authenticatedRequestService.roles(authentication)
+        );
     }
 
     @GetMapping("/me")
     public CatalogResponse myCatalog(JwtAuthenticationToken authentication) {
-        return catalogService.getMyCatalog(username(authentication), roles(authentication));
+        return catalogService.getMyCatalog(
+                authenticatedRequestService.username(authentication),
+                authenticatedRequestService.roles(authentication)
+        );
     }
 
     @GetMapping("/students/{studentUsername}")
     public CatalogResponse studentCatalog(@PathVariable String studentUsername, JwtAuthenticationToken authentication) {
-        return catalogService.getCatalogForStudent(username(authentication), roles(authentication), studentUsername);
+        return catalogService.getCatalogForStudent(
+                authenticatedRequestService.username(authentication),
+                authenticatedRequestService.roles(authentication),
+                studentUsername
+        );
     }
 
     @PostMapping("/grades")
     public GradeResponse createGrade(@Valid @RequestBody CreateGradeRequest request, JwtAuthenticationToken authentication) {
         return catalogService.createGrade(
-                username(authentication),
-                roles(authentication),
+                authenticatedRequestService.username(authentication),
+                authenticatedRequestService.roles(authentication),
                 request.student_username(),
                 request.subject_name(),
                 request.grade_value(),
@@ -99,8 +109,8 @@ public class CatalogController {
             JwtAuthenticationToken authentication
     ) {
         return catalogService.updateGrade(
-                username(authentication),
-                roles(authentication),
+                authenticatedRequestService.username(authentication),
+                authenticatedRequestService.roles(authentication),
                 gradeId,
                 request.version(),
                 request.grade_value(),
@@ -110,14 +120,18 @@ public class CatalogController {
 
     @DeleteMapping("/grades/{gradeId}")
     public ActionResponse deleteGrade(@PathVariable Long gradeId, JwtAuthenticationToken authentication) {
-        return catalogService.deleteGrade(username(authentication), roles(authentication), gradeId);
+        return catalogService.deleteGrade(
+                authenticatedRequestService.username(authentication),
+                authenticatedRequestService.roles(authentication),
+                gradeId
+        );
     }
 
     @PostMapping("/absences")
     public AbsenceResponse createAbsence(@Valid @RequestBody CreateAbsenceRequest request, JwtAuthenticationToken authentication) {
         return catalogService.createAbsence(
-                username(authentication),
-                roles(authentication),
+                authenticatedRequestService.username(authentication),
+                authenticatedRequestService.roles(authentication),
                 request.student_username(),
                 request.subject_name(),
                 request.absence_date()
@@ -131,31 +145,10 @@ public class CatalogController {
             JwtAuthenticationToken authentication
     ) {
         return catalogService.motivateAbsence(
-                username(authentication),
-                roles(authentication),
+                authenticatedRequestService.username(authentication),
+                authenticatedRequestService.roles(authentication),
                 absenceId,
                 request.version()
         );
-    }
-
-    private String username(JwtAuthenticationToken authentication) {
-        return schoolDataService.resolveAuthenticatedUsername(
-                (String) authentication.getToken().getClaims().getOrDefault("preferred_username", authentication.getName()),
-                (String) authentication.getToken().getClaims().get("email")
-        );
-    }
-
-    private List<String> roles(JwtAuthenticationToken authentication) {
-        Object realmAccess = authentication.getToken().getClaims().get("realm_access");
-        if (realmAccess instanceof Map<?, ?> realmAccessMap) {
-            Object roleValues = realmAccessMap.get("roles");
-            if (roleValues instanceof List<?> roleList) {
-                return roleList.stream()
-                        .map(String::valueOf)
-                        .filter(APP_ROLES::contains)
-                        .toList();
-            }
-        }
-        return List.of();
     }
 }

@@ -23,6 +23,11 @@ import ro.timetable.common.dto.ApiDtos.NotificationResponse;
 import ro.timetable.common.dto.ApiDtos.ProfileResponse;
 import ro.timetable.common.dto.ApiDtos.RegistrationResponse;
 import ro.timetable.common.dto.ApiDtos.TimetableGenerationResponse;
+import ro.timetable.common.dto.ApiDtos.TimetableMoveOptionsResponse;
+import ro.timetable.common.dto.ApiDtos.TimetableMoveResponse;
+import ro.timetable.common.dto.ApiDtos.TimetableSlotMoveOptionResponse;
+import ro.timetable.common.dto.ApiDtos.UnreadNotificationCountResponse;
+import ro.timetable.timetable.model.TimetableEntry;
 
 public final class ApiDtos {
 
@@ -72,6 +77,12 @@ public final class ApiDtos {
     ) {
     }
 
+    public record ProfileSettingsResponse(
+            boolean email_notifications_enabled,
+            boolean in_app_notifications_enabled
+    ) {
+    }
+
     public record ClassSummaryResponse(
             Long id,
             String name,
@@ -98,6 +109,7 @@ public final class ApiDtos {
             String class_profile,
             List<String> subjects_taught,
             Map<String, Object> claims,
+            ProfileSettingsResponse settings,
             @JsonProperty("class") ClassSummaryResponse school_class
     ) {
     }
@@ -108,13 +120,51 @@ public final class ApiDtos {
     ) {
     }
 
+    public record TimetableSlotMoveOptionResponse(
+            Integer weekday,
+            Integer index_in_day,
+            String status,
+            String mode,
+            Long target_entry_id,
+            String target_subject_name,
+            String target_teacher_name,
+            String target_room_name,
+            List<String> warnings,
+            String blocked_reason
+    ) {
+    }
+
+    public record TimetableMoveOptionsResponse(
+            Long source_entry_id,
+            Integer source_version,
+            Integer source_weekday,
+            Integer source_index_in_day,
+            List<TimetableSlotMoveOptionResponse> slot_options
+    ) {
+    }
+
+    public record TimetableMoveResponse(
+            String detail,
+            String mode,
+            List<String> warnings,
+            List<TimetableEntry> affected_entries
+    ) {
+    }
+
     public record NotificationResponse(
             Long id,
             String recipient_username,
+            String title,
+            String category,
+            String action_path,
             String message,
             boolean read,
+            String read_at,
             String created_at
     ) {
+    }
+
+    public record UnreadNotificationCountResponse(long unread_count) {
     }
 
     public record MailStatusResponse(

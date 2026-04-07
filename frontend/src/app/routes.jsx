@@ -55,7 +55,7 @@ function RouteAccessNotice({ defaultPath }) {
   )
 }
 
-export default function AppRoutes({ session, roles, onLogin, onRefreshToken, onLogout }) {
+export default function AppRoutes({ session, roles, onLogin }) {
   const visibleItems = NAV_ITEMS.filter((item) => hasAnyRole(roles, item.allowedRoles))
   const defaultPath = defaultPathForRoles(roles, visibleItems)
 
@@ -75,10 +75,7 @@ export default function AppRoutes({ session, roles, onLogin, onRefreshToken, onL
         element={(
           <ProtectedRoute session={session}>
             <DashboardPage
-              accessToken={session?.accessToken}
               roles={roles}
-              onRefreshToken={onRefreshToken}
-              onLogout={onLogout}
             />
           </ProtectedRoute>
         )}

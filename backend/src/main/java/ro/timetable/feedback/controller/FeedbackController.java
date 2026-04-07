@@ -4,7 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import jakarta.validation.Valid;
 import java.util.List;
-import java.util.Map;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -14,21 +13,22 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ro.timetable.common.dto.ApiDtos.FeedbackEntryResponse;
+import ro.timetable.common.security.AuthenticatedRequestService;
 import ro.timetable.feedback.service.FeedbackService;
-import ro.timetable.reference.service.SchoolDataService;
 
 @RestController
 @RequestMapping("/api/feedback")
 public class FeedbackController {
 
-    private static final List<String> APP_ROLES = List.of("student", "professor", "secretariat", "scheduler", "admin", "sysadmin");
-
+    private final AuthenticatedRequestService authenticatedRequestService;
     private final FeedbackService feedbackService;
-    private final SchoolDataService schoolDataService;
 
-    public FeedbackController(FeedbackService feedbackService, SchoolDataService schoolDataService) {
+    public FeedbackController(
+            AuthenticatedRequestService authenticatedRequestService,
+            FeedbackService feedbackService
+    ) {
+        this.authenticatedRequestService = authenticatedRequestService;
         this.feedbackService = feedbackService;
-        this.schoolDataService = schoolDataService;
     }
 
     public record SubmitFeedbackRequest(
@@ -51,19 +51,26 @@ public class FeedbackController {
 
     @GetMapping
     public List<FeedbackEntryResponse> listFeedback(JwtAuthenticationToken authentication) {
-        return feedbackService.listEntries(username(authentication), roles(authentication));
+        return feedbackService.listEntries(
+                authenticatedRequestService.username(authentication),
+                authenticatedRequestService.roles(authentication)
+        );
     }
 
     @GetMapping("/{feedbackId}")
     public FeedbackEntryResponse getFeedback(@PathVariable Long feedbackId, JwtAuthenticationToken authentication) {
-        return feedbackService.getEntry(feedbackId, username(authentication), roles(authentication));
+        return feedbackService.getEntry(
+                feedbackId,
+                authenticatedRequestService.username(authentication),
+                authenticatedRequestService.roles(authentication)
+        );
     }
 
     @PostMapping
     public FeedbackEntryResponse submitFeedback(@Valid @RequestBody SubmitFeedbackRequest request, JwtAuthenticationToken authentication) {
         return feedbackService.submitFeedback(
-                username(authentication),
-                roles(authentication),
+                authenticatedRequestService.username(authentication),
+                authenticatedRequestService.roles(authentication),
                 request.category(),
                 request.satisfaction(),
                 request.wants_contact(),
@@ -79,8 +86,8 @@ public class FeedbackController {
     ) {
         return feedbackService.updateStatus(
                 feedbackId,
-                username(authentication),
-                roles(authentication),
+                authenticatedRequestService.username(authentication),
+                authenticatedRequestService.roles(authentication),
                 request.status()
         );
     }
@@ -93,30 +100,9 @@ public class FeedbackController {
     ) {
         return feedbackService.replyToFeedback(
                 feedbackId,
-                username(authentication),
-                roles(authentication),
+                authenticatedRequestService.username(authentication),
+                authenticatedRequestService.roles(authentication),
                 request.message()
         );
-    }
-
-    private String username(JwtAuthenticationToken authentication) {
-        return schoolDataService.resolveAuthenticatedUsername(
-                (String) authentication.getToken().getClaims().getOrDefault("preferred_username", authentication.getName()),
-                (String) authentication.getToken().getClaims().get("email")
-        );
-    }
-
-    private List<String> roles(JwtAuthenticationToken authentication) {
-        Object realmAccess = authentication.getToken().getClaims().get("realm_access");
-        if (realmAccess instanceof Map<?, ?> realmAccessMap) {
-            Object roleValues = realmAccessMap.get("roles");
-            if (roleValues instanceof List<?> roleList) {
-                return roleList.stream()
-                        .map(String::valueOf)
-                        .filter(APP_ROLES::contains)
-                        .toList();
-            }
-        }
-        return List.of();
     }
 }

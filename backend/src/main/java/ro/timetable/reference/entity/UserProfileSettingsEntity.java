@@ -26,6 +26,9 @@ public class UserProfileSettingsEntity {
     @Column(name = "email_notifications_enabled", nullable = false)
     private boolean emailNotificationsEnabled = true;
 
+    @Column(name = "in_app_notifications_enabled", nullable = false)
+    private boolean inAppNotificationsEnabled = true;
+
     public Long getProfileId() {
         return profileId;
     }
@@ -49,5 +52,13 @@ public class UserProfileSettingsEntity {
 
     public void setEmailNotificationsEnabled(boolean emailNotificationsEnabled) {
         this.emailNotificationsEnabled = emailNotificationsEnabled;
+    }
+
+    public boolean isInAppNotificationsEnabled() {
+        return inAppNotificationsEnabled;
+    }
+
+    public void setInAppNotificationsEnabled(boolean inAppNotificationsEnabled) {
+        this.inAppNotificationsEnabled = inAppNotificationsEnabled;
     }
 }

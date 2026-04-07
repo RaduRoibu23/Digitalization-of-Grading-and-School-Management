@@ -1,9 +1,9 @@
 package ro.timetable.timetable.controller;
 
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.util.List;
-import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -18,6 +18,9 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import ro.timetable.audit.service.AuditService;
 import ro.timetable.common.dto.ApiDtos.TimetableGenerationResponse;
+import ro.timetable.common.dto.ApiDtos.TimetableMoveOptionsResponse;
+import ro.timetable.common.dto.ApiDtos.TimetableMoveResponse;
+import ro.timetable.common.security.AuthenticatedRequestService;
 import ro.timetable.reference.service.SchoolDataService;
 import ro.timetable.timetable.model.TimetableEntry;
 import ro.timetable.timetable.model.TimetableGenerationRequest;
@@ -26,13 +29,17 @@ import ro.timetable.timetable.model.TimetableGenerationRequest;
 @RequestMapping("/api/timetables")
 public class TimetableController {
 
-    private static final List<String> APP_ROLES = List.of("student", "professor", "secretariat", "scheduler", "admin", "sysadmin");
-
     private final AuditService auditService;
+    private final AuthenticatedRequestService authenticatedRequestService;
     private final SchoolDataService schoolDataService;
 
-    public TimetableController(AuditService auditService, SchoolDataService schoolDataService) {
+    public TimetableController(
+            AuditService auditService,
+            AuthenticatedRequestService authenticatedRequestService,
+            SchoolDataService schoolDataService
+    ) {
         this.auditService = auditService;
+        this.authenticatedRequestService = authenticatedRequestService;
         this.schoolDataService = schoolDataService;
     }
 
@@ -43,18 +50,29 @@ public class TimetableController {
     ) {
     }
 
+    public record TimetableMoveOptionsRequest(@NotNull Integer entry_version) {
+    }
+
+    public record TimetableMoveRequest(
+            @NotNull Integer entry_version,
+            @NotNull Integer target_weekday,
+            @NotNull Integer target_index_in_day,
+            @NotBlank String mode
+    ) {
+    }
+
     @GetMapping("/classes/{classId}")
     public List<TimetableEntry> timetableForClass(@PathVariable Long classId, JwtAuthenticationToken authentication) {
-        ensureTimetableAccess(username(authentication), roles(authentication), classId);
+        ensureTimetableAccess(authenticatedRequestService.username(authentication), authenticatedRequestService.roles(authentication), classId);
         return schoolDataService.getTimetableForClass(classId);
     }
 
     @GetMapping("/me/teacher")
     public List<TimetableEntry> timetableForTeacher(JwtAuthenticationToken authentication) {
-        if (!roles(authentication).contains("professor")) {
+        if (!authenticatedRequestService.roles(authentication).contains("professor")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar profesorii pot accesa acest endpoint");
         }
-        return schoolDataService.getTimetableForTeacher(username(authentication));
+        return schoolDataService.getTimetableForTeacher(authenticatedRequestService.username(authentication));
     }
 
     @PostMapping("/generate")
@@ -62,11 +80,11 @@ public class TimetableController {
         if (request.class_id() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "class_id is required");
         }
-        ensureTimetableManagement(roles(authentication));
+        ensureTimetableManagement(authenticatedRequestService.roles(authentication));
         TimetableGenerationResponse response = schoolDataService.generateTimetable(request.class_id());
         auditService.record(
                 "Generare orar",
-                username(authentication),
+                authenticatedRequestService.username(authentication),
                 "Orar generat pentru clasa " + schoolDataService.getClassById(request.class_id()).name()
         );
         return response;
@@ -75,12 +93,12 @@ public class TimetableController {
     @DeleteMapping("/classes/{classId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long classId, JwtAuthenticationToken authentication) {
-        ensureTimetableManagement(roles(authentication));
+        ensureTimetableManagement(authenticatedRequestService.roles(authentication));
         String className = schoolDataService.getClassById(classId).name();
         schoolDataService.deleteTimetable(classId);
         auditService.record(
                 "Stergere orar",
-                username(authentication),
+                authenticatedRequestService.username(authentication),
                 "Orarul clasei " + className + " a fost sters"
         );
     }
@@ -91,14 +109,46 @@ public class TimetableController {
             @Valid @RequestBody UpdateTimetableEntryRequest request,
             JwtAuthenticationToken authentication
     ) {
-        ensureTimetableManagement(roles(authentication));
+        ensureTimetableManagement(authenticatedRequestService.roles(authentication));
         TimetableEntry updated = schoolDataService.updateEntry(entryId, request.version(), request.subject_id(), request.room_id());
         auditService.record(
                 "Actualizare orar",
-                username(authentication),
+                authenticatedRequestService.username(authentication),
                 "Orarul clasei " + updated.className() + " a fost actualizat la " + updated.subjectName() + " in sala " + updated.roomName()
         );
         return updated;
+    }
+
+    @PostMapping("/entries/{entryId}/move-options")
+    public TimetableMoveOptionsResponse moveOptions(
+            @PathVariable Long entryId,
+            @Valid @RequestBody TimetableMoveOptionsRequest request,
+            JwtAuthenticationToken authentication
+    ) {
+        ensureTimetableManagement(authenticatedRequestService.roles(authentication));
+        return schoolDataService.moveOptions(entryId, request.entry_version());
+    }
+
+    @PostMapping("/entries/{entryId}/move")
+    public TimetableMoveResponse moveEntry(
+            @PathVariable Long entryId,
+            @Valid @RequestBody TimetableMoveRequest request,
+            JwtAuthenticationToken authentication
+    ) {
+        ensureTimetableManagement(authenticatedRequestService.roles(authentication));
+        TimetableMoveResponse response = schoolDataService.moveEntry(
+                entryId,
+                request.entry_version(),
+                request.target_weekday(),
+                request.target_index_in_day(),
+                request.mode()
+        );
+        auditService.record(
+                "Mutare manuala orar",
+                authenticatedRequestService.username(authentication),
+                "O ora a fost mutata manual in consola de administrare pentru intrarea " + entryId
+        );
+        return response;
     }
 
     private void ensureTimetableAccess(String username, List<String> roles, Long classId) {
@@ -111,26 +161,5 @@ public class TimetableController {
         if (!schoolDataService.canManageTimetables(roles)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Nu ai dreptul sa modifici orarul");
         }
-    }
-
-    private String username(JwtAuthenticationToken authentication) {
-        return schoolDataService.resolveAuthenticatedUsername(
-                (String) authentication.getToken().getClaims().getOrDefault("preferred_username", authentication.getName()),
-                (String) authentication.getToken().getClaims().get("email")
-        );
-    }
-
-    private List<String> roles(JwtAuthenticationToken authentication) {
-        Object realmAccess = authentication.getToken().getClaims().get("realm_access");
-        if (realmAccess instanceof Map<?, ?> realmAccessMap) {
-            Object roleValues = realmAccessMap.get("roles");
-            if (roleValues instanceof List<?> roleList) {
-                return roleList.stream()
-                        .map(String::valueOf)
-                        .filter(APP_ROLES::contains)
-                        .toList();
-            }
-        }
-        return List.of();
     }
 }

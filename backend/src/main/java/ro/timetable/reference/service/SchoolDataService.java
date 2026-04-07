@@ -23,7 +23,11 @@ import org.springframework.web.server.ResponseStatusException;
 import ro.timetable.common.dto.ApiDtos.ClassSummaryResponse;
 import ro.timetable.common.dto.ApiDtos.MeResponse;
 import ro.timetable.common.dto.ApiDtos.ProfileResponse;
+import ro.timetable.common.dto.ApiDtos.ProfileSettingsResponse;
 import ro.timetable.common.dto.ApiDtos.TimetableGenerationResponse;
+import ro.timetable.common.dto.ApiDtos.TimetableMoveOptionsResponse;
+import ro.timetable.common.dto.ApiDtos.TimetableMoveResponse;
+import ro.timetable.common.dto.ApiDtos.TimetableSlotMoveOptionResponse;
 import ro.timetable.common.dto.ApiDtos;
 import ro.timetable.common.util.PersistentStateService;
 import ro.timetable.reference.model.Room;
@@ -48,6 +52,9 @@ public class SchoolDataService {
     }
 
     private record AssignmentCandidate(List<SlotAssignment> assignments, int score) {
+    }
+
+    private record TimetableMoveCandidate(List<TimetableEntry> updatedEntries, List<String> warnings, String mode) {
     }
 
     private static final int CLASS_COUNT = 10;
@@ -344,6 +351,39 @@ public class SchoolDataService {
         return updated;
     }
 
+    public MeResponse updateMyProfile(
+            String username,
+            List<String> roles,
+            Map<String, Object> claims,
+            Integer version,
+            String firstName,
+            String lastName,
+            String email,
+            String address,
+            boolean emailNotificationsEnabled,
+            boolean inAppNotificationsEnabled
+    ) {
+        UserProfile existing = getProfile(username);
+        SchoolClass homeroomClass = "professor".equals(existing.role()) ? homeroomClassForTeacher(existing.username()) : null;
+
+        updateProfile(
+                username,
+                version,
+                firstName,
+                lastName,
+                email,
+                existing.classId(),
+                address,
+                existing.cnp(),
+                existing.idSeries(),
+                existing.serialNumber(),
+                existing.fatherInitial(),
+                homeroomClass == null ? null : homeroomClass.id()
+        );
+        referenceDataPersistenceService.updateProfileSettings(username, emailNotificationsEnabled, inAppNotificationsEnabled);
+        return meResponse(username, roles, claims);
+    }
+
     public SchoolClass getClassById(Long classId) {
         return requireClass(classId);
     }
@@ -497,6 +537,98 @@ public class SchoolDataService {
           throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Timetable entry not found");
       }
 
+    public TimetableMoveOptionsResponse moveOptions(Long entryId, Integer entryVersion) {
+        TimetableEntry source = requireTimetableEntry(entryId);
+        ensureTimetableEntryVersion(source, entryVersion);
+
+        List<TimetableSlotMoveOptionResponse> slotOptions = new ArrayList<>();
+        for (int weekday = 1; weekday <= WEEK_DAYS; weekday++) {
+            for (int indexInDay = 1; indexInDay <= SLOTS_PER_DAY; indexInDay++) {
+                if (Objects.equals(source.weekday(), weekday) && Objects.equals(source.indexInDay(), indexInDay)) {
+                    slotOptions.add(new TimetableSlotMoveOptionResponse(
+                            weekday,
+                            indexInDay,
+                            "same",
+                            "stay",
+                            source.id(),
+                            source.subjectName(),
+                            source.teacherName(),
+                            source.roomName(),
+                            List.of(),
+                            null
+                    ));
+                    continue;
+                }
+
+                TimetableEntry targetEntry = findClassTimetableEntry(source.classId(), weekday, indexInDay, source.id());
+                try {
+                    TimetableMoveCandidate candidate = buildMoveCandidate(source, targetEntry, weekday, indexInDay, "swap-auto");
+                    slotOptions.add(new TimetableSlotMoveOptionResponse(
+                            weekday,
+                            indexInDay,
+                            candidate.warnings().isEmpty() ? "valid" : "warning",
+                            candidate.mode(),
+                            targetEntry == null ? null : targetEntry.id(),
+                            targetEntry == null ? null : targetEntry.subjectName(),
+                            targetEntry == null ? null : targetEntry.teacherName(),
+                            targetEntry == null ? null : targetEntry.roomName(),
+                            candidate.warnings(),
+                            null
+                    ));
+                } catch (ResponseStatusException ex) {
+                    slotOptions.add(new TimetableSlotMoveOptionResponse(
+                            weekday,
+                            indexInDay,
+                            "blocked",
+                            targetEntry == null ? "move" : "swap-auto",
+                            targetEntry == null ? null : targetEntry.id(),
+                            targetEntry == null ? null : targetEntry.subjectName(),
+                            targetEntry == null ? null : targetEntry.teacherName(),
+                            targetEntry == null ? null : targetEntry.roomName(),
+                            List.of(),
+                            ex.getReason()
+                    ));
+                }
+            }
+        }
+
+        return new TimetableMoveOptionsResponse(
+                source.id(),
+                source.version(),
+                source.weekday(),
+                source.indexInDay(),
+                slotOptions
+        );
+    }
+
+    public TimetableMoveResponse moveEntry(
+            Long entryId,
+            Integer entryVersion,
+            Integer targetWeekday,
+            Integer targetIndexInDay,
+            String mode
+    ) {
+        TimetableEntry source = requireTimetableEntry(entryId);
+        ensureTimetableEntryVersion(source, entryVersion);
+        if (targetWeekday == null || targetWeekday < 1 || targetWeekday > WEEK_DAYS) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ziua selectata este invalida");
+        }
+        if (targetIndexInDay == null || targetIndexInDay < 1 || targetIndexInDay > SLOTS_PER_DAY) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Intervalul selectat este invalid");
+        }
+
+        TimetableEntry targetEntry = findClassTimetableEntry(source.classId(), targetWeekday, targetIndexInDay, source.id());
+        TimetableMoveCandidate candidate = buildMoveCandidate(source, targetEntry, targetWeekday, targetIndexInDay, mode);
+        applyTimetableMove(source.classId(), source.id(), targetEntry == null ? null : targetEntry.id(), candidate.updatedEntries());
+
+        return new TimetableMoveResponse(
+                "Orarul a fost actualizat manual.",
+                candidate.mode(),
+                candidate.warnings(),
+                candidate.updatedEntries()
+        );
+    }
+
     private String weekdayLabel(Integer weekday) {
         return switch (weekday == null ? 0 : weekday) {
             case 1 -> "Luni";
@@ -608,6 +740,7 @@ public class SchoolDataService {
         Object emailClaim = claims == null ? null : claims.get("email");
         UserProfile profile = resolveAuthenticatedProfile(username, emailClaim == null ? null : String.valueOf(emailClaim));
         SchoolClass schoolClass = profile.classId() == null ? null : requireClass(profile.classId());
+        ProfileSettingsResponse settings = referenceDataPersistenceService.loadProfileSettings(profile.username());
         return new MeResponse(
                 profile.id(),
                 profile.version(),
@@ -627,6 +760,7 @@ public class SchoolDataService {
                 schoolClass == null ? null : schoolClass.profile(),
                 profile.subjectsTaught(),
                 claims,
+                settings,
                 schoolClass == null ? null : new ClassSummaryResponse(profile.classId(), profile.className(), schoolClass.profile())
         );
     }
@@ -1068,24 +1202,242 @@ public class SchoolDataService {
         return score;
     }
 
-    private String assignedTeacherForClassSubject(Long classId, Long subjectId, Long ignoredEntryId) {
+    private TimetableEntry requireTimetableEntry(Long entryId) {
+        return timetablesByClassId.values().stream()
+                .flatMap(Collection::stream)
+                .filter(entry -> Objects.equals(entry.id(), entryId))
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Intrarea din orar nu exista"));
+    }
+
+    private void ensureTimetableEntryVersion(TimetableEntry entry, Integer version) {
+        if (!Objects.equals(entry.version(), version)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Orarul a fost modificat intre timp. Da refresh si incearca din nou.");
+        }
+    }
+
+    private TimetableEntry findClassTimetableEntry(Long classId, Integer weekday, Integer indexInDay, Long ignoredEntryId) {
         return timetablesByClassId.getOrDefault(classId, List.of()).stream()
                 .filter(entry -> !Objects.equals(entry.id(), ignoredEntryId))
+                .filter(entry -> Objects.equals(entry.weekday(), weekday) && Objects.equals(entry.indexInDay(), indexInDay))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private TimetableMoveCandidate buildMoveCandidate(
+            TimetableEntry source,
+            TimetableEntry target,
+            Integer targetWeekday,
+            Integer targetIndexInDay,
+            String requestedMode
+    ) {
+        if (Objects.equals(source.weekday(), targetWeekday) && Objects.equals(source.indexInDay(), targetIndexInDay)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ora este deja pe slotul selectat.");
+        }
+
+        String normalizedMode = normalizeMoveMode(requestedMode, target != null);
+        Set<Long> ignoredEntryIds = target == null
+                ? Set.of(source.id())
+                : Set.of(source.id(), target.id());
+
+        List<TimetableEntry> updatedEntries = new ArrayList<>();
+        updatedEntries.add(resolveMovedEntry(source, targetWeekday, targetIndexInDay, ignoredEntryIds));
+        if (target != null) {
+            updatedEntries.add(resolveMovedEntry(target, source.weekday(), source.indexInDay(), ignoredEntryIds));
+        }
+
+        List<TimetableEntry> classEntries = replaceClassEntries(source.classId(), source.id(), target == null ? null : target.id(), updatedEntries);
+        List<String> warnings = buildSoftWarnings(source.classId(), classEntries);
+        return new TimetableMoveCandidate(updatedEntries, warnings, normalizedMode);
+    }
+
+    private String normalizeMoveMode(String requestedMode, boolean targetOccupied) {
+        String normalizedMode = requestedMode == null ? "swap-auto" : requestedMode.trim().toLowerCase(Locale.ROOT);
+        if (targetOccupied) {
+            if (!"swap-auto".equals(normalizedMode)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Slotul selectat este ocupat si necesita swap.");
+            }
+            return "swap-auto";
+        }
+        if (!"move".equals(normalizedMode) && !"swap-auto".equals(normalizedMode)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Modul de mutare este invalid.");
+        }
+        return "move";
+    }
+
+    private TimetableEntry resolveMovedEntry(
+            TimetableEntry entry,
+            Integer newWeekday,
+            Integer newIndexInDay,
+            Set<Long> ignoredEntryIds
+    ) {
+        String teacherUsername = resolveTeacherForSlot(entry, newWeekday, newIndexInDay, ignoredEntryIds);
+        Room room = resolveRoomForSlot(entry, newWeekday, newIndexInDay, ignoredEntryIds);
+        UserProfile teacher = getProfile(teacherUsername);
+
+        return new TimetableEntry(
+                entry.id(),
+                entry.classId(),
+                entry.className(),
+                entry.subjectId(),
+                entry.subjectName(),
+                room.id(),
+                room.name(),
+                teacher.username(),
+                teacher.firstName() + " " + teacher.lastName(),
+                newWeekday,
+                newIndexInDay,
+                entry.version() + 1
+        );
+    }
+
+    private String resolveTeacherForSlot(TimetableEntry entry, Integer weekday, Integer indexInDay, Set<Long> ignoredEntryIds) {
+        String assignedTeacherUsername = assignedTeacherForClassSubject(entry.classId(), entry.subjectId(), ignoredEntryIds);
+        if (assignedTeacherUsername != null) {
+            try {
+                return validateTeacherAvailability(assignedTeacherUsername, entry.subjectId(), ignoredEntryIds, weekday, indexInDay);
+            } catch (ResponseStatusException ignored) {
+            }
+        }
+
+        try {
+            return validateTeacherAvailability(entry.teacherUsername(), entry.subjectId(), ignoredEntryIds, weekday, indexInDay);
+        } catch (ResponseStatusException ignored) {
+            return selectTeacherForSubject(entry.subjectId(), ignoredEntryIds, weekday, indexInDay);
+        }
+    }
+
+    private Room resolveRoomForSlot(TimetableEntry entry, Integer weekday, Integer indexInDay, Set<Long> ignoredEntryIds) {
+        if (entry.roomId() != null) {
+            try {
+                validateRoomAvailability(entry.roomId(), ignoredEntryIds, weekday, indexInDay);
+                return requireRoom(entry.roomId());
+            } catch (ResponseStatusException ignored) {
+            }
+        }
+        return defaultRoomForSubject(entry.classId(), entry.subjectName(), weekday, indexInDay, ignoredEntryIds);
+    }
+
+    private void applyTimetableMove(Long classId, Long sourceEntryId, Long targetEntryId, List<TimetableEntry> updatedEntries) {
+        List<TimetableEntry> replacedEntries = replaceClassEntries(classId, sourceEntryId, targetEntryId, updatedEntries);
+        timetablesByClassId.put(classId, replacedEntries);
+        updatedEntries.forEach(persistentStateService::saveTimetableEntry);
+    }
+
+    private List<TimetableEntry> replaceClassEntries(Long classId, Long sourceEntryId, Long targetEntryId, List<TimetableEntry> replacements) {
+        List<TimetableEntry> currentEntries = timetablesByClassId.getOrDefault(classId, List.of());
+        List<TimetableEntry> nextEntries = new ArrayList<>();
+        for (TimetableEntry entry : currentEntries) {
+            if (Objects.equals(entry.id(), sourceEntryId) || Objects.equals(entry.id(), targetEntryId)) {
+                continue;
+            }
+            nextEntries.add(entry);
+        }
+        nextEntries.addAll(replacements);
+        nextEntries.sort(Comparator.comparing(TimetableEntry::weekday).thenComparing(TimetableEntry::indexInDay));
+        return nextEntries;
+    }
+
+    private List<String> buildSoftWarnings(Long classId, List<TimetableEntry> classEntries) {
+        SchoolClass schoolClass = requireClass(classId);
+        LinkedHashMap<String, Integer> subjectTargets = timetablePlanForClass(schoolClass);
+        List<SlotAssignment> currentAssignments = toSlotAssignments(timetablesByClassId.getOrDefault(classId, List.of()));
+        List<SlotAssignment> candidateAssignments = toSlotAssignments(classEntries);
+
+        LinkedHashSet<String> warnings = new LinkedHashSet<>();
+        int currentScore = evaluateScheduleQuality(classId, subjectTargets, currentAssignments);
+        int candidateScore = evaluateScheduleQuality(classId, subjectTargets, candidateAssignments);
+        if (candidateScore < currentScore) {
+            warnings.add("Mutarea reduce calitatea estimata a orarului pentru clasa selectata.");
+        }
+
+        for (int weekday = 1; weekday <= WEEK_DAYS; weekday++) {
+            int currentWeekday = weekday;
+            List<SlotAssignment> dayAssignments = candidateAssignments.stream()
+                    .filter(entry -> entry.slot().weekday() == currentWeekday)
+                    .sorted(Comparator.comparingInt(entry -> entry.slot().indexInDay()))
+                    .toList();
+
+            for (int index = 0; index < dayAssignments.size(); index++) {
+                SlotAssignment current = dayAssignments.get(index);
+                String subjectName = subjectName(current);
+
+                if (isHeavySubject(subjectName) && current.slot().indexInDay() >= 5) {
+                    warnings.add(subjectName + " ajunge intr-un interval tarziu in " + weekdayLabel(currentWeekday) + ".");
+                }
+                if (index > 0 && Objects.equals(dayAssignments.get(index - 1).subjectId(), current.subjectId())) {
+                    warnings.add(subjectName + " apare in ore consecutive in " + weekdayLabel(currentWeekday) + ".");
+                }
+            }
+        }
+
+        for (Map.Entry<String, Integer> target : subjectTargets.entrySet()) {
+            if (target.getValue() > WEEK_DAYS) {
+                continue;
+            }
+            for (int weekday = 1; weekday <= WEEK_DAYS; weekday++) {
+                int occurrences = countAssignmentsForSubjectOnDay(candidateAssignments, weekday, target.getKey());
+                if (occurrences > 1) {
+                    warnings.add(target.getKey() + " apare de " + occurrences + " ori in " + weekdayLabel(weekday) + ".");
+                }
+            }
+        }
+
+        int minDayLoad = Integer.MAX_VALUE;
+        int maxDayLoad = Integer.MIN_VALUE;
+        for (int weekday = 1; weekday <= WEEK_DAYS; weekday++) {
+            int dayLoad = countAssignmentsForDay(candidateAssignments, weekday);
+            minDayLoad = Math.min(minDayLoad, dayLoad);
+            maxDayLoad = Math.max(maxDayLoad, dayLoad);
+        }
+        if (maxDayLoad - minDayLoad > 2) {
+            warnings.add("Mutarea dezechilibreaza distributia orelor intre zile.");
+        }
+
+        return warnings.stream().toList();
+    }
+
+    private List<SlotAssignment> toSlotAssignments(List<TimetableEntry> entries) {
+        return entries.stream()
+                .map(entry -> new SlotAssignment(
+                        new Slot(entry.weekday(), entry.indexInDay()),
+                        entry.subjectId(),
+                        entry.teacherUsername(),
+                        entry.roomId()
+                ))
+                .toList();
+    }
+
+    private Set<Long> ignoredEntryIds(Long ignoredEntryId) {
+        return ignoredEntryId == null ? Set.of() : Set.of(ignoredEntryId);
+    }
+
+    private String assignedTeacherForClassSubject(Long classId, Long subjectId, Long ignoredEntryId) {
+        return assignedTeacherForClassSubject(classId, subjectId, ignoredEntryIds(ignoredEntryId));
+    }
+
+    private String assignedTeacherForClassSubject(Long classId, Long subjectId, Set<Long> ignoredEntryIds) {
+        return timetablesByClassId.getOrDefault(classId, List.of()).stream()
+                .filter(entry -> !ignoredEntryIds.contains(entry.id()))
                 .filter(entry -> Objects.equals(entry.subjectId(), subjectId))
                 .map(TimetableEntry::teacherUsername)
                 .findFirst()
                 .orElse(null);
     }
     private String validateTeacherAvailability(String teacherUsername, Long subjectId, Long ignoredEntryId, Integer weekday, Integer indexInDay) {
+        return validateTeacherAvailability(teacherUsername, subjectId, ignoredEntryIds(ignoredEntryId), weekday, indexInDay);
+    }
+
+    private String validateTeacherAvailability(String teacherUsername, Long subjectId, Set<Long> ignoredEntryIds, Integer weekday, Integer indexInDay) {
         if (teacherUsername == null || teacherUsername.isBlank()) {
-            return selectTeacherForSubject(subjectId, ignoredEntryId, weekday, indexInDay);
+            return selectTeacherForSubject(subjectId, ignoredEntryIds, weekday, indexInDay);
         }
         if (!teachersBySubjectId.getOrDefault(subjectId, List.of()).contains(teacherUsername)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Profesorul selectat nu poate preda materia aleasa.");
         }
         boolean conflict = timetablesByClassId.values().stream()
                 .flatMap(Collection::stream)
-                .filter(entry -> !Objects.equals(entry.id(), ignoredEntryId))
+                .filter(entry -> !ignoredEntryIds.contains(entry.id()))
                 .anyMatch(entry -> teacherUsername.equals(entry.teacherUsername())
                         && Objects.equals(entry.weekday(), weekday)
                         && Objects.equals(entry.indexInDay(), indexInDay));
@@ -1096,10 +1448,14 @@ public class SchoolDataService {
     }
 
     private String selectTeacherForSubject(Long subjectId, Long ignoredEntryId, Integer weekday, Integer indexInDay) {
+        return selectTeacherForSubject(subjectId, ignoredEntryIds(ignoredEntryId), weekday, indexInDay);
+    }
+
+    private String selectTeacherForSubject(Long subjectId, Set<Long> ignoredEntryIds, Integer weekday, Integer indexInDay) {
         return teachersBySubjectId.getOrDefault(subjectId, List.of()).stream()
                 .filter(username -> timetablesByClassId.values().stream()
                         .flatMap(Collection::stream)
-                        .filter(entry -> !Objects.equals(entry.id(), ignoredEntryId))
+                        .filter(entry -> !ignoredEntryIds.contains(entry.id()))
                         .noneMatch(entry -> username.equals(entry.teacherUsername())
                                 && Objects.equals(entry.weekday(), weekday)
                                 && Objects.equals(entry.indexInDay(), indexInDay)))
@@ -1108,9 +1464,13 @@ public class SchoolDataService {
     }
 
     private void validateRoomAvailability(Long roomId, Long ignoredEntryId, Integer weekday, Integer indexInDay) {
+        validateRoomAvailability(roomId, ignoredEntryIds(ignoredEntryId), weekday, indexInDay);
+    }
+
+    private void validateRoomAvailability(Long roomId, Set<Long> ignoredEntryIds, Integer weekday, Integer indexInDay) {
         boolean conflict = timetablesByClassId.values().stream()
                 .flatMap(Collection::stream)
-                .filter(entry -> !Objects.equals(entry.id(), ignoredEntryId))
+                .filter(entry -> !ignoredEntryIds.contains(entry.id()))
                 .anyMatch(entry -> Objects.equals(entry.roomId(), roomId)
                         && Objects.equals(entry.weekday(), weekday)
                         && Objects.equals(entry.indexInDay(), indexInDay));
@@ -1120,10 +1480,14 @@ public class SchoolDataService {
     }
 
     private Room defaultRoomForSubject(Long classId, String subjectName, Integer weekday, Integer indexInDay, Long ignoredEntryId) {
+        return defaultRoomForSubject(classId, subjectName, weekday, indexInDay, ignoredEntryIds(ignoredEntryId));
+    }
+
+    private Room defaultRoomForSubject(Long classId, String subjectName, Integer weekday, Integer indexInDay, Set<Long> ignoredEntryIds) {
         for (Long roomId : candidateRoomIds(classId, subjectName)) {
             boolean conflict = timetablesByClassId.values().stream()
                     .flatMap(Collection::stream)
-                    .filter(entry -> !Objects.equals(entry.id(), ignoredEntryId))
+                    .filter(entry -> !ignoredEntryIds.contains(entry.id()))
                     .anyMatch(entry -> Objects.equals(entry.roomId(), roomId)
                             && Objects.equals(entry.weekday(), weekday)
                             && Objects.equals(entry.indexInDay(), indexInDay));

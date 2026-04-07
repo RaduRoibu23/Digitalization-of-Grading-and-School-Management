@@ -13,15 +13,26 @@ function sessionStorageRef() {
   }
 }
 
+function decodeBase64Url(value) {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=')
+  return atob(padded)
+}
+
 export function decodeJwt(token) {
   try {
     const parts = token.split('.')
     const payload = parts[1]
-    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'))
-    return JSON.parse(decodeURIComponent(escape(json)))
+    const json = decodeBase64Url(payload)
+    return JSON.parse(json)
   } catch {
     return null
   }
+}
+
+export function tokenExpiresAtMs(token) {
+  const decoded = token ? decodeJwt(token) : null
+  return decoded?.exp ? decoded.exp * 1000 : null
 }
 
 export function persistSession(accessToken, idToken, refreshToken) {
@@ -72,17 +83,19 @@ export function rolesFromToken(accessToken) {
 }
 
 export function tokenExpiryText(token) {
-  const decoded = token ? decodeJwt(token) : null
-  if (!decoded?.exp) return '-'
+  const expirationMs = tokenExpiresAtMs(token)
+  if (!expirationMs) return '-'
 
-  const expiration = new Date(decoded.exp * 1000)
-  return `${expiration.toLocaleString()} (exp=${decoded.exp})`
+  const expiration = new Date(expirationMs)
+  const decoded = decodeJwt(token)
+  return `${expiration.toLocaleString()} (exp=${decoded?.exp ?? '-'})`
 }
 
 export async function login(username, password) {
   const data = await requestJson('/login', {
     method: 'POST',
     body: { username, password },
+    skipAuthRetry: true,
   })
 
   persistSession(data.access_token, data.id_token, data.refresh_token)
@@ -98,6 +111,7 @@ export async function refreshAccessToken(refreshToken) {
   const data = await requestJson('/refresh', {
     method: 'POST',
     body: { refreshToken },
+    skipAuthRetry: true,
   })
 
   persistSession(data.access_token, data.id_token, data.refresh_token)

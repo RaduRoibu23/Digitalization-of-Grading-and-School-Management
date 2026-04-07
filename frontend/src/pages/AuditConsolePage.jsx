@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { apiGet } from '../services/apiService'
 
 const POLL_MS = 20000
@@ -15,6 +16,9 @@ export default function AuditConsole({ accessToken }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [entries, setEntries] = useState([])
+  const [panelStyle, setPanelStyle] = useState(null)
+  const triggerRef = useRef(null)
+  const panelRef = useRef(null)
 
   async function loadAuditEntries() {
     if (!accessToken) return
@@ -33,19 +37,72 @@ export default function AuditConsole({ accessToken }) {
   useEffect(() => {
     if (!open) return undefined
 
+    function updatePanelPosition() {
+      const trigger = triggerRef.current
+      if (!trigger) {
+        return
+      }
+
+      const rect = trigger.getBoundingClientRect()
+      const panelWidth = Math.min(832, window.innerWidth - 32)
+      const left = Math.max(16, Math.min(window.innerWidth - panelWidth - 16, rect.right - panelWidth))
+      setPanelStyle({
+        top: rect.bottom + 12,
+        left,
+        width: panelWidth,
+      })
+    }
+
+    function handlePointerDown(event) {
+      if (
+        triggerRef.current
+        && !triggerRef.current.contains(event.target)
+        && panelRef.current
+        && !panelRef.current.contains(event.target)
+      ) {
+        setOpen(false)
+      }
+    }
+
+    function handleEscape(event) {
+      if (event.key === 'Escape') {
+        setOpen(false)
+      }
+    }
+
+    updatePanelPosition()
     loadAuditEntries()
     const intervalId = window.setInterval(loadAuditEntries, POLL_MS)
-    return () => window.clearInterval(intervalId)
+    window.addEventListener('mousedown', handlePointerDown)
+    window.addEventListener('keydown', handleEscape)
+    window.addEventListener('resize', updatePanelPosition)
+    window.addEventListener('scroll', updatePanelPosition, true)
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener('mousedown', handlePointerDown)
+      window.removeEventListener('keydown', handleEscape)
+      window.removeEventListener('resize', updatePanelPosition)
+      window.removeEventListener('scroll', updatePanelPosition, true)
+    }
   }, [open, accessToken])
 
   return (
     <>
-      <button className="auditConsoleToggle btn primary" type="button" onClick={() => setOpen((current) => !current)}>
+      <button
+        ref={triggerRef}
+        className="auditConsoleToggle btn primary"
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+      >
         {open ? 'Inchide audit' : 'Audit'}
       </button>
 
-      {open && (
-        <section className="auditConsolePanel contentCard">
+      {open && panelStyle && createPortal(
+        <section
+          ref={panelRef}
+          className="auditConsolePanel contentCard"
+          style={panelStyle}
+        >
           <div className="auditConsoleHeader contentHeader">
             <div>
               <div className="title">Consola audit</div>
@@ -99,7 +156,8 @@ export default function AuditConsole({ accessToken }) {
               </table>
             </div>
           )}
-        </section>
+        </section>,
+        document.body
       )}
     </>
   )

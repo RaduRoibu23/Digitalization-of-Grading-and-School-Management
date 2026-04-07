@@ -4,7 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import jakarta.validation.Valid;
 import java.util.List;
-import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,21 +14,22 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ro.timetable.common.dto.ApiDtos.DocumentRequestResponse;
+import ro.timetable.common.security.AuthenticatedRequestService;
 import ro.timetable.documents.service.DocumentService;
-import ro.timetable.reference.service.SchoolDataService;
 
 @RestController
 @RequestMapping("/api/documents")
 public class DocumentController {
 
-    private static final List<String> APP_ROLES = List.of("student", "professor", "secretariat", "scheduler", "admin", "sysadmin");
-
+    private final AuthenticatedRequestService authenticatedRequestService;
     private final DocumentService documentService;
-    private final SchoolDataService schoolDataService;
 
-    public DocumentController(DocumentService documentService, SchoolDataService schoolDataService) {
+    public DocumentController(
+            AuthenticatedRequestService authenticatedRequestService,
+            DocumentService documentService
+    ) {
+        this.authenticatedRequestService = authenticatedRequestService;
         this.documentService = documentService;
-        this.schoolDataService = schoolDataService;
     }
 
     public record CreateDocumentRequest(
@@ -45,14 +45,17 @@ public class DocumentController {
 
     @GetMapping("/requests")
     public List<DocumentRequestResponse> listRequests(JwtAuthenticationToken authentication) {
-        return documentService.listRequests(username(authentication), roles(authentication));
+        return documentService.listRequests(
+                authenticatedRequestService.username(authentication),
+                authenticatedRequestService.roles(authentication)
+        );
     }
 
     @PostMapping("/requests")
     public DocumentRequestResponse createRequest(@Valid @RequestBody CreateDocumentRequest request, JwtAuthenticationToken authentication) {
         return documentService.createStudentRequest(
-                username(authentication),
-                roles(authentication),
+                authenticatedRequestService.username(authentication),
+                authenticatedRequestService.roles(authentication),
                 request.type(),
                 request.purpose()
         );
@@ -60,7 +63,11 @@ public class DocumentController {
 
     @PatchMapping("/requests/{requestId}/approve")
     public DocumentRequestResponse approve(@PathVariable Long requestId, JwtAuthenticationToken authentication) {
-        return documentService.approveRequest(requestId, username(authentication), roles(authentication));
+        return documentService.approveRequest(
+                requestId,
+                authenticatedRequestService.username(authentication),
+                authenticatedRequestService.roles(authentication)
+        );
     }
 
     @PatchMapping("/requests/{requestId}/reject")
@@ -69,32 +76,20 @@ public class DocumentController {
             @Valid @RequestBody RejectDocumentRequest request,
             JwtAuthenticationToken authentication
     ) {
-        return documentService.rejectRequest(requestId, username(authentication), roles(authentication), request.reason());
+        return documentService.rejectRequest(
+                requestId,
+                authenticatedRequestService.username(authentication),
+                authenticatedRequestService.roles(authentication),
+                request.reason()
+        );
     }
 
     @GetMapping("/requests/{requestId}/download")
     public ResponseEntity<byte[]> download(@PathVariable Long requestId, JwtAuthenticationToken authentication) {
-        return documentService.downloadApprovedDocument(requestId, username(authentication), roles(authentication));
-    }
-
-    private String username(JwtAuthenticationToken authentication) {
-        return schoolDataService.resolveAuthenticatedUsername(
-                (String) authentication.getToken().getClaims().getOrDefault("preferred_username", authentication.getName()),
-                (String) authentication.getToken().getClaims().get("email")
+        return documentService.downloadApprovedDocument(
+                requestId,
+                authenticatedRequestService.username(authentication),
+                authenticatedRequestService.roles(authentication)
         );
-    }
-
-    private List<String> roles(JwtAuthenticationToken authentication) {
-        Object realmAccess = authentication.getToken().getClaims().get("realm_access");
-        if (realmAccess instanceof Map<?, ?> realmAccessMap) {
-            Object roleValues = realmAccessMap.get("roles");
-            if (roleValues instanceof List<?> roleList) {
-                return roleList.stream()
-                        .map(String::valueOf)
-                        .filter(APP_ROLES::contains)
-                        .toList();
-            }
-        }
-        return List.of();
     }
 }
