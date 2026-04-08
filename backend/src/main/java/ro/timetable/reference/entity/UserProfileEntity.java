@@ -62,7 +62,6 @@ public class UserProfileEntity {
     @JoinColumn(name = "class_id")
     private SchoolClassEntity schoolClass;
 
-    // #manytomany Profesorii pot preda mai multe materii, iar o materie poate fi predata de mai multi profesori.
     @ManyToMany
     @JoinTable(
             name = "user_profile_subject_links",
@@ -71,7 +70,6 @@ public class UserProfileEntity {
     )
     private List<SubjectEntity> teachingSubjects = new ArrayList<>();
 
-    // #onetoone Fiecare profil are un singur set de preferinte, folosit acum si pentru email notifications.
     @OneToOne(mappedBy = "profile", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private UserProfileSettingsEntity settings;
 

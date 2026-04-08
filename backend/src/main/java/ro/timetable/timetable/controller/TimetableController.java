@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -21,9 +22,11 @@ import ro.timetable.common.dto.ApiDtos.TimetableGenerationResponse;
 import ro.timetable.common.dto.ApiDtos.TimetableMoveOptionsResponse;
 import ro.timetable.common.dto.ApiDtos.TimetableMoveResponse;
 import ro.timetable.common.security.AuthenticatedRequestService;
+import ro.timetable.reference.model.UserProfile;
 import ro.timetable.reference.service.SchoolDataService;
 import ro.timetable.timetable.model.TimetableEntry;
 import ro.timetable.timetable.model.TimetableGenerationRequest;
+import ro.timetable.timetable.service.TimetablePdfService;
 
 @RestController
 @RequestMapping("/api/timetables")
@@ -32,15 +35,18 @@ public class TimetableController {
     private final AuditService auditService;
     private final AuthenticatedRequestService authenticatedRequestService;
     private final SchoolDataService schoolDataService;
+    private final TimetablePdfService timetablePdfService;
 
     public TimetableController(
             AuditService auditService,
             AuthenticatedRequestService authenticatedRequestService,
-            SchoolDataService schoolDataService
+            SchoolDataService schoolDataService,
+            TimetablePdfService timetablePdfService
     ) {
         this.auditService = auditService;
         this.authenticatedRequestService = authenticatedRequestService;
         this.schoolDataService = schoolDataService;
+        this.timetablePdfService = timetablePdfService;
     }
 
     public record UpdateTimetableEntryRequest(
@@ -73,6 +79,56 @@ public class TimetableController {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar profesorii pot accesa acest endpoint");
         }
         return schoolDataService.getTimetableForTeacher(authenticatedRequestService.username(authentication));
+    }
+
+    @GetMapping("/classes/{classId}/download")
+    public ResponseEntity<byte[]> downloadClassTimetable(@PathVariable Long classId, JwtAuthenticationToken authentication) {
+        String actorUsername = authenticatedRequestService.username(authentication);
+        List<String> roles = authenticatedRequestService.roles(authentication);
+        ensureTimetableAccess(actorUsername, roles, classId);
+        String className = schoolDataService.getClassById(classId).name();
+        auditService.record(
+                "Descarcare PDF orar",
+                actorUsername,
+                "PDF generat pentru orarul clasei " + className
+        );
+        return timetablePdfService.renderClassTimetablePdf(className, schoolDataService.getTimetableForClass(classId));
+    }
+
+    @GetMapping("/me/download")
+    public ResponseEntity<byte[]> downloadMyTimetable(JwtAuthenticationToken authentication) {
+        String actorUsername = authenticatedRequestService.username(authentication);
+        List<String> roles = authenticatedRequestService.roles(authentication);
+
+        if (roles.contains("professor")) {
+            UserProfile profile = schoolDataService.getProfile(actorUsername);
+            String teacherName = profile.firstName() + " " + profile.lastName();
+            auditService.record(
+                    "Descarcare PDF orar propriu",
+                    actorUsername,
+                    "PDF generat pentru orarul profesorului " + teacherName
+            );
+            return timetablePdfService.renderTeacherTimetablePdf(
+                    teacherName,
+                    schoolDataService.getTimetableForTeacher(actorUsername)
+            );
+        }
+
+        if (roles.contains("student")) {
+            UserProfile profile = schoolDataService.getProfile(actorUsername);
+            if (profile.classId() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Nu pot determina clasa elevului");
+            }
+            String className = schoolDataService.getClassById(profile.classId()).name();
+            auditService.record(
+                    "Descarcare PDF orar propriu",
+                    actorUsername,
+                    "PDF generat pentru orarul elevului din clasa " + className
+            );
+            return timetablePdfService.renderClassTimetablePdf(className, schoolDataService.getTimetableForClass(profile.classId()));
+        }
+
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Nu ai acces la acest export");
     }
 
     @PostMapping("/generate")

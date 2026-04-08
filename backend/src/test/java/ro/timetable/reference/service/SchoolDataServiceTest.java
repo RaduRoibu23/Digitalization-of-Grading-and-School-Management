@@ -30,6 +30,9 @@ class SchoolDataServiceTest {
 
         service.init();
 
+        assertThat(service.getUserProfilesByRole("professor"))
+                .hasSize(21);
+
         for (SchoolClass schoolClass : service.getClasses()) {
             service.generateTimetable(schoolClass.id());
         }

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { apiGet, apiPatch, apiDelete } from "../services/apiService";
+import { apiGet, apiPatch, apiDelete, apiDownload } from "../services/apiService";
 import { loadViewState, saveViewState } from "../services/viewState";
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 
@@ -47,6 +47,20 @@ function signature(list) {
       .sort((a, b) => a.id - b.id)
       .map((e) => ({ id: e.id, s: e.subjectId, r: e.roomId ?? null, v: e.version }))
   );
+}
+
+function extractFilename(response) {
+  const directHeader = response.headers.get('x-download-filename');
+  if (directHeader) {
+    return directHeader;
+  }
+  const contentDisposition = response.headers.get('content-disposition') || '';
+  const quotedMatch = contentDisposition.match(/filename="([^"]+)"/i);
+  if (quotedMatch?.[1]) {
+    return quotedMatch[1];
+  }
+  const plainMatch = contentDisposition.match(/filename=([^;]+)/i);
+  return plainMatch?.[1]?.trim() || 'orar.pdf';
 }
 
 export default function TimetableScreen({ accessToken, roles, mode }) {
@@ -342,7 +356,7 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
       const versionConflict = [409, 412, 423].includes(status) && message.toLowerCase().includes("intre timp");
       if (status === 404 || versionConflict) {
         setNeedsRefresh(true);
-        setBanner({ type: "warn", text: "Orarul a fost modificat intre timp. Da refresh si incearca din nou." });
+        setBanner({ type: "warn", text: "Orarul a fost modificat intre timp. Da reincarca si incearca din nou." });
       } else {
         setNeedsRefresh(false);
         setBanner({ type: "error", text: message });
@@ -367,6 +381,27 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
       setBanner({ type: "error", text: String(error?.message || error) });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function downloadPdf() {
+    setBanner(null);
+    try {
+      const path = mode === "class"
+        ? `/timetables/classes/${selectedClassId}/download`
+        : "/timetables/me/download";
+      const response = await apiDownload(path, accessToken);
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = extractFilename(response);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(objectUrl);
+    } catch (error) {
+      setBanner({ type: "error", text: String(error?.message || error) });
     }
   }
 
@@ -418,14 +453,14 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
 
           {editingAllowed && !isEditing && (
             <button className="btn primary" onClick={beginEdit} disabled={loading || entries.length === 0 || needsRefresh}>
-              Edit
+              Editeaza
             </button>
           )}
 
           {editingAllowed && isEditing && (
             <>
-              <button className="btn" onClick={cancelEdit} disabled={loading}>Cancel</button>
-              <button className="btn primary" onClick={saveAll} disabled={loading}>Save</button>
+              <button className="btn" onClick={cancelEdit} disabled={loading}>Renunta</button>
+              <button className="btn primary" onClick={saveAll} disabled={loading}>Salveaza</button>
             </>
           )}
 
@@ -435,9 +470,17 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
               onClick={() => setConfirmDeleteOpen(true)}
               disabled={loading || entries.length === 0}
             >
-              Delete Timetable
+              Sterge orar
             </button>
           )}
+
+          <button
+            className="btn"
+            onClick={downloadPdf}
+            disabled={loading || isEditing || entries.length === 0 || (mode === "class" && !selectedClassId)}
+          >
+            Descarca PDF
+          </button>
         </div>
       </div>
 
@@ -445,13 +488,13 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
         <div className={`banner ${banner.type}`}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
             <div>{banner.text}</div>
-            {needsRefresh && <button className="btn" onClick={refreshNow} disabled={loading}>Refresh</button>}
+            {needsRefresh && <button className="btn" onClick={refreshNow} disabled={loading}>Reincarca</button>}
           </div>
         </div>
       )}
 
       {loading ? (
-        <div className="mutedBlock">Loading...</div>
+        <div className="mutedBlock">Se incarca...</div>
       ) : entries.length === 0 ? (
         <div className="mutedBlock">{isTeacherView ? "Nu exista intrari in orarul profesorului." : "Nu exista intrari de orar."}</div>
       ) : (
@@ -523,7 +566,7 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
                                 });
                               }}
                             >
-                              <option value="">- No room -</option>
+                              <option value="">- Fara sala -</option>
                               {rooms.map((room) => (
                                 <option key={room.id} value={room.id}>{room.name} (Capacitate: {room.capacity})</option>
                               ))}

@@ -2355,7 +2355,8 @@ body::after{
 .header{
   gap: 24px;
   padding: 22px 26px;
-  overflow: visible;
+  overflow: hidden;
+  isolation: isolate;
   z-index: 60;
   background:
     linear-gradient(135deg, rgba(11, 24, 38, 0.9), rgba(19, 33, 50, 0.8)),
@@ -2363,6 +2364,7 @@ body::after{
 }
 
 .header::before{
+  border-radius: inherit;
   background: linear-gradient(120deg, var(--module-soft), transparent 38%, var(--module-soft-2));
 }
 
@@ -2379,25 +2381,33 @@ body::after{
 .headerUtilityButtons{
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: nowrap;
   flex-shrink: 0;
-  padding: 6px;
-  border-radius: 20px;
+  padding: 4px;
+  border-radius: 999px;
+  overflow: hidden;
   border: 1px solid rgba(255,255,255,0.08);
-  background: linear-gradient(180deg, rgba(8, 19, 30, 0.42), rgba(8, 16, 26, 0.24));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  background: linear-gradient(180deg, rgba(5, 13, 22, 0.74), rgba(9, 18, 28, 0.56));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 14px 28px rgba(0,0,0,0.12);
   backdrop-filter: blur(12px);
 }
 
 .headerUtilityButtons .auditConsoleToggle,
 .headerUtilityButtons .btn.danger{
+  min-height: 44px;
   box-shadow: none;
-  border-radius: 16px;
+  border-radius: 999px;
+  border-color: rgba(255,255,255,0.08);
 }
 
 .headerUtilityButtons .auditConsoleToggle{
   padding-inline: 16px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--module-accent) 20%, rgba(255,255,255,0.08)), rgba(255,255,255,0.06));
+}
+
+.headerUtilityButtons .btn.danger{
+  background: linear-gradient(135deg, rgba(112, 37, 37, 0.9), rgba(74, 24, 24, 0.88));
 }
 
 .statusBadge{
@@ -2996,6 +3006,10 @@ body::after{
   transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
 }
 
+.plannerSlot.is-inspected{
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,0.18), 0 18px 32px rgba(0,0,0,0.18);
+}
+
 .plannerSlot.slot-valid{
   border-color: rgba(101, 212, 158, 0.72);
   background: linear-gradient(180deg, rgba(84, 167, 124, 0.44), rgba(42, 90, 67, 0.5));
@@ -3118,6 +3132,120 @@ body::after{
 .inspectorEntry span,
 .inspectorEntry small{
   color: var(--muted);
+}
+
+.inspectorOptionDetail{
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+}
+
+.inspectorOptionDetail.status-valid{
+  background: linear-gradient(180deg, rgba(77, 152, 115, 0.2), rgba(35, 68, 51, 0.22));
+}
+
+.inspectorOptionDetail.status-warning{
+  background: linear-gradient(180deg, rgba(169, 128, 36, 0.22), rgba(88, 66, 21, 0.24));
+}
+
+.inspectorOptionDetail.status-blocked{
+  background: linear-gradient(180deg, rgba(95, 103, 120, 0.18), rgba(53, 60, 72, 0.22));
+}
+
+.inspectorOptionHeader{
+  display: grid;
+  gap: 6px;
+}
+
+.inspectorStatusPill{
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.08);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.inspectorStatusPill.status-valid{
+  background: rgba(101, 212, 158, 0.18);
+  color: #d3ffe8;
+}
+
+.inspectorStatusPill.status-warning{
+  background: rgba(241, 196, 90, 0.18);
+  color: #ffe8a8;
+}
+
+.inspectorStatusPill.status-blocked,
+.inspectorStatusPill.status-same{
+  background: rgba(148, 158, 180, 0.16);
+  color: rgba(255,255,255,0.82);
+}
+
+.inspectorOptionHeader small{
+  color: var(--muted);
+}
+
+.inspectorTargetCard{
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+}
+
+.inspectorTargetCard.is-empty{
+  background: rgba(255,255,255,0.03);
+}
+
+.inspectorTargetLabel{
+  color: rgba(255,255,255,0.64);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.inspectorTargetCard span:not(.inspectorTargetLabel),
+.inspectorTargetCard small{
+  color: var(--muted);
+}
+
+.inspectorReasonList{
+  display: grid;
+  gap: 10px;
+}
+
+.inspectorReasonItem{
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.08);
+  line-height: 1.6;
+  background: rgba(255,255,255,0.04);
+}
+
+.inspectorReasonItem.valid{
+  background: rgba(101, 212, 158, 0.12);
+}
+
+.inspectorReasonItem.warning{
+  background: rgba(241, 196, 90, 0.14);
+}
+
+.inspectorReasonItem.blocked{
+  background: rgba(148, 158, 180, 0.14);
+}
+
+.inspectorActionRow{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .inspectorOptions{
@@ -3285,6 +3413,10 @@ body::after{
   padding-bottom: 18px;
 }
 
+.landingPageCompact{
+  gap: 18px;
+}
+
 .landingHero,
 .landingSection{
   border: 1px solid rgba(255,255,255,0.1);
@@ -3296,6 +3428,10 @@ body::after{
 
 .landingHero{
   padding: 28px;
+}
+
+.landingHeroCommand{
+  padding: 24px;
 }
 
 .landingTopbar{
@@ -3324,6 +3460,35 @@ body::after{
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 440px);
   gap: 22px;
   align-items: stretch;
+}
+
+.landingCommandDeck{
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.landingCommandLead,
+.landingInfoPanel{
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.035));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+.landingCommandLead{
+  padding: 26px;
+}
+
+.landingInfoPanel{
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--module-soft) 95%, rgba(255,255,255,0.03)), rgba(255,255,255,0.03)),
+    linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04));
 }
 
 .landingLead,
@@ -3360,12 +3525,21 @@ body::after{
   max-width: 12ch;
 }
 
+.landingTitleCompact{
+  max-width: 11ch;
+  font-size: clamp(2.05rem, 4vw, 3.3rem);
+}
+
 .landingCopy{
   margin: 16px 0 0;
   max-width: 60ch;
   color: var(--muted);
   font-size: 15px;
   line-height: 1.75;
+}
+
+.landingCopyCompact{
+  max-width: 58ch;
 }
 
 .landingActions{
@@ -3383,6 +3557,149 @@ body::after{
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-top: 26px;
+}
+
+.landingHoverGrid{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.landingHoverCard{
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-height: 180px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: linear-gradient(180deg, rgba(7, 18, 28, 0.62), rgba(14, 28, 41, 0.42));
+  color: var(--text);
+  text-align: left;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.landingHoverCard:hover,
+.landingHoverCard:focus-visible,
+.landingHoverCard.active{
+  transform: translateY(-6px);
+  border-color: color-mix(in srgb, var(--module-accent) 46%, rgba(255,255,255,0.08));
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--module-soft) 75%, rgba(255,255,255,0.05)), rgba(255,255,255,0.04)),
+    linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04));
+  box-shadow: 0 24px 36px rgba(0,0,0,0.18);
+}
+
+.landingHoverCard strong{
+  font-family: var(--display);
+  font-size: 1.1rem;
+}
+
+.landingHoverCard span:last-child{
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.landingHoverEyebrow{
+  color: rgba(255,255,255,0.68);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.landingHoverCard.accent-teal,
+.landingInfoPanel.accent-teal{
+  --module-soft: rgba(51, 120, 129, 0.26);
+  --module-soft-2: rgba(68, 154, 145, 0.2);
+}
+
+.landingHoverCard.accent-amber,
+.landingInfoPanel.accent-amber{
+  --module-soft: rgba(156, 114, 36, 0.24);
+  --module-soft-2: rgba(187, 149, 59, 0.2);
+}
+
+.landingHoverCard.accent-slate,
+.landingInfoPanel.accent-slate{
+  --module-soft: rgba(84, 98, 133, 0.22);
+  --module-soft-2: rgba(111, 126, 164, 0.18);
+}
+
+.landingPanelCopy{
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.landingInfoMetric{
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.05);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.landingInfoList{
+  display: grid;
+  gap: 12px;
+}
+
+.landingInfoItem{
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  line-height: 1.6;
+}
+
+.landingInfoDot{
+  width: 10px;
+  height: 10px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--module-accent), rgba(255,255,255,0.72));
+  box-shadow: 0 0 0 4px rgba(255,255,255,0.06);
+}
+
+.landingFlowStrip{
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.landingFlowChip{
+  display: grid;
+  gap: 10px;
+  min-height: 104px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+}
+
+.landingFlowChip span{
+  color: rgba(255,255,255,0.6);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.landingFlowChip strong{
+  font-family: var(--display);
+  font-size: 1rem;
+  line-height: 1.35;
 }
 
 .landingStat{
@@ -3685,7 +4002,8 @@ body::after{
 }
 
 @media (max-width: 1180px){
-  .landingGridFocus{
+  .landingGridFocus,
+  .landingCommandDeck{
     grid-template-columns: 1fr;
   }
 }
@@ -3794,6 +4112,11 @@ body::after{
 }
 
 @media (max-width: 820px){
+  .landingHoverGrid,
+  .landingFlowStrip{
+    grid-template-columns: 1fr;
+  }
+
   .auditConsoleToggle{
     right: auto;
     bottom: auto;

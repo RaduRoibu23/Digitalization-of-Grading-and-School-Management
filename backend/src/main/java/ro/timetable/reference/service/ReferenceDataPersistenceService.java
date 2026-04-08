@@ -227,7 +227,6 @@ public class ReferenceDataPersistenceService {
         return entity;
     }
 
-    // #manytomany Mapam relatia ORM many-to-many inapoi la lista de nume folosita de API-uri si de serviciile existente.
     private List<String> toSortedSubjectNames(UserProfileEntity entity) {
         return entity.getTeachingSubjects() == null
                 ? List.of()

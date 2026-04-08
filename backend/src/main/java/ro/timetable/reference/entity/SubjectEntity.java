@@ -25,7 +25,6 @@ public class SubjectEntity {
     @OneToMany(mappedBy = "subject")
     private List<StudentGradeEntity> grades = new ArrayList<>();
 
-    // #manytomany Profesorii si materiile formeaza acum o relatie many-to-many prin tabela de legatura.
     @ManyToMany(mappedBy = "teachingSubjects")
     private List<UserProfileEntity> teachers = new ArrayList<>();
 

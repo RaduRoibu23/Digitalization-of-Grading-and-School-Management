@@ -17,7 +17,6 @@ public class UserProfileSettingsEntity {
     @Column(name = "profile_id")
     private Long profileId;
 
-    // #onetoone Tabela de setari foloseste acelasi id ca profilul parinte prin @MapsId.
     @OneToOne(fetch = FetchType.LAZY)
     @MapsId
     @JoinColumn(name = "profile_id")

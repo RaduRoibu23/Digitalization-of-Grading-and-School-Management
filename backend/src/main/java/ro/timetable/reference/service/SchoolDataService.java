@@ -41,7 +41,10 @@ import ro.timetable.timetable.model.TimetableEntry;
 @Service
 public class SchoolDataService {
 
-    private record TeacherSeed(String username, String firstName, String lastName, String subjectName) {
+    private record TeacherSeed(String username, String firstName, String lastName, List<String> subjectNames) {
+        private TeacherSeed {
+            subjectNames = List.copyOf(subjectNames);
+        }
     }
 
     private record StudentIdentityDocument(String series, String serialNumber) {
@@ -831,18 +834,21 @@ public class SchoolDataService {
                 existing == null ? null : existing.fatherInitial(),
                 null,
                 null,
-                List.of(teacher.subjectName())
+                teacher.subjectNames()
         );
     }
 
     private Map<String, String> teacherReplacementMap(List<UserProfile> removedTeachers, Map<String, TeacherSeed> desiredTeachersByUsername) {
         Map<String, String> replacements = new LinkedHashMap<>();
         Map<String, String> replacementBySubject = new LinkedHashMap<>();
-        desiredTeachersByUsername.values().forEach(seed -> replacementBySubject.putIfAbsent(seed.subjectName(), seed.username()));
+        desiredTeachersByUsername.values().forEach(seed -> seed.subjectNames().forEach(subjectName -> replacementBySubject.putIfAbsent(subjectName, seed.username())));
 
         for (UserProfile removed : removedTeachers) {
-            String subjectName = removed.subjectsTaught().isEmpty() ? null : removed.subjectsTaught().get(0);
-            String replacementUsername = subjectName == null ? null : replacementBySubject.get(subjectName);
+            String replacementUsername = removed.subjectsTaught().stream()
+                    .map(replacementBySubject::get)
+                    .filter(Objects::nonNull)
+                    .findFirst()
+                    .orElse(null);
             if (replacementUsername != null) {
                 replacements.put(removed.username(), replacementUsername);
             }
@@ -1201,14 +1207,10 @@ public class SchoolDataService {
         long distinctDaysAfterThis = distinctDaysUsed + (sameDayCount == 0 ? 1 : 0);
         int remainingDistinctDays = Math.max(0, WEEK_DAYS - (int) distinctDaysAfterThis);
         if (prefersMiddayForProfile(classId, subjectName)) {
-            if (slot.indexInDay() == 2) {
-                score -= 18;
-            } else if (slot.indexInDay() <= 4) {
-                score += 18;
-            } else if (slot.indexInDay() == 5) {
-                score += 8;
-            } else {
-                score -= (slot.indexInDay() - 5) * 5;
+            int distanceFromCenter = Math.min(Math.abs(slot.indexInDay() - 3), Math.abs(slot.indexInDay() - 4));
+            score += 12 - distanceFromCenter * 3;
+            if (slot.indexInDay() >= 6) {
+                score -= (slot.indexInDay() - 5) * 8;
             }
         } else if (isHeavySubject(subjectName)) {
             if (slot.indexInDay() <= 2) {
@@ -1388,8 +1390,8 @@ public class SchoolDataService {
             for (int index = 0; index < dayAssignments.size(); index++) {
                 SlotAssignment current = dayAssignments.get(index);
                 String subjectName = subjectName(current);
-                if (prefersMiddayForProfile(classId, subjectName) && current.slot().indexInDay() == 2) {
-                    score -= 12;
+                if (prefersMiddayForProfile(classId, subjectName) && current.slot().indexInDay() >= 6) {
+                    score -= (current.slot().indexInDay() - 5) * 8;
                 } else if (isHeavySubject(subjectName) && current.slot().indexInDay() >= 5) {
                     score -= (current.slot().indexInDay() - 4) * 8;
                 }
@@ -1464,7 +1466,7 @@ public class SchoolDataService {
         }
 
         List<TimetableEntry> classEntries = replaceClassEntries(source.classId(), source.id(), target == null ? null : target.id(), updatedEntries);
-        List<String> warnings = buildSoftWarnings(source.classId(), classEntries);
+        List<String> warnings = buildSoftWarnings(source.classId(), source, target, classEntries, updatedEntries);
         return new TimetableMoveCandidate(updatedEntries, warnings, normalizedMode);
     }
 
@@ -1555,11 +1557,30 @@ public class SchoolDataService {
         return nextEntries;
     }
 
-    private List<String> buildSoftWarnings(Long classId, List<TimetableEntry> classEntries) {
+    private List<String> buildSoftWarnings(
+            Long classId,
+            TimetableEntry source,
+            TimetableEntry target,
+            List<TimetableEntry> classEntries,
+            List<TimetableEntry> updatedEntries
+    ) {
         SchoolClass schoolClass = requireClass(classId);
         LinkedHashMap<String, Integer> subjectTargets = timetablePlanForClass(schoolClass);
         List<SlotAssignment> currentAssignments = toSlotAssignments(timetablesByClassId.getOrDefault(classId, List.of()));
         List<SlotAssignment> candidateAssignments = toSlotAssignments(classEntries);
+        Set<Integer> affectedWeekdays = new LinkedHashSet<>();
+        Set<String> affectedSubjects = new LinkedHashSet<>();
+
+        affectedWeekdays.add(source.weekday());
+        affectedSubjects.add(source.subjectName());
+        if (target != null) {
+            affectedWeekdays.add(target.weekday());
+            affectedSubjects.add(target.subjectName());
+        }
+        updatedEntries.forEach(entry -> {
+            affectedWeekdays.add(entry.weekday());
+            affectedSubjects.add(entry.subjectName());
+        });
 
         LinkedHashSet<String> warnings = new LinkedHashSet<>();
         int currentScore = evaluateScheduleQuality(classId, subjectTargets, currentAssignments);
@@ -1568,7 +1589,7 @@ public class SchoolDataService {
             warnings.add("Mutarea reduce calitatea estimata a orarului pentru clasa selectata.");
         }
 
-        for (int weekday = 1; weekday <= WEEK_DAYS; weekday++) {
+        for (int weekday : affectedWeekdays) {
             int currentWeekday = weekday;
             List<SlotAssignment> dayAssignments = candidateAssignments.stream()
                     .filter(entry -> entry.slot().weekday() == currentWeekday)
@@ -1578,6 +1599,9 @@ public class SchoolDataService {
             for (int index = 0; index < dayAssignments.size(); index++) {
                 SlotAssignment current = dayAssignments.get(index);
                 String subjectName = subjectName(current);
+                if (!affectedSubjects.contains(subjectName)) {
+                    continue;
+                }
 
                 if (isHeavySubject(subjectName) && current.slot().indexInDay() >= 5) {
                     warnings.add(subjectName + " ajunge intr-un interval tarziu in " + weekdayLabel(currentWeekday) + ".");
@@ -1588,14 +1612,15 @@ public class SchoolDataService {
             }
         }
 
-        for (Map.Entry<String, Integer> target : subjectTargets.entrySet()) {
-            if (target.getValue() > WEEK_DAYS) {
+        for (String subjectName : affectedSubjects) {
+            int totalOccurrences = subjectTargets.getOrDefault(subjectName, 0);
+            if (totalOccurrences == 0 || totalOccurrences > WEEK_DAYS) {
                 continue;
             }
-            for (int weekday = 1; weekday <= WEEK_DAYS; weekday++) {
-                int occurrences = countAssignmentsForSubjectOnDay(candidateAssignments, weekday, target.getKey());
+            for (int weekday : affectedWeekdays) {
+                int occurrences = countAssignmentsForSubjectOnDay(candidateAssignments, weekday, subjectName);
                 if (occurrences > 1) {
-                    warnings.add(target.getKey() + " apare de " + occurrences + " ori in " + weekdayLabel(weekday) + ".");
+                    warnings.add(subjectName + " apare de " + occurrences + " ori in " + weekdayLabel(weekday) + ".");
                 }
             }
         }
@@ -2107,41 +2132,43 @@ public class SchoolDataService {
                 null,
                 null,
                 null,
-                List.of(teacher.subjectName())
+                teacher.subjectNames()
         ));
-        Long subjectId = subjectIdsByName.get(teacher.subjectName());
-        if (subjectId != null) {
-            teachersBySubjectId.computeIfAbsent(subjectId, ignored -> new ArrayList<>()).add(teacher.username());
-        }
+        teacher.subjectNames().forEach(subjectName -> {
+            Long subjectId = subjectIdsByName.get(subjectName);
+            if (subjectId != null) {
+                teachersBySubjectId.computeIfAbsent(subjectId, ignored -> new ArrayList<>()).add(teacher.username());
+            }
+        });
+    }
+
+    private TeacherSeed teacherSeed(String username, String firstName, String lastName, String... subjectNames) {
+        return new TeacherSeed(username, firstName, lastName, List.of(subjectNames));
     }
 
     private List<TeacherSeed> teacherSeeds() {
         return List.of(
-                new TeacherSeed("romana01", "Mihaela", "Ionescu", "Limba si literatura romana"),
-                new TeacherSeed("romana02", "Corina", "Pavel", "Limba si literatura romana"),
-                new TeacherSeed("mate01", "Cristian", "Serban", "Matematica"),
-                new TeacherSeed("mate02", "Irina", "Voicu", "Matematica"),
-                new TeacherSeed("sport01", "Dorin", "Avram", "Educatie fizica"),
-                new TeacherSeed("chimie01", "Alina", "Marin", "Chimie"),
-                new TeacherSeed("fizica01", "Mircea", "Petrescu", "Fizica"),
-                new TeacherSeed("fizica02", "Anca", "Stan", "Fizica"),
-                new TeacherSeed("biologie01", "Laura", "Nistor", "Biologie"),
-                new TeacherSeed("engleza01", "Simona", "Manole", "Limba engleza"),
-                new TeacherSeed("engleza02", "Monica", "Diaconescu", "Limba engleza"),
-                new TeacherSeed("franceza01", "Lavinia", "Coman", "Limba franceza"),
-                new TeacherSeed("franceza02", "Mirela", "Ene", "Limba franceza"),
-                new TeacherSeed("latina01", "Carmen", "Preda", "Limba latina"),
-                new TeacherSeed("istorie01", "Dan", "Neagu", "Istorie"),
-                new TeacherSeed("geografie01", "Claudiu", "Barbu", "Geografie"),
-                new TeacherSeed("socioumane01", "Andrada", "Lazar", "Socio-umane"),
-                new TeacherSeed("religie01", "Gabriel", "Constantin", "Religie"),
-                new TeacherSeed("artistica01", "Diana", "Rosu", "Educatie artistica"),
-                new TeacherSeed("tic01", "Bogdan", "Georgescu", "TIC"),
-                new TeacherSeed("info01", "Marian", "Radu", "Informatica"),
-                new TeacherSeed("infoint01", "Catalin", "Tudose", "Informatica intensiv"),
-                new TeacherSeed("antreprenoriala01", "Iulia", "Sandu", "Educatie antreprenoriala"),
-                new TeacherSeed("literatura01", "Sabina", "Matei", "Literatura universala"),
-                new TeacherSeed("stiinte01", "Violeta", "Enache", "Stiinte")
+                teacherSeed("romana01", "Mihaela", "Ionescu", "Limba si literatura romana"),
+                teacherSeed("romana02", "Corina", "Pavel", "Limba si literatura romana", "Literatura universala"),
+                teacherSeed("mate01", "Cristian", "Serban", "Matematica"),
+                teacherSeed("mate02", "Irina", "Voicu", "Matematica"),
+                teacherSeed("engleza01", "Simona", "Manole", "Limba engleza"),
+                teacherSeed("engleza02", "Monica", "Diaconescu", "Limba engleza"),
+                teacherSeed("franceza01", "Lavinia", "Coman", "Limba franceza"),
+                teacherSeed("franceza02", "Mirela", "Ene", "Limba franceza"),
+                teacherSeed("fizica01", "Mircea", "Petrescu", "Fizica"),
+                teacherSeed("fizica02", "Anca", "Stan", "Fizica"),
+                teacherSeed("stiinte01", "Violeta", "Enache", "Chimie", "Biologie", "Stiinte"),
+                teacherSeed("istorie01", "Dan", "Neagu", "Istorie"),
+                teacherSeed("geografie01", "Claudiu", "Barbu", "Geografie"),
+                teacherSeed("socioumane01", "Andrada", "Lazar", "Socio-umane", "Educatie antreprenoriala"),
+                teacherSeed("religie01", "Gabriel", "Constantin", "Religie"),
+                teacherSeed("artistica01", "Diana", "Rosu", "Educatie artistica"),
+                teacherSeed("sport01", "Dorin", "Avram", "Educatie fizica"),
+                teacherSeed("tic01", "Bogdan", "Georgescu", "TIC"),
+                teacherSeed("info01", "Marian", "Radu", "Informatica"),
+                teacherSeed("infoint01", "Catalin", "Tudose", "Informatica intensiv"),
+                teacherSeed("latina01", "Carmen", "Preda", "Limba latina")
         );
     }
 
