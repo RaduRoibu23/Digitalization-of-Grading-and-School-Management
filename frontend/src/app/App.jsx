@@ -4,12 +4,14 @@ import Header from '../components/layout/Header'
 import { apiGet, apiPatch } from '../services/apiService'
 import { clearApiAuthRuntime, configureApiAuthRuntime } from '../services/apiClient'
 import { clearSession, loadSession, refreshAccessToken, rolesFromToken, tokenExpiresAtMs } from '../services/authService'
+import { NOTIFICATION_REFRESH_EVENT } from '../services/appEvents'
 import AppRoutes from './routes'
 
-const NOTIFICATION_POLL_MS = 12000
+const NOTIFICATION_POLL_MS = 5000
 const REFRESH_LEEWAY_MS = 45000
 
 function resolveModuleTheme(pathname) {
+  if (pathname === '/app' || pathname === '/app/') return 'dashboard'
   if (pathname.startsWith('/app/catalog')) return 'catalog'
   if (pathname.startsWith('/app/documente')) return 'documents'
   if (pathname.startsWith('/app/feedback')) return 'feedback'
@@ -42,6 +44,7 @@ function App() {
   const navigate = useNavigate()
   const [session, setSession] = useState(() => loadSession())
   const [notifications, setNotifications] = useState([])
+  const [notificationsError, setNotificationsError] = useState('')
   const [unreadCount, setUnreadCount] = useState(0)
   const [notificationsLoading, setNotificationsLoading] = useState(false)
   const [toasts, setToasts] = useState([])
@@ -60,6 +63,7 @@ function App() {
     setNotifications([])
     setUnreadCount(0)
     setNotificationsLoading(false)
+    setNotificationsError('')
     setToasts([])
     seenNotificationIdsRef.current = new Set()
     notificationsBootstrappedRef.current = false
@@ -142,6 +146,7 @@ function App() {
 
       setNotifications(nextNotifications)
       setUnreadCount(nextUnreadCount)
+      setNotificationsError('')
 
       const seenIds = seenNotificationIdsRef.current
       const newUnreadNotifications = nextNotifications.filter((item) => !item.read && !seenIds.has(item.id))
@@ -161,6 +166,7 @@ function App() {
         notificationsBootstrappedRef.current = true
       }
     } catch {
+      setNotificationsError('Nu s-au putut incarca notificarile acum.')
     } finally {
       setNotificationsLoading(false)
     }
@@ -177,7 +183,30 @@ function App() {
       refreshNotificationState()
     }, NOTIFICATION_POLL_MS)
 
-    return () => window.clearInterval(intervalId)
+    function handleFocusRefresh() {
+      refreshNotificationState()
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        refreshNotificationState()
+      }
+    }
+
+    function handleNotificationRefreshRequest() {
+      refreshNotificationState()
+    }
+
+    window.addEventListener('focus', handleFocusRefresh)
+    window.addEventListener(NOTIFICATION_REFRESH_EVENT, handleNotificationRefreshRequest)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', handleFocusRefresh)
+      window.removeEventListener(NOTIFICATION_REFRESH_EVENT, handleNotificationRefreshRequest)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [session?.accessToken])
 
   async function handleMarkNotificationRead(notificationId) {
@@ -238,6 +267,7 @@ function App() {
           <Header
             accessToken={session?.accessToken}
             canViewAudit={canViewAudit}
+            notificationsError={notificationsError}
             notifications={notifications}
             notificationsLoading={notificationsLoading}
             onDismissToast={handleDismissToast}

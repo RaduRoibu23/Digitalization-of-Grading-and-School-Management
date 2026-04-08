@@ -11,6 +11,11 @@ import ro.timetable.common.dto.ApiDtos.AuditEntryResponse;
 import ro.timetable.common.dto.ApiDtos.CatalogResponse;
 import ro.timetable.common.dto.ApiDtos.CatalogSubjectResponse;
 import ro.timetable.common.dto.ApiDtos.ClassSummaryResponse;
+import ro.timetable.common.dto.ApiDtos.DashboardMetricResponse;
+import ro.timetable.common.dto.ApiDtos.DashboardQuickActionResponse;
+import ro.timetable.common.dto.ApiDtos.DashboardSummaryResponse;
+import ro.timetable.common.dto.ApiDtos.DashboardTimetableEntryResponse;
+import ro.timetable.common.dto.ApiDtos.AnnouncementResponse;
 import ro.timetable.common.dto.ApiDtos.DocumentRequestResponse;
 import ro.timetable.common.dto.ApiDtos.FeedbackEntryResponse;
 import ro.timetable.common.dto.ApiDtos.GradeResponse;
@@ -165,6 +170,60 @@ public final class ApiDtos {
     }
 
     public record UnreadNotificationCountResponse(long unread_count) {
+    }
+
+    public record DashboardMetricResponse(
+            String id,
+            String label,
+            String value,
+            String detail,
+            String tone
+    ) {
+    }
+
+    public record DashboardQuickActionResponse(
+            String label,
+            String path,
+            String description,
+            String tone
+    ) {
+    }
+
+    public record DashboardTimetableEntryResponse(
+            Long id,
+            String subject_name,
+            String class_name,
+            String room_name,
+            String teacher_name,
+            Integer weekday,
+            Integer index_in_day,
+            String time_label
+    ) {
+    }
+
+    public record AnnouncementResponse(
+            Long id,
+            String title,
+            String message,
+            String created_by_username,
+            String created_at
+    ) {
+    }
+
+    public record DashboardSummaryResponse(
+            String role_context,
+            String title,
+            String subtitle,
+            List<DashboardMetricResponse> metrics,
+            List<DashboardQuickActionResponse> quick_actions,
+            List<AnnouncementResponse> announcements,
+            boolean can_publish_announcements,
+            List<DashboardTimetableEntryResponse> today_timetable,
+            DashboardTimetableEntryResponse next_entry,
+            List<NotificationResponse> recent_notifications,
+            List<DocumentRequestResponse> pending_documents,
+            List<FeedbackEntryResponse> recent_feedback
+    ) {
     }
 
     public record MailStatusResponse(

@@ -208,7 +208,7 @@ export default function CatalogScreen({ accessToken, roles }) {
       setBanner({ type: 'ok', text: 'Nota a fost actualizata.' })
     } catch (error) {
       if ([409, 412, 423].includes(error?.status)) {
-        setBanner({ type: 'error', text: 'Nota a fost modificata intre timp. Da Refresh si incearca din nou.' })
+        setBanner({ type: 'error', text: 'Nota a fost modificata intre timp. Actualizeaza catalogul si incearca din nou.' })
       } else {
         setBanner({ type: 'error', text: String(error?.message || error) })
       }
@@ -283,7 +283,7 @@ export default function CatalogScreen({ accessToken, roles }) {
       setBanner({ type: 'ok', text: 'Absenta a fost motivata.' })
     } catch (error) {
       if ([409, 412, 423].includes(error?.status)) {
-        setBanner({ type: 'error', text: 'Absenta a fost modificata intre timp. Da Refresh si incearca din nou.' })
+        setBanner({ type: 'error', text: 'Absenta a fost modificata intre timp. Actualizeaza catalogul si incearca din nou.' })
       } else {
         setBanner({ type: 'error', text: String(error?.message || error) })
       }
@@ -311,6 +311,9 @@ export default function CatalogScreen({ accessToken, roles }) {
 
   const student = catalog?.student || null
   const subjects = Array.isArray(catalog?.subjects) ? catalog.subjects : []
+  const totalGrades = subjects.reduce((total, row) => total + (Array.isArray(row.grades) ? row.grades.length : 0), 0)
+  const totalAbsences = subjects.reduce((total, row) => total + (Array.isArray(row.absences) ? row.absences.length : 0), 0)
+  const subjectsWithAverage = subjects.filter((row) => row.average !== null && row.average !== undefined).length
   const filteredSubjects = useMemo(() => {
     const query = search.trim().toLowerCase()
     if (!query) return subjects
@@ -370,7 +373,7 @@ export default function CatalogScreen({ accessToken, roles }) {
             onChange={(event) => setSearch(event.target.value)}
           />
           <button className="btn" onClick={reloadCurrentCatalog} disabled={loading || (canBrowseStudents && !selectedStudent)}>
-            Refresh
+            Actualizeaza
           </button>
         </div>
       </div>
@@ -385,11 +388,23 @@ export default function CatalogScreen({ accessToken, roles }) {
           <div className="statPill">
             <strong>Clasa:</strong> {student.class_name || '-'}
           </div>
+          <div className="statPill">
+            <strong>Materii afisate:</strong> {filteredSubjects.length}
+          </div>
+          <div className="statPill">
+            <strong>Medii calculate:</strong> {subjectsWithAverage}
+          </div>
+          <div className="statPill">
+            <strong>Total note:</strong> {totalGrades}
+          </div>
+          <div className="statPill">
+            <strong>Total absente:</strong> {totalAbsences}
+          </div>
         </div>
       )}
 
       {loading ? (
-        <div className="mutedBlock">Loading...</div>
+        <div className="mutedBlock">Se incarca datele din catalog...</div>
       ) : !student ? (
         <div className="mutedBlock">Nu exista date pentru catalog.</div>
       ) : filteredSubjects.length === 0 ? (
@@ -461,14 +476,14 @@ export default function CatalogScreen({ accessToken, roles }) {
                                         onClick={() => saveGrade(grade)}
                                         disabled={savingId === grade.id || !draft.grade_date || !draft.grade_value}
                                       >
-                                        Save
+                                        Salveaza
                                       </button>
                                       <button
                                         className="btn danger"
                                         onClick={() => setDeleteTarget(grade)}
                                         disabled={savingId === grade.id}
                                       >
-                                        Delete
+                                        Sterge
                                       </button>
                                     </div>
                                   ) : (
@@ -504,7 +519,7 @@ export default function CatalogScreen({ accessToken, roles }) {
                                     onClick={() => addGrade(row)}
                                     disabled={addingSubject === row.subject_name || !addDraft.grade_date || !addDraft.grade_value}
                                   >
-                                    Add
+                                    Adauga
                                   </button>
                                 </div>
                               </div>

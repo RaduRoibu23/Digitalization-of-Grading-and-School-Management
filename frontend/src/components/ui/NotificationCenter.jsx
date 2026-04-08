@@ -15,7 +15,7 @@ function categoryLabel(category) {
     case 'documents':
       return 'Documente'
     case 'feedback':
-      return 'Help'
+      return 'Asistenta'
     case 'timetable':
       return 'Orar'
     default:
@@ -59,6 +59,7 @@ export function NotificationToastStack({ items, onDismiss, onOpenNotification })
 }
 
 export default function NotificationCenter({
+  error,
   notifications,
   unreadCount,
   loading,
@@ -69,14 +70,33 @@ export default function NotificationCenter({
 }) {
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState('all')
+  const [categoryFilter, setCategoryFilter] = useState('all')
   const triggerRef = useRef(null)
   const panelRef = useRef(null)
   const [panelStyle, setPanelStyle] = useState(null)
 
+  const categoryOptions = useMemo(() => {
+    const categories = new Set(['all'])
+    ;(Array.isArray(notifications) ? notifications : []).forEach((item) => {
+      if (item?.category) {
+        categories.add(item.category)
+      }
+    })
+    return Array.from(categories)
+  }, [notifications])
+
   const visibleNotifications = useMemo(() => {
     const list = Array.isArray(notifications) ? notifications : []
-    return filter === 'unread' ? list.filter((item) => !item.read) : list
-  }, [filter, notifications])
+    return list.filter((item) => {
+      if (filter === 'unread' && item.read) {
+        return false
+      }
+      if (categoryFilter !== 'all' && item.category !== categoryFilter) {
+        return false
+      }
+      return true
+    })
+  }, [categoryFilter, filter, notifications])
 
   useEffect(() => {
     if (!open) {
@@ -156,12 +176,12 @@ export default function NotificationCenter({
           <div className="notificationPanelHeader">
             <div>
               <div className="notificationPanelTitle">Centrul de notificari</div>
-              <div className="notificationPanelSubtitle">Inbox global cu acces rapid la actualizarile relevante.</div>
+              <div className="notificationPanelSubtitle">Flux global cu acces rapid la actualizarile relevante.</div>
             </div>
 
             <div className="notificationPanelActions">
               <button className="btn btnSmall" type="button" onClick={onRefresh} disabled={loading}>
-                {loading ? 'Se incarca...' : 'Refresh'}
+                {loading ? 'Se incarca...' : 'Actualizeaza'}
               </button>
               <button className="btn btnSmall" type="button" onClick={onMarkAllRead} disabled={loading || unreadCount === 0}>
                 Marcheaza tot
@@ -184,10 +204,26 @@ export default function NotificationCenter({
             >
               Necitite
             </button>
+            <select
+              className="select notificationFilterSelect"
+              value={categoryFilter}
+              onChange={(event) => setCategoryFilter(event.target.value)}
+              aria-label="Filtreaza notificarile dupa categorie"
+            >
+              {categoryOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option === 'all' ? 'Toate categoriile' : categoryLabel(option)}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="notificationPanelBody">
-            {visibleNotifications.length === 0 ? (
+            {error ? (
+              <div className="notificationEmptyState errorState">
+                {error}
+              </div>
+            ) : visibleNotifications.length === 0 ? (
               <div className="notificationEmptyState">
                 Nu exista notificari pentru filtrul selectat.
               </div>

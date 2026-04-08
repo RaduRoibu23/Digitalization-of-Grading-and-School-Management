@@ -4,6 +4,7 @@ import NotificationCenter, { NotificationToastStack } from '../ui/NotificationCe
 export default function Header({
   accessToken,
   canViewAudit,
+  notificationsError,
   notifications,
   notificationsLoading,
   onDismissToast,
@@ -22,7 +23,7 @@ export default function Header({
         <div className="brand">
           <div className="logo" aria-hidden="true"></div>
           <div>
-            <div className="eyebrow">Academic Workspace</div>
+            <div className="eyebrow">Panou Academic</div>
             <h1>Digitalization of Grading and School Management</h1>
             <div className="sub">Spatiu academic fluid pentru orar, catalog, documente si asistenta scolara.</div>
           </div>
@@ -31,10 +32,11 @@ export default function Header({
         <div className="headerInfoRail">
           <div id="status-badge" className="badge statusBadge">
             <span className="statusDot"></span>
-            Status: {status}
+            Sesiune: {status}
           </div>
 
           <NotificationCenter
+            error={notificationsError}
             notifications={notifications}
             unreadCount={unreadCount}
             loading={notificationsLoading}
@@ -48,7 +50,7 @@ export default function Header({
             {canViewAudit && <AuditConsolePage accessToken={accessToken} />}
 
             <button className="btn danger" type="button" onClick={onLogout}>
-              Logout
+              Iesire
             </button>
           </div>
         </div>

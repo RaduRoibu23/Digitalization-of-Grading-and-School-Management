@@ -91,16 +91,16 @@ public class FeedbackService {
         notificationService.createNotifications(
                 reviewerUsernames(),
                 new NotificationService.NotificationPayload(
-                        "Cerere Help noua",
-                        "Cerere Help noua de la " + actorUsername + " pentru categoria " + labelForCategory(normalizedCategory, SOURCE_HELP),
+                        "Cerere asistenta noua",
+                        "Cerere noua de asistenta de la " + actorUsername + " pentru categoria " + labelForCategory(normalizedCategory, SOURCE_HELP),
                         "feedback",
                         "/app/feedback"
                 )
         );
         auditService.record(
-                "Trimitere Help",
+                "Trimitere asistenta",
                 actorUsername,
-                "A fost trimisa o cerere Help pentru categoria " + labelForCategory(normalizedCategory, SOURCE_HELP)
+                "A fost trimisa o cerere de asistenta pentru categoria " + labelForCategory(normalizedCategory, SOURCE_HELP)
         );
         return toResponse(saved, canReview(roles));
     }
@@ -284,7 +284,7 @@ public class FeedbackService {
     }
 
     private String buildReplyNotificationMessage(String category, String replyMessage) {
-        String prefix = "Raspuns la cererea ta Help (" + labelForCategory(category, SOURCE_HELP) + "): ";
+        String prefix = "Raspuns la cererea ta de asistenta (" + labelForCategory(category, SOURCE_HELP) + "): ";
         String normalizedReplyMessage = replyMessage.replaceAll("\\s+", " ").trim();
         if (normalizedReplyMessage.length() <= NOTIFICATION_REPLY_PREVIEW_LENGTH) {
             return prefix + normalizedReplyMessage;

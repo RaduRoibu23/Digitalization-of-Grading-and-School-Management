@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.HtmlUtils;
@@ -67,6 +68,7 @@ public class MailService {
         this.mailSender = mailSender;
     }
 
+    @Async
     public void sendWelcomeEmailBestEffort(String recipientEmail, String recipientName, String username, String className) {
         List<String> detailLines = new ArrayList<>();
         detailLines.add("Contul tau de elev a fost creat cu succes in platforma.");
@@ -86,6 +88,7 @@ public class MailService {
         );
     }
 
+    @Async
     public void sendNotificationEmailBestEffort(String recipientEmail, String recipientName, String message) {
         sendHtmlEmailBestEffort(
                 recipientEmail,

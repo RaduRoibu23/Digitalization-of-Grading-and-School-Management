@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import TextPromptDialog from '../components/ui/TextPromptDialog'
 import { apiDownload, apiGet, apiPatch, apiPost } from '../services/apiService'
+import { requestNotificationRefresh } from '../services/appEvents'
 import { loadViewState, saveViewState } from '../services/viewState'
 
 const DOCUMENT_TYPES = [
@@ -41,6 +42,17 @@ function formatDate(value) {
   } catch {
     return value
   }
+}
+
+function timelineLabel(request) {
+  if (!request) return '-'
+  if (request.status === 'PENDING') {
+    return `Solicitata la ${formatDate(request.created_at)}`
+  }
+  if (request.reviewed_at) {
+    return `Procesata la ${formatDate(request.reviewed_at)}`
+  }
+  return formatDate(request.created_at)
 }
 
 function extractFilename(response) {
@@ -124,13 +136,15 @@ export default function DocumentsScreen({ accessToken, roles = [] }) {
     setSaving(true)
     setBanner(null)
     try {
-      await apiPost(
+      const created = await apiPost(
         '/documents/requests',
         { type: documentType, purpose: purpose.trim() },
         accessToken
       )
+      setRequests((current) => [created, ...current])
       setPurpose('')
-      await refreshRequests({ type: 'ok', text: 'Cererea a fost trimisa catre secretariat si sysadmin.' })
+      setBanner({ type: 'ok', text: 'Cererea a fost trimisa catre secretariat si sysadmin.' })
+      requestNotificationRefresh()
     } catch (error) {
       setBanner({ type: 'error', text: String(error?.message || error) })
     } finally {
@@ -207,7 +221,12 @@ export default function DocumentsScreen({ accessToken, roles = [] }) {
       <div className="contentHeader">
         <div>
           <div className="title">Documente</div>
-          <div className="subtitle">Cereri, aprobari si descarcare PDF fara stocarea fisierelor in aplicatie.</div>
+          <div className="subtitle">Cereri, aprobari si descarcare PDF intr-un flux clar pentru elev, secretariat si sysadmin.</div>
+        </div>
+        <div className="headerActions">
+          <button className="btn" type="button" onClick={() => refreshRequests()} disabled={loading}>
+            {loading ? 'Se incarca...' : 'Actualizeaza'}
+          </button>
         </div>
       </div>
 
@@ -284,7 +303,7 @@ export default function DocumentsScreen({ accessToken, roles = [] }) {
                       <td>{request.student_username}</td>
                       <td>{typeLabel(request)}</td>
                       <td>{request.purpose}</td>
-                      <td>{formatDate(request.created_at)}</td>
+                      <td>{timelineLabel(request)}</td>
                       <td>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                           <button className="btn primary" onClick={() => approveRequest(request.id)} disabled={saving}>
@@ -331,12 +350,12 @@ export default function DocumentsScreen({ accessToken, roles = [] }) {
               {requests.map((request) => (
                 <tr key={request.id}>
                   <td>{typeLabel(request)}</td>
-                  <td><span className="studentClassBadge">{statusLabel(request.status)}</span></td>
+                  <td><span className={`dashboardChip ${request.status === 'PENDING' ? 'warning' : request.status === 'APPROVED' ? 'accent' : 'neutral'}`.trim()}>{statusLabel(request.status)}</span></td>
                   <td>{request.student_username}</td>
                   <td>{request.purpose}</td>
                   <td>{request.series && request.document_number ? `${request.series} ${String(request.document_number).padStart(5, '0')}` : '-'}</td>
-                  <td>{formatDate(request.created_at)}</td>
-                  <td>{request.reviewed_by_username || request.resolution_note || '-'}</td>
+                  <td>{timelineLabel(request)}</td>
+                  <td>{request.reviewed_by_username ? `${request.reviewed_by_username} / ${formatDate(request.reviewed_at)}` : request.resolution_note || '-'}</td>
                   <td>
                     {request.can_download ? (
                       <button className="btn" onClick={() => downloadDocument(request.id)} disabled={saving}>

@@ -1,6 +1,7 @@
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import { NAV_ITEMS } from '../components/layout/Sidebar'
 import AccountCreationPage from '../pages/AccountCreationPage'
+import AppDashboardPage from '../pages/AppDashboardPage'
 import CatalogPage from '../pages/CatalogPage'
 import DashboardPage from '../pages/DashboardPage'
 import DocumentsPage from '../pages/DocumentsPage'
@@ -32,8 +33,9 @@ function hasAnyRole(userRoles, allowedRoles) {
 }
 
 function defaultPathForRoles(roles, visibleItems) {
+  const navigableItems = visibleItems.filter((item) => item.path)
   const preferred = roles.includes('student') || roles.includes('professor') ? 'orarul-meu' : 'orar-pe-clasa'
-  return visibleItems.some((item) => item.path === preferred) ? preferred : visibleItems[0]?.path || 'profil'
+  return navigableItems.some((item) => item.path === preferred) ? preferred : navigableItems[0]?.path || 'profil'
 }
 
 function RouteAccessNotice({ defaultPath }) {
@@ -80,7 +82,7 @@ export default function AppRoutes({ session, roles, onLogin }) {
           </ProtectedRoute>
         )}
       >
-        <Route index element={<Navigate to={defaultPath} replace />} />
+        <Route index element={<AppDashboardPage accessToken={session?.accessToken} roles={roles} />} />
         {visibleItems.some((item) => item.path === 'orarul-meu') && (
           <Route path="orarul-meu" element={<TimetablePage accessToken={session?.accessToken} roles={roles} mode="my" />} />
         )}

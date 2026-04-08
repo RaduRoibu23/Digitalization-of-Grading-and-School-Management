@@ -59,7 +59,7 @@ async function createHttpError(response) {
 
 async function parseResponse(response) {
   if (response.status === 204) {
-    return { detail: 'Deleted' }
+    return { detail: 'Sters' }
   }
 
   const text = await response.text()

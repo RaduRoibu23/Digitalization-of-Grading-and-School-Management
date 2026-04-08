@@ -16,9 +16,20 @@ export default function AuditConsole({ accessToken }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [entries, setEntries] = useState([])
+  const [search, setSearch] = useState('')
+  const [actorFilter, setActorFilter] = useState('all')
   const [panelStyle, setPanelStyle] = useState(null)
   const triggerRef = useRef(null)
   const panelRef = useRef(null)
+
+  const actorOptions = Array.from(new Set(entries.map((entry) => entry.actor_username).filter(Boolean)))
+  const visibleEntries = entries.filter((entry) => {
+    if (actorFilter !== 'all' && entry.actor_username !== actorFilter) {
+      return false
+    }
+    const haystack = `${entry.action || ''} ${entry.actor_username || ''} ${entry.effect || ''}`.toLowerCase()
+    return haystack.includes(search.trim().toLowerCase())
+  })
 
   async function loadAuditEntries() {
     if (!accessToken) return
@@ -111,7 +122,7 @@ export default function AuditConsole({ accessToken }) {
 
             <div className="auditConsoleActions headerActions">
               <button className="btn" type="button" onClick={loadAuditEntries} disabled={loading}>
-                {loading ? 'Se incarca...' : 'Refresh'}
+                {loading ? 'Se incarca...' : 'Actualizeaza'}
               </button>
               <button className="btn" type="button" onClick={() => setOpen(false)}>
                 Inchide
@@ -121,14 +132,34 @@ export default function AuditConsole({ accessToken }) {
 
           {error && <div className="banner error">{error}</div>}
 
+          <div className="auditConsoleFilters">
+            <input
+              className="input"
+              type="search"
+              placeholder="Cauta dupa actiune, utilizator sau efect"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            <select
+              className="select"
+              value={actorFilter}
+              onChange={(event) => setActorFilter(event.target.value)}
+            >
+              <option value="all">Toti utilizatorii</option>
+              {actorOptions.map((actor) => (
+                <option key={actor} value={actor}>{actor}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="auditConsoleMeta catalogStats">
-            <span className="statPill">Intrari: <strong>{entries.length}</strong></span>
+            <span className="statPill">Intrari vizibile: <strong>{visibleEntries.length}</strong></span>
             <span className="statPill">Actualizare: <strong>la 20s</strong></span>
           </div>
 
           {loading && entries.length === 0 ? (
             <div className="mutedBlock">Se incarca istoricul de audit...</div>
-          ) : entries.length === 0 ? (
+          ) : visibleEntries.length === 0 ? (
             <div className="mutedBlock">Nu exista inca actiuni inregistrate.</div>
           ) : (
             <div className="auditConsoleTableWrap tableWrap">
@@ -143,7 +174,7 @@ export default function AuditConsole({ accessToken }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {entries.map((entry) => (
+                  {visibleEntries.map((entry) => (
                     <tr key={entry.id}>
                       <td className="auditConsoleOrderCell">{entry.id}</td>
                       <td className="auditConsoleActionCell">{entry.action || '-'}</td>

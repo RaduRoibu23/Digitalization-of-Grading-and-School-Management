@@ -1,0 +1,45 @@
+:root{
+  --font-sans: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
+  --font-display: 'Sora', 'Segoe UI', sans-serif;
+  --motion-fast: 180ms;
+  --motion-base: 280ms;
+  --motion-slow: 460ms;
+  --surface-strong: rgba(7, 16, 25, 0.92);
+  --surface-soft: rgba(255,255,255,0.04);
+  --surface-border: rgba(255,255,255,0.1);
+}
+
+.appRoot{
+  --module-accent: #66bfc7;
+  --module-accent-2: #8ba4ff;
+  --module-soft: rgba(102, 191, 199, 0.16);
+  --module-soft-2: rgba(139, 164, 255, 0.14);
+}
+
+.appRoot[data-module='dashboard']{
+  --module-accent: #6abbb3;
+  --module-accent-2: #8ca7ff;
+  --module-soft: rgba(106, 187, 179, 0.18);
+  --module-soft-2: rgba(140, 167, 255, 0.16);
+}
+
+.appRoot,
+.appRoot *{
+  font-family: var(--font-sans);
+}
+
+.brand h1,
+.title,
+.feedbackHeroTitle,
+.dashboardPanelTitle,
+.dashboardStateTitle{
+  font-family: var(--font-display);
+}
+
+@media (prefers-reduced-motion: reduce){
+  :root{
+    --motion-fast: 1ms;
+    --motion-base: 1ms;
+    --motion-slow: 1ms;
+  }
+}
