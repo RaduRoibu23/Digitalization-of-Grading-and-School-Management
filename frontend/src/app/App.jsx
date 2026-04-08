@@ -40,20 +40,13 @@ function toastFromNotification(notification) {
 function App() {
   const location = useLocation()
   const navigate = useNavigate()
-  const [session, setSession] = useState(null)
+  const [session, setSession] = useState(() => loadSession())
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [notificationsLoading, setNotificationsLoading] = useState(false)
   const [toasts, setToasts] = useState([])
   const seenNotificationIdsRef = useRef(new Set())
   const notificationsBootstrappedRef = useRef(false)
-
-  useEffect(() => {
-    const savedSession = loadSession()
-    if (savedSession?.accessToken) {
-      setSession(savedSession)
-    }
-  }, [])
 
   const roles = useMemo(() => rolesFromToken(session?.accessToken), [session?.accessToken])
   const status = session?.accessToken ? 'autentificat' : 'neautentificat'

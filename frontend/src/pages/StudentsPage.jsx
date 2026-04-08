@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { apiGet, apiPut } from '../services/apiService'
+import { loadViewState, saveViewState } from '../services/viewState'
 
 const PAGE_SIZE = 15
+const STUDENTS_VIEW_STATE_KEY = 'students'
 const ROLE_OPTIONS = [
   { value: 'student', label: 'Studenti' },
   { value: 'professor', label: 'Profesori' },
@@ -67,16 +69,25 @@ function formFromProfile(profile) {
 }
 
 export default function StudentsScreen({ accessToken, roles = [] }) {
+  const initialViewState = useMemo(
+    () => loadViewState(STUDENTS_VIEW_STATE_KEY, {
+      roleFilter: 'student',
+      search: '',
+      sortBy: null,
+      page: 1,
+    }),
+    []
+  )
   const canManageProfiles = roles.includes('secretariat') || roles.includes('sysadmin')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [banner, setBanner] = useState(null)
   const [profiles, setProfiles] = useState([])
   const [classes, setClasses] = useState([])
-  const [sortBy, setSortBy] = useState(null)
-  const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
-  const [roleFilter, setRoleFilter] = useState('student')
+  const [sortBy, setSortBy] = useState(initialViewState.sortBy)
+  const [search, setSearch] = useState(initialViewState.search)
+  const [page, setPage] = useState(initialViewState.page)
+  const [roleFilter, setRoleFilter] = useState(initialViewState.roleFilter)
   const [editingUsername, setEditingUsername] = useState('')
   const [form, setForm] = useState(formFromProfile(null))
 
@@ -157,6 +168,21 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
   const currentPage = Math.min(page, totalPages)
   const pageStart = (currentPage - 1) * PAGE_SIZE
   const paginatedProfiles = filteredProfiles.slice(pageStart, pageStart + PAGE_SIZE)
+
+  useEffect(() => {
+    saveViewState(STUDENTS_VIEW_STATE_KEY, {
+      roleFilter,
+      search,
+      sortBy,
+      page: currentPage,
+    })
+  }, [currentPage, roleFilter, search, sortBy])
+
+  useEffect(() => {
+    if (page !== currentPage) {
+      setPage(currentPage)
+    }
+  }, [currentPage, page])
 
   function beginEdit(profile) {
     setEditingUsername(profile.username || '')

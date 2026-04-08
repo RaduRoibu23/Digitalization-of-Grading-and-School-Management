@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import TextPromptDialog from '../components/ui/TextPromptDialog'
 import { apiDownload, apiGet, apiPatch, apiPost } from '../services/apiService'
+import { loadViewState, saveViewState } from '../services/viewState'
 
 const DOCUMENT_TYPES = [
   {
@@ -14,6 +15,7 @@ const DOCUMENT_TYPES = [
     helper: 'PDF cu materiile si notele elevului existente in momentul aprobarii documentului.',
   },
 ]
+const DOCUMENTS_VIEW_STATE_KEY = 'documents'
 
 function statusLabel(status) {
   switch (status) {
@@ -62,7 +64,9 @@ export default function DocumentsScreen({ accessToken, roles = [] }) {
   const [saving, setSaving] = useState(false)
   const [banner, setBanner] = useState(null)
   const [requests, setRequests] = useState([])
-  const [documentType, setDocumentType] = useState(DOCUMENT_TYPES[0].value)
+  const [documentType, setDocumentType] = useState(() =>
+    loadViewState(DOCUMENTS_VIEW_STATE_KEY, { documentType: DOCUMENT_TYPES[0].value }).documentType
+  )
   const [purpose, setPurpose] = useState('')
   const [rejectDialog, setRejectDialog] = useState({ open: false, requestId: null, reason: '' })
 
@@ -94,6 +98,12 @@ export default function DocumentsScreen({ accessToken, roles = [] }) {
     [requests]
   )
   const selectedDocument = DOCUMENT_TYPES.find((option) => option.value === documentType) || DOCUMENT_TYPES[0]
+
+  useEffect(() => {
+    saveViewState(DOCUMENTS_VIEW_STATE_KEY, {
+      documentType,
+    })
+  }, [documentType])
 
   async function refreshRequests(nextBanner = null) {
     setLoading(true)

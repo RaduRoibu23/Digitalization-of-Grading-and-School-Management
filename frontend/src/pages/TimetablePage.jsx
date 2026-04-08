@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPatch, apiDelete } from "../services/apiService";
+import { loadViewState, saveViewState } from "../services/viewState";
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 
 const WEEKDAY = ["Luni", "Marti", "Miercuri", "Joi", "Vineri"];
@@ -14,6 +15,7 @@ const TIME_LABELS = {
 };
 
 const POLL_MS = 8000;
+const TIMETABLE_CLASS_VIEW_STATE_KEY = "timetable-class";
 
 function canEdit(roles) {
   const allowed = ["secretariat", "scheduler", "admin", "sysadmin"];
@@ -48,11 +50,21 @@ function signature(list) {
 }
 
 export default function TimetableScreen({ accessToken, roles, mode }) {
+  const initialViewState = useMemo(
+    () => loadViewState(TIMETABLE_CLASS_VIEW_STATE_KEY, {
+      selectedClassId: "",
+      classSearch: "",
+    }),
+    []
+  );
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState(null);
   const [classes, setClasses] = useState([]);
-  const [selectedClassId, setSelectedClassId] = useState(1);
-  const [classSearch, setClassSearch] = useState("");
+  const [selectedClassId, setSelectedClassId] = useState(() => {
+    const parsed = Number(initialViewState.selectedClassId);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  });
+  const [classSearch, setClassSearch] = useState(initialViewState.classSearch);
   const [subjects, setSubjects] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [entries, setEntries] = useState([]);
@@ -109,9 +121,12 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
     const data = await apiGet("/classes", accessToken);
     const list = Array.isArray(data) ? data : [];
     setClasses(list);
-    if (list.length > 0) {
-      setSelectedClassId((current) => current || list[0].id);
-    }
+    setSelectedClassId((current) => {
+      if (list.length === 0) {
+        return null;
+      }
+      return list.some((item) => item.id === current) ? current : list[0].id;
+    });
   }
 
   function applyLoadedEntries(data) {
@@ -179,6 +194,12 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
       setLoading(true);
       try {
         if (mode === "class") {
+          if (!selectedClassId) {
+            setEntries([]);
+            setOriginal([]);
+            setLastSig("");
+            return;
+          }
           await loadTimetableForClass(selectedClassId);
         } else {
           await loadMyTimetable();
@@ -192,11 +213,25 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
   }, [mode, selectedClassId, isTeacherView]);
 
   useEffect(() => {
+    if (mode !== "class") {
+      return;
+    }
+
+    saveViewState(TIMETABLE_CLASS_VIEW_STATE_KEY, {
+      selectedClassId: selectedClassId ?? "",
+      classSearch,
+    });
+  }, [classSearch, mode, selectedClassId]);
+
+  useEffect(() => {
     if (isEditing) return;
 
     const intervalId = setInterval(async () => {
       try {
         if (mode === "class") {
+          if (!selectedClassId) {
+            return;
+          }
           const data = await apiGet(`/timetables/classes/${selectedClassId}`, accessToken);
           const list = (Array.isArray(data) ? data : []).map(normalizeEntry).filter(Boolean);
           list.sort((a, b) => (a.weekday - b.weekday) || (a.indexInDay - b.indexInDay));
@@ -368,7 +403,7 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
               />
               <select
                 className="select"
-                value={selectedClassId}
+                value={selectedClassId ?? ""}
                 onChange={(event) => setSelectedClassId(Number(event.target.value))}
                 disabled={loading || isEditing}
               >

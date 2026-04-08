@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { apiDelete, apiGet, apiPost } from '../services/apiService'
+import { loadViewState, saveViewState } from '../services/viewState'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 
 const WEEKDAY_LABELS = ['Luni', 'Marti', 'Miercuri', 'Joi', 'Vineri']
@@ -12,6 +13,7 @@ const TIME_LABELS = [
   { slot: 6, label: '13:00-13:50' },
   { slot: 7, label: '14:00-14:50' },
 ]
+const GENERATE_TIMETABLE_VIEW_STATE_KEY = 'generate-timetable'
 
 function slotKey(weekday, indexInDay) {
   return `${weekday}-${indexInDay}`
@@ -39,8 +41,14 @@ function normalizeEntries(data) {
 }
 
 export default function GenerateTimetableScreen({ accessToken }) {
+  const initialViewState = useMemo(
+    () => loadViewState(GENERATE_TIMETABLE_VIEW_STATE_KEY, {
+      classId: '',
+    }),
+    []
+  )
   const [classes, setClasses] = useState([])
-  const [classId, setClassId] = useState('')
+  const [classId, setClassId] = useState(initialViewState.classId)
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(false)
   const [boardLoading, setBoardLoading] = useState(false)
@@ -84,9 +92,14 @@ export default function GenerateTimetableScreen({ accessToken }) {
         const data = await apiGet('/classes', accessToken)
         const list = Array.isArray(data) ? data : []
         setClasses(list)
-        if (list.length > 0) {
-          setClassId(String(list[0].id))
-        }
+        setClassId((current) => {
+          if (list.length === 0) {
+            return ''
+          }
+          return list.some((item) => String(item.id) === String(current))
+            ? String(current)
+            : String(list[0].id)
+        })
       } catch (error) {
         setBanner({ type: 'error', text: String(error?.message || error) })
       }
@@ -97,6 +110,12 @@ export default function GenerateTimetableScreen({ accessToken }) {
     if (!classId) return
     loadTimetableForClass(classId)
   }, [accessToken, classId])
+
+  useEffect(() => {
+    saveViewState(GENERATE_TIMETABLE_VIEW_STATE_KEY, {
+      classId,
+    })
+  }, [classId])
 
   async function loadTimetableForClass(nextClassId) {
     setBoardLoading(true)

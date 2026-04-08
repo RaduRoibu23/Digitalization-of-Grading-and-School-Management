@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { apiGet, apiPatch, apiPost } from '../services/apiService'
+import { loadViewState, saveViewState } from '../services/viewState'
 
 const CATEGORY_OPTIONS = [
   { value: 'general', label: 'General' },
@@ -28,6 +29,7 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'IN_PROGRESS', label: 'In curs de rezolvare' },
   { value: 'RESOLVED', label: 'Rezolvate' },
 ]
+const FEEDBACK_VIEW_STATE_KEY = 'feedback'
 
 function formatDate(value) {
   if (!value) return '-'
@@ -133,7 +135,9 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
   const [detailError, setDetailError] = useState(null)
   const [entries, setEntries] = useState([])
   const [activeEntry, setActiveEntry] = useState(null)
-  const [statusFilter, setStatusFilter] = useState('ALL')
+  const [statusFilter, setStatusFilter] = useState(() =>
+    loadViewState(FEEDBACK_VIEW_STATE_KEY, { statusFilter: 'ALL' }).statusFilter
+  )
   const [statusDraft, setStatusDraft] = useState('UNOPENED')
   const [replyDraft, setReplyDraft] = useState('')
   const [form, setForm] = useState({
@@ -164,6 +168,12 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
     }
     loadEntries()
   }, [accessToken])
+
+  useEffect(() => {
+    saveViewState(FEEDBACK_VIEW_STATE_KEY, {
+      statusFilter,
+    })
+  }, [statusFilter])
 
   useEffect(() => {
     if (!feedbackId || !accessToken) {

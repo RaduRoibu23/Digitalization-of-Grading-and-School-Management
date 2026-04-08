@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { apiDelete, apiGet, apiPatch, apiPost } from '../services/apiService'
+import { loadViewState, saveViewState } from '../services/viewState'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 
 const PAGE_SIZE = 6
+const CATALOG_VIEW_STATE_KEY = 'catalog'
 
 function studentLabel(student) {
   if (!student) return ''
@@ -30,10 +32,18 @@ function gradeTone(value) {
 }
 
 export default function CatalogScreen({ accessToken, roles }) {
+  const initialViewState = useMemo(
+    () => loadViewState(CATALOG_VIEW_STATE_KEY, {
+      selectedStudent: '',
+      search: '',
+      page: 1,
+    }),
+    []
+  )
   const [loading, setLoading] = useState(false)
   const [banner, setBanner] = useState(null)
   const [students, setStudents] = useState([])
-  const [selectedStudent, setSelectedStudent] = useState('')
+  const [selectedStudent, setSelectedStudent] = useState(initialViewState.selectedStudent)
   const [catalog, setCatalog] = useState(null)
   const [drafts, setDrafts] = useState({})
   const [newGrades, setNewGrades] = useState({})
@@ -42,8 +52,8 @@ export default function CatalogScreen({ accessToken, roles }) {
   const [addingSubject, setAddingSubject] = useState(null)
   const [addingAbsenceSubject, setAddingAbsenceSubject] = useState(null)
   const [motivatingAbsenceId, setMotivatingAbsenceId] = useState(null)
-  const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
+  const [search, setSearch] = useState(initialViewState.search)
+  const [page, setPage] = useState(initialViewState.page)
   const [deleteTarget, setDeleteTarget] = useState(null)
 
   const canBrowseStudents = useMemo(
@@ -66,7 +76,7 @@ export default function CatalogScreen({ accessToken, roles }) {
 
   useEffect(() => {
     setPage(1)
-  }, [catalog, search])
+  }, [search, selectedStudent])
 
   async function loadStudents() {
     setLoading(true)
@@ -75,9 +85,14 @@ export default function CatalogScreen({ accessToken, roles }) {
       const data = await apiGet('/catalog/students', accessToken)
       const list = Array.isArray(data) ? data : []
       setStudents(list)
-      if (list.length > 0) {
-        setSelectedStudent((current) => current || list[0].username)
-      }
+      setSelectedStudent((current) => {
+        if (list.length === 0) {
+          return ''
+        }
+        return list.some((item) => item.username === current)
+          ? current
+          : list[0].username
+      })
     } catch (error) {
       setBanner({ type: 'error', text: String(error?.message || error) })
     } finally {
@@ -308,6 +323,20 @@ export default function CatalogScreen({ accessToken, roles }) {
   const totalPages = Math.max(1, Math.ceil(filteredSubjects.length / PAGE_SIZE))
   const currentPage = Math.min(page, totalPages)
   const paginatedSubjects = filteredSubjects.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+
+  useEffect(() => {
+    saveViewState(CATALOG_VIEW_STATE_KEY, {
+      selectedStudent,
+      search,
+      page: currentPage,
+    })
+  }, [currentPage, search, selectedStudent])
+
+  useEffect(() => {
+    if (page !== currentPage) {
+      setPage(currentPage)
+    }
+  }, [currentPage, page])
 
   return (
     <section className="contentCard">
