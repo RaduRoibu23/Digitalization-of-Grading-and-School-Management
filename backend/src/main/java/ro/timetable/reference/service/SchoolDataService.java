@@ -30,6 +30,8 @@ import ro.timetable.common.dto.ApiDtos.TimetableMoveResponse;
 import ro.timetable.common.dto.ApiDtos.TimetableSlotMoveOptionResponse;
 import ro.timetable.common.dto.ApiDtos;
 import ro.timetable.common.util.PersistentStateService;
+import ro.timetable.catalog.model.StudentAbsence;
+import ro.timetable.catalog.model.StudentGrade;
 import ro.timetable.reference.model.Room;
 import ro.timetable.reference.model.SchoolClass;
 import ro.timetable.reference.model.Subject;
@@ -62,6 +64,40 @@ public class SchoolDataService {
     private static final int WEEK_DAYS = 5;
     private static final int SLOTS_PER_DAY = 7;
     private static final int TIMETABLE_GENERATION_ATTEMPTS = 60;
+    private static final Set<String> FILOLOGIE_PROFILE_SUBJECTS = Set.of(
+            "Limba si literatura romana",
+            "Istorie",
+            "Geografie"
+    );
+    private static final Set<String> STEM_PROFILE_SUBJECTS = Set.of(
+            "Limba si literatura romana",
+            "Matematica",
+            "Fizica",
+            "Informatica",
+            "Informatica intensiv"
+    );
+    private static final Set<String> LEGACY_DEMO_TEACHER_USERNAMES = Set.of(
+            "romana01", "romana02", "romana03",
+            "mate01", "mate02", "mate03",
+            "sport01", "sport02",
+            "chimie01", "chimie02",
+            "fizica01", "fizica02",
+            "biologie01", "biologie02",
+            "engleza01", "engleza02", "engleza03",
+            "franceza01", "franceza02",
+            "latina01",
+            "istorie01", "istorie02",
+            "geografie01", "geografie02",
+            "socioumane01", "socioumane02",
+            "religie01",
+            "artistica01",
+            "tic01", "tic02",
+            "info01", "info02", "info03",
+            "infoint01", "infoint02",
+            "antreprenoriala01",
+            "literatura01",
+            "stiinte01"
+    );
     private static final String[] CLASS_NAMES = {
             "IX A", "IX B", "IX C", "X A", "X B",
             "X C", "XI A", "XI B", "XII A", "XII B"
@@ -128,6 +164,7 @@ public class SchoolDataService {
     void init() {
         initializeReferenceData();
         loadPersistedTimetables();
+        synchronizeDemoTeacherRoster();
         reconcileHomeroomAssignmentsWithTimetables();
     }
 
@@ -736,6 +773,171 @@ public class SchoolDataService {
         timetablesByClassId.values().forEach(entries -> entries.sort(Comparator.comparing(TimetableEntry::weekday).thenComparing(TimetableEntry::indexInDay)));
     }
 
+    private void synchronizeDemoTeacherRoster() {
+        Map<String, TeacherSeed> desiredTeachersByUsername = new LinkedHashMap<>();
+        teacherSeeds().forEach(seed -> desiredTeachersByUsername.put(seed.username(), seed));
+
+        List<UserProfile> legacyTeacherProfiles = profilesByUsername.values().stream()
+                .filter(profile -> "professor".equals(profile.role()))
+                .filter(profile -> LEGACY_DEMO_TEACHER_USERNAMES.contains(profile.username()))
+                .sorted(Comparator.comparing(UserProfile::username))
+                .toList();
+
+        boolean changed = false;
+        for (TeacherSeed teacher : desiredTeachersByUsername.values()) {
+            UserProfile existing = profilesByUsername.get(teacher.username());
+            UserProfile desired = teacherProfileFromSeed(teacher, existing);
+            if (!Objects.equals(existing, desired)) {
+                profilesByUsername.put(desired.username(), desired);
+                referenceDataPersistenceService.saveUserProfile(desired);
+                changed = true;
+            }
+        }
+
+        List<UserProfile> removedTeachers = legacyTeacherProfiles.stream()
+                .filter(profile -> !desiredTeachersByUsername.containsKey(profile.username()))
+                .toList();
+
+        if (removedTeachers.isEmpty() && !changed) {
+            rebuildDerivedIndexes();
+            return;
+        }
+
+        Map<String, String> replacementsByUsername = teacherReplacementMap(removedTeachers, desiredTeachersByUsername);
+        removedTeachers.forEach(profile -> profilesByUsername.remove(profile.username()));
+        rebuildDerivedIndexes();
+
+        if (!removedTeachers.isEmpty()) {
+            regeneratePersistedTimetablesForTeacherRoster();
+            remapPersistedGradesForTeacherRoster(replacementsByUsername);
+            remapPersistedAbsencesForTeacherRoster(replacementsByUsername);
+            referenceDataPersistenceService.deleteUserProfilesByUsername(removedTeachers.stream().map(UserProfile::username).toList());
+        }
+    }
+
+    private UserProfile teacherProfileFromSeed(TeacherSeed teacher, UserProfile existing) {
+        return new UserProfile(
+                existing == null ? profileIds.getAndIncrement() : existing.id(),
+                existing == null ? 1 : existing.version(),
+                teacher.username(),
+                "professor",
+                teacher.firstName(),
+                teacher.lastName(),
+                teacher.username() + "@timetable.local",
+                existing == null ? null : existing.address(),
+                existing == null ? null : existing.cnp(),
+                existing == null ? null : existing.idSeries(),
+                existing == null ? null : existing.serialNumber(),
+                existing == null ? null : existing.fatherInitial(),
+                null,
+                null,
+                List.of(teacher.subjectName())
+        );
+    }
+
+    private Map<String, String> teacherReplacementMap(List<UserProfile> removedTeachers, Map<String, TeacherSeed> desiredTeachersByUsername) {
+        Map<String, String> replacements = new LinkedHashMap<>();
+        Map<String, String> replacementBySubject = new LinkedHashMap<>();
+        desiredTeachersByUsername.values().forEach(seed -> replacementBySubject.putIfAbsent(seed.subjectName(), seed.username()));
+
+        for (UserProfile removed : removedTeachers) {
+            String subjectName = removed.subjectsTaught().isEmpty() ? null : removed.subjectsTaught().get(0);
+            String replacementUsername = subjectName == null ? null : replacementBySubject.get(subjectName);
+            if (replacementUsername != null) {
+                replacements.put(removed.username(), replacementUsername);
+            }
+        }
+        return replacements;
+    }
+
+    private void regeneratePersistedTimetablesForTeacherRoster() {
+        List<Long> classIdsWithTimetables = timetablesByClassId.keySet().stream()
+                .sorted()
+                .toList();
+        if (classIdsWithTimetables.isEmpty()) {
+            return;
+        }
+
+        Map<Long, List<TimetableEntry>> backup = new LinkedHashMap<>();
+        timetablesByClassId.forEach((classId, entries) -> backup.put(classId, copyEntries(entries)));
+
+        Map<Long, List<TimetableEntry>> regenerated = new LinkedHashMap<>();
+        timetablesByClassId.clear();
+        try {
+            for (Long classId : classIdsWithTimetables) {
+                SchoolClass schoolClass = requireClass(classId);
+                List<TimetableEntry> generated = buildGeneratedTimetable(schoolClass, classId);
+                regenerated.put(classId, generated);
+                timetablesByClassId.put(classId, generated);
+            }
+        } catch (RuntimeException exception) {
+            timetablesByClassId.clear();
+            backup.forEach((classId, entries) -> timetablesByClassId.put(classId, copyEntries(entries)));
+            throw exception;
+        }
+
+        for (Long classId : classIdsWithTimetables) {
+            persistentStateService.replaceTimetableForClass(classId, regenerated.getOrDefault(classId, List.of()));
+        }
+    }
+
+    private void remapPersistedGradesForTeacherRoster(Map<String, String> replacementsByUsername) {
+        List<StudentGrade> grades = persistentStateService.loadGrades();
+        List<StudentGrade> updatedGrades = new ArrayList<>();
+        for (StudentGrade grade : grades) {
+            String replacementUsername = replacementsByUsername.get(grade.teacherUsername());
+            if (replacementUsername == null) {
+                continue;
+            }
+            UserProfile teacher = getProfile(replacementUsername);
+            updatedGrades.add(new StudentGrade(
+                    grade.id(),
+                    grade.studentUsername(),
+                    grade.studentName(),
+                    grade.classId(),
+                    grade.className(),
+                    grade.subjectId(),
+                    grade.subjectName(),
+                    grade.gradeValue(),
+                    grade.gradeDate(),
+                    teacher.username(),
+                    displayName(teacher),
+                    grade.version()
+            ));
+        }
+        persistentStateService.saveGrades(updatedGrades);
+    }
+
+    private void remapPersistedAbsencesForTeacherRoster(Map<String, String> replacementsByUsername) {
+        List<StudentAbsence> absences = persistentStateService.loadAbsences();
+        List<StudentAbsence> updatedAbsences = new ArrayList<>();
+        for (StudentAbsence absence : absences) {
+            String replacementUsername = replacementsByUsername.get(absence.teacherUsername());
+            if (replacementUsername == null) {
+                continue;
+            }
+            UserProfile teacher = getProfile(replacementUsername);
+            updatedAbsences.add(new StudentAbsence(
+                    absence.id(),
+                    absence.studentUsername(),
+                    absence.studentName(),
+                    absence.classId(),
+                    absence.className(),
+                    absence.subjectId(),
+                    absence.subjectName(),
+                    absence.absenceDate(),
+                    teacher.username(),
+                    displayName(teacher),
+                    absence.motivated(),
+                    absence.motivatedByUsername(),
+                    absence.motivatedByName(),
+                    absence.motivatedAt(),
+                    absence.version()
+            ));
+        }
+        persistentStateService.saveAbsences(updatedAbsences);
+    }
+
     public MeResponse meResponse(String username, List<String> roles, Map<String, Object> claims) {
         Object emailClaim = claims == null ? null : claims.get("email");
         UserProfile profile = resolveAuthenticatedProfile(username, emailClaim == null ? null : String.valueOf(emailClaim));
@@ -942,6 +1144,9 @@ public class SchoolDataService {
             if (usedSlots.contains(slotKey(slot.weekday(), slot.indexInDay()))) {
                 continue;
             }
+            if (prefersMiddayForProfile(classId, subjectName) && slot.indexInDay() == 1) {
+                continue;
+            }
 
             int sameDayCount = daySubjectCounts.getOrDefault(daySubjectKey(slot.weekday(), subjectName), 0);
             if (sameDayCount >= 2) {
@@ -995,7 +1200,17 @@ public class SchoolDataService {
         long distinctDaysUsed = countDistinctDaysForSubject(assignments, subjectName);
         long distinctDaysAfterThis = distinctDaysUsed + (sameDayCount == 0 ? 1 : 0);
         int remainingDistinctDays = Math.max(0, WEEK_DAYS - (int) distinctDaysAfterThis);
-        if (isHeavySubject(subjectName)) {
+        if (prefersMiddayForProfile(classId, subjectName)) {
+            if (slot.indexInDay() == 2) {
+                score -= 18;
+            } else if (slot.indexInDay() <= 4) {
+                score += 18;
+            } else if (slot.indexInDay() == 5) {
+                score += 8;
+            } else {
+                score -= (slot.indexInDay() - 5) * 5;
+            }
+        } else if (isHeavySubject(subjectName)) {
             if (slot.indexInDay() <= 2) {
                 score += 18;
             } else if (slot.indexInDay() <= 4) {
@@ -1173,7 +1388,9 @@ public class SchoolDataService {
             for (int index = 0; index < dayAssignments.size(); index++) {
                 SlotAssignment current = dayAssignments.get(index);
                 String subjectName = subjectName(current);
-                if (isHeavySubject(subjectName) && current.slot().indexInDay() >= 5) {
+                if (prefersMiddayForProfile(classId, subjectName) && current.slot().indexInDay() == 2) {
+                    score -= 12;
+                } else if (isHeavySubject(subjectName) && current.slot().indexInDay() >= 5) {
                     score -= (current.slot().indexInDay() - 4) * 8;
                 }
                 if (usesPreferredHomeRoom(classId, subjectName, current.roomId())) {
@@ -1547,6 +1764,21 @@ public class SchoolDataService {
         return Set.of("Limba si literatura romana", "Matematica", "Informatica", "Informatica intensiv", "Fizica", "Limba engleza").contains(subjectName);
     }
 
+    private boolean prefersMiddayForProfile(Long classId, String subjectName) {
+        if (subjectName == null) {
+            return false;
+        }
+        SchoolClass schoolClass = classes.get(classId);
+        if (schoolClass == null || schoolClass.profile() == null) {
+            return false;
+        }
+        return switch (schoolClass.profile()) {
+            case "Filologie" -> FILOLOGIE_PROFILE_SUBJECTS.contains(subjectName);
+            case "Matematica-Informatica", "Matematica-Informatica Intensiv" -> STEM_PROFILE_SUBJECTS.contains(subjectName);
+            default -> false;
+        };
+    }
+
     private boolean usesPreferredHomeRoom(Long classId, String subjectName, Long roomId) {
         return !requiresSpecialRoom(subjectName) && Objects.equals(homeRoomIdsByClassId.get(classId), roomId);
     }
@@ -1887,39 +2119,26 @@ public class SchoolDataService {
         return List.of(
                 new TeacherSeed("romana01", "Mihaela", "Ionescu", "Limba si literatura romana"),
                 new TeacherSeed("romana02", "Corina", "Pavel", "Limba si literatura romana"),
-                new TeacherSeed("romana03", "Adrian", "Mocanu", "Limba si literatura romana"),
                 new TeacherSeed("mate01", "Cristian", "Serban", "Matematica"),
                 new TeacherSeed("mate02", "Irina", "Voicu", "Matematica"),
-                new TeacherSeed("mate03", "Raluca", "Toma", "Matematica"),
                 new TeacherSeed("sport01", "Dorin", "Avram", "Educatie fizica"),
-                new TeacherSeed("sport02", "Lucian", "Ilie", "Educatie fizica"),
                 new TeacherSeed("chimie01", "Alina", "Marin", "Chimie"),
-                new TeacherSeed("chimie02", "Sorin", "Dumitru", "Chimie"),
                 new TeacherSeed("fizica01", "Mircea", "Petrescu", "Fizica"),
                 new TeacherSeed("fizica02", "Anca", "Stan", "Fizica"),
                 new TeacherSeed("biologie01", "Laura", "Nistor", "Biologie"),
-                new TeacherSeed("biologie02", "Paula", "Tudor", "Biologie"),
                 new TeacherSeed("engleza01", "Simona", "Manole", "Limba engleza"),
                 new TeacherSeed("engleza02", "Monica", "Diaconescu", "Limba engleza"),
-                new TeacherSeed("engleza03", "Radu", "Oprea", "Limba engleza"),
                 new TeacherSeed("franceza01", "Lavinia", "Coman", "Limba franceza"),
                 new TeacherSeed("franceza02", "Mirela", "Ene", "Limba franceza"),
                 new TeacherSeed("latina01", "Carmen", "Preda", "Limba latina"),
                 new TeacherSeed("istorie01", "Dan", "Neagu", "Istorie"),
-                new TeacherSeed("istorie02", "Oana", "Munteanu", "Istorie"),
                 new TeacherSeed("geografie01", "Claudiu", "Barbu", "Geografie"),
-                new TeacherSeed("geografie02", "Florina", "Florea", "Geografie"),
                 new TeacherSeed("socioumane01", "Andrada", "Lazar", "Socio-umane"),
-                new TeacherSeed("socioumane02", "Mihnea", "Dragomir", "Socio-umane"),
                 new TeacherSeed("religie01", "Gabriel", "Constantin", "Religie"),
                 new TeacherSeed("artistica01", "Diana", "Rosu", "Educatie artistica"),
                 new TeacherSeed("tic01", "Bogdan", "Georgescu", "TIC"),
-                new TeacherSeed("tic02", "Camelia", "Apostol", "TIC"),
                 new TeacherSeed("info01", "Marian", "Radu", "Informatica"),
-                new TeacherSeed("info02", "Alexandra", "Stoica", "Informatica"),
-                new TeacherSeed("info03", "Sergiu", "Nedelcu", "Informatica"),
                 new TeacherSeed("infoint01", "Catalin", "Tudose", "Informatica intensiv"),
-                new TeacherSeed("infoint02", "Cezara", "Moldovan", "Informatica intensiv"),
                 new TeacherSeed("antreprenoriala01", "Iulia", "Sandu", "Educatie antreprenoriala"),
                 new TeacherSeed("literatura01", "Sabina", "Matei", "Literatura universala"),
                 new TeacherSeed("stiinte01", "Violeta", "Enache", "Stiinte")

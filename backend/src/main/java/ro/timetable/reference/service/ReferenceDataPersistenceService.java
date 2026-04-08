@@ -1,6 +1,7 @@
 package ro.timetable.reference.service;
 
 import java.util.Comparator;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -122,6 +123,14 @@ public class ReferenceDataPersistenceService {
     @Transactional
     public void saveUserProfile(UserProfile profile) {
         userProfileRepository.save(toEntity(profile, true));
+    }
+
+    @Transactional
+    public void deleteUserProfilesByUsername(Collection<String> usernames) {
+        if (usernames == null || usernames.isEmpty()) {
+            return;
+        }
+        userProfileRepository.deleteAllByUsernameIn(usernames);
     }
 
     @Transactional(readOnly = true)
