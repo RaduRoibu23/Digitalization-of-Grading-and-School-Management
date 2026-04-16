@@ -1,65 +1,59 @@
 # Digitalization of Grading and School Management
 
-Monorepo pentru o platforma scolara care reuneste catalogul digital, generarea orarului, notificarile si administrarea conturilor. Arhitectura actuala pastreaza frontend-ul React, backend-ul Spring Boot, PostgreSQL pentru persistenta aplicatiei si Keycloak ca serviciu activ de identitate si autorizare.
+## Setup
 
-## Structura
+Pentru rularea solutiei sunt necesare Docker Desktop si Docker Compose.
 
-```text
-.
-|-- frontend/
-|-- backend/
-|-- infra/
-|-- docs/
-|-- scripts/
-|-- .github/workflows/
-|-- README.md
-`-- LICENSE
-```
+Configuratia locala este pastrata in fisierul `infra/.env`. Inainte de pornire se verifica valorile din acest fisier, in special cele pentru baza de date, Keycloak si SMTP.
 
-## Componente
+## Rularea solutiei cu Docker
 
-- `frontend/`: aplicatia React/Vite, reorganizata in `src/app`, `src/pages`, `src/components`, `src/services`, `src/styles` si `src/config`.
-- `backend/`: aplicatia Spring Boot, reorganizata pe module functionale: `auth`, `audit`, `catalog`, `documents`, `feedback`, `notifications`, `reference`, `timetable`, plus `common`.
-- `infra/`: infrastructura pentru dezvoltare locala, inclusiv `docker-compose.local.yml`, fisierul `infra/.env`, configurarea Nginx si importul realm-ului Keycloak.
-- `docs/`: note scurte despre arhitectura, API si baza de date.
-- `scripts/`: comenzi rapide pentru pornirea componentelor locale.
-
-## Pornire locala
-
-1. Completeaza valorile din `infra/.env`. Pentru testare locala, aplicatia foloseste Mailtrap Sandbox, deci ai nevoie de credentialele SMTP din sandbox-ul Mailtrap.
-2. Porneste intregul stack local:
+Din radacina proiectului se ruleaza comanda:
 
 ```bash
-docker compose -f infra/docker-compose.local.yml up --build
+docker compose --env-file infra/.env -f infra/docker-compose.local.yml up -d --build
 ```
 
-Sau foloseste scripturile helper:
+Prin aceasta comanda sunt pornite toate serviciile necesare:
 
-```bash
-./scripts/run-keycloak.sh
-./scripts/run-backend.sh
-./scripts/run-frontend.sh
-```
+- frontend-ul
+- backend-ul
+- baza de date a aplicatiei
+- baza de date pentru Keycloak
+- serverul Keycloak
 
-## Endpoint-uri locale
+Dupa pornire, aplicatia este disponibila la urmatoarele adrese:
 
 - Frontend: `http://localhost:3000`
 - Backend API: `http://localhost:8000/api`
 - Swagger UI: `http://localhost:8000/swagger-ui.html`
 - Keycloak: `http://localhost:8181`
 
-## Observatii importante
+Pentru oprirea serviciilor se foloseste comanda:
 
-- Keycloak nu este componenta legacy si ramane parte activa din fluxul de autentificare.
-- Backend-ul continua sa foloseasca Flyway pentru migrari si PostgreSQL pentru datele aplicatiei.
-- Fluxurile publice de register si feedback extern nu mai fac parte din aplicatie; conturile se creeaza doar prin fluxurile interne, iar formularul `Help` ramane disponibil doar utilizatorilor autentificati.
-- Notificarile existente din aplicatie continua sa fie salvate in platforma si sunt oglindite si pe email in Mailtrap Sandbox atunci cand SMTP-ul este configurat.
-- Realm-ul Keycloak este importat din `infra/keycloak/realms/timetable-realm-realm.json`.
-- Nginx ramane folosit pentru servirea build-ului frontend in containerul local.
+```bash
+docker compose --env-file infra/.env -f infra/docker-compose.local.yml down
+```
 
-## CI si deploy
+## Rularea componentelor local
 
-- `.github/workflows/frontend-ci.yml` construieste frontend-ul cu Node.js.
-- `.github/workflows/backend-ci.yml` construieste backend-ul cu Maven si Java 17.
+Daca se doreste rularea componentelor in mod separat, bazele de date si Keycloak pot fi pornite mai intai din Docker:
 
-Documentatia suplimentara se afla in `docs/architecture.md`, `docs/api.md` si `docs/database.md`.
+```bash
+docker compose --env-file infra/.env -f infra/docker-compose.local.yml up -d postgres-app postgres-keycloak keycloak
+```
+
+Backend-ul se porneste din folderul `backend` cu:
+
+```bash
+mvn spring-boot:run
+```
+
+Frontend-ul se porneste din folderul `frontend` cu:
+
+```bash
+npm install
+npm run dev
+```
+
+In aceasta varianta, backend-ul ruleaza pe portul `8000`, iar frontend-ul pe portul implicit al Vite, de regula `5173`, daca nu este configurat altfel.
