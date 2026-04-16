@@ -1,4 +1,4 @@
-export default function AuthShowcase({ eyebrow, title, description, badges = [], cards = [], note = '', variant = 'default' }) {
+export default function AuthIntroPanel({ eyebrow, title, description, badges = [], cards = [], note = '', variant = 'default' }) {
   return (
     <section className={`authShowcase ${variant === 'compact' ? 'authShowcaseCompact' : ''}`}>
       <div className="authShowcaseInner">

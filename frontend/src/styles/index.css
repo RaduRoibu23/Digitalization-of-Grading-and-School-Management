@@ -260,7 +260,6 @@ code.inline{
   border: 1px solid rgba(255,255,255,0.10);
 }
 
-/* Dashboard split: left content and right results panel */
 .dashboard-grid{
   display:grid;
   grid-template-columns: 1fr 420px;
@@ -287,7 +286,6 @@ code.inline{
   .results-panel{ position: static; height: auto; }
 }
 
-/* Timetable Table */
 .timetable-container {
   overflow-x: auto;
 }
@@ -341,7 +339,6 @@ code.inline{
   color: var(--muted);
 }
 
-/* Data Tables */
 .data-table {
   width: 100%;
   border-collapse: collapse;
@@ -367,7 +364,6 @@ code.inline{
   background: rgba(255,255,255,0.04);
 }
 
-/* User Info Display */
 .user-info-display {
   display: flex;
   flex-direction: column;
@@ -388,7 +384,6 @@ code.inline{
   margin-right: 8px;
 }
 
-/* Notifications List */
 .notifications-list {
   display: flex;
   flex-direction: column;
@@ -417,7 +412,6 @@ code.inline{
   color: var(--muted);
 }
 
-/* Error Display */
 .error-display {
   padding: 16px;
   border-radius: 12px;
@@ -436,7 +430,6 @@ code.inline{
   margin-bottom: 8px;
 }
 
-/* JSON Display */
 .json-display {
   background: rgba(0,0,0,0.3);
   padding: 12px;
@@ -448,7 +441,6 @@ code.inline{
   border: 1px solid var(--border);
 }
 
-/* Success Display */
 .success-display {
   padding: 16px;
   border-radius: 12px;
@@ -462,13 +454,11 @@ code.inline{
   margin-bottom: 8px;
 }
 
-/* Object Display */
 .object-display {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-/* ---- App shell (sidebar + content) ---- */
 .appShell{
   display:flex;
   gap: 14px;
@@ -496,8 +486,6 @@ code.inline{
   display:flex;
   flex-direction: column;
   gap: 8px;
-
-  /* ~4 butoane vizibile, restul scroll */
   max-height: 210px;
   overflow-y: auto;
   padding-right: 4px;
@@ -794,7 +782,6 @@ code.inline{
   font-size: 12px;
   color: var(--text);
 }
-/* Login full-screen centered */
 .loginPage{
   position: fixed;
   inset: 0;
@@ -809,7 +796,6 @@ code.inline{
   z-index: 9999;
 }
 
-/* Card centrat */
 .loginCard{
   width: 100%;
   max-width: 340px;
@@ -846,7 +832,7 @@ code.inline{
   margin: 8px 0 16px 0;
 }
 
-.quickLoginGrid {
+.presetAccountGrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
@@ -866,7 +852,6 @@ code.inline{
   opacity: 0.5;
 }
 
-/* Notification Pop-ups */
 .notificationContainer {
   position: fixed;
   top: 20px;
@@ -1118,7 +1103,6 @@ code.inline{
   }
 }
 
-/* --- Visual refresh --- */
 :root{
   --bg: #06131b;
   --bg-deep: #041018;
@@ -1661,7 +1645,7 @@ body::after{
 .btn,
 .navBtn,
 .gradeBadge,
-.quickLoginGrid .btn,
+.presetAccountGrid .btn,
 .notificationClose{
   transition: transform 0.22s ease, box-shadow 0.22s ease, background 0.22s ease, border-color 0.22s ease;
 }
@@ -2088,7 +2072,7 @@ body::after{
   margin: 4px 0 0;
 }
 
-.quickLoginGrid{
+.presetAccountGrid{
   display:grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
@@ -2244,7 +2228,7 @@ body::after{
     grid-template-columns: 1fr;
   }
 
-  .quickLoginGrid{
+  .presetAccountGrid{
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -2267,7 +2251,7 @@ body::after{
     font-size: clamp(2.1rem, 12vw, 3rem);
   }
 
-  .quickLoginGrid{
+  .presetAccountGrid{
     grid-template-columns: 1fr 1fr;
   }
 
@@ -2289,7 +2273,6 @@ body::after{
   min-height: calc(100vh - 32px);
 }
 
-/* ---- Academic premium refresh ---- */
 
 .appRoot{
   --module-accent: #7bc6c2;

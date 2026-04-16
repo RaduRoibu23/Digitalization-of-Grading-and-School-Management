@@ -241,7 +241,6 @@ public class MailService {
             long waitTime = MAILTRAP_SANDBOX_MIN_INTERVAL_MS - (now - lastSandboxSendAt);
             if (waitTime > 0) {
                 try {
-                    // Mailtrap Sandbox limiteaza trimiterea rapida, asa ca spatiem mailurile automate.
                     Thread.sleep(waitTime);
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
@@ -273,7 +272,6 @@ public class MailService {
 
     private void sleepSafely(long waitTime) {
         try {
-            // Mailtrap Sandbox limiteaza trimiterea rapida, asa ca spatiem mailurile automate si re-incercam la nevoie.
             Thread.sleep(waitTime);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();

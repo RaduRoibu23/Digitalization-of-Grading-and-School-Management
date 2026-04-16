@@ -70,7 +70,7 @@ public class CatalogService {
     void init() {
         loadPersistedGrades();
         loadPersistedAbsences();
-        seedDemoCatalogDataIfNeeded();
+        seedCatalogDataIfNeeded();
     }
 
     public List<ProfileResponse> getCatalogStudents(String requesterUsername, List<String> roles) {
@@ -805,7 +805,7 @@ public class CatalogService {
         absencesByStudentUsername.values().forEach(this::sortAbsences);
     }
 
-    private void seedDemoCatalogDataIfNeeded() {
+    private void seedCatalogDataIfNeeded() {
         List<UserProfile> students = schoolDataService.getUserProfilesByRole("student");
         if (students.isEmpty()) {
             return;

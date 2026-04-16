@@ -15,7 +15,7 @@ export const CONFIG = {
     storageKey: env.VITE_AUTH_STORAGE_KEY || 'timetable_auth',
   },
 
-  quickUsers: [
+  presetAccounts: [
     { label: 'Sysadmin', username: 'sysadmin01' },
     { label: 'Admin', username: 'admin01' },
     { label: 'Secretariat', username: 'secretariat01' },

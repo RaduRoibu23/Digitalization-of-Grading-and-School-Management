@@ -12,7 +12,7 @@ const FEATURE_CARDS = [
       'Pastreaza restrictii reale pe profesori, sali si suprapuneri intre sloturi.',
       'Permite swap sau mutare manuala direct din grid, cu validare pe server.',
     ],
-    metric: '10 clase demo, grid complet si editare manuala',
+    metric: '10 clase, grid complet si editare manuala',
     accent: 'teal',
   },
   {

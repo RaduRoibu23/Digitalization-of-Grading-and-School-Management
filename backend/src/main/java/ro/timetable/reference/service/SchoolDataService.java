@@ -79,7 +79,7 @@ public class SchoolDataService {
             "Informatica",
             "Informatica intensiv"
     );
-    private static final Set<String> LEGACY_DEMO_TEACHER_USERNAMES = Set.of(
+    private static final Set<String> LEGACY_TEACHER_USERNAMES = Set.of(
             "romana01", "romana02", "romana03",
             "mate01", "mate02", "mate03",
             "sport01", "sport02",
@@ -167,7 +167,7 @@ public class SchoolDataService {
     void init() {
         initializeReferenceData();
         loadPersistedTimetables();
-        synchronizeDemoTeacherRoster();
+        synchronizeTeacherRoster();
         reconcileHomeroomAssignmentsWithTimetables();
     }
 
@@ -776,13 +776,13 @@ public class SchoolDataService {
         timetablesByClassId.values().forEach(entries -> entries.sort(Comparator.comparing(TimetableEntry::weekday).thenComparing(TimetableEntry::indexInDay)));
     }
 
-    private void synchronizeDemoTeacherRoster() {
+    private void synchronizeTeacherRoster() {
         Map<String, TeacherSeed> desiredTeachersByUsername = new LinkedHashMap<>();
         teacherSeeds().forEach(seed -> desiredTeachersByUsername.put(seed.username(), seed));
 
         List<UserProfile> legacyTeacherProfiles = profilesByUsername.values().stream()
                 .filter(profile -> "professor".equals(profile.role()))
-                .filter(profile -> LEGACY_DEMO_TEACHER_USERNAMES.contains(profile.username()))
+                .filter(profile -> LEGACY_TEACHER_USERNAMES.contains(profile.username()))
                 .sorted(Comparator.comparing(UserProfile::username))
                 .toList();
 
@@ -1053,7 +1053,6 @@ public class SchoolDataService {
             }
             try {
                 List<SlotAssignment> candidateAssignments = tryBuildAssignments(schoolClass, classId, occurrences, slots, plan);
-                // Keep the best valid timetable instead of stopping at the first schedulable one.
                 int candidateScore = evaluateScheduleQuality(classId, plan, candidateAssignments);
                 if (bestCandidate == null || candidateScore > bestCandidate.score()) {
                     bestCandidate = new AssignmentCandidate(candidateAssignments, candidateScore);
@@ -1378,7 +1377,6 @@ public class SchoolDataService {
     }
 
     private int evaluateScheduleQuality(Long classId, Map<String, Integer> subjectTargets, List<SlotAssignment> assignments) {
-        // Favor timetables that spread repeated subjects across the week and keep demanding classes earlier.
         int score = 0;
         for (int weekday = 1; weekday <= WEEK_DAYS; weekday++) {
             int day = weekday;

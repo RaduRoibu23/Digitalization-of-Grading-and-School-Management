@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CONFIG } from '../config/config'
 import { login } from '../services/authService'
-import AuthShowcasePage from './AuthShowcasePage'
+import AuthIntroPanel from './AuthIntroPanel'
 
 export default function LoginPage({ onLogin }) {
   const [username, setUsername] = useState('')
@@ -10,7 +10,7 @@ export default function LoginPage({ onLogin }) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const showcaseCards = [
+  const overviewCards = [
     { value: 'Acces rapid', title: 'Autentificare clara', text: 'Intri direct in platforma si ajungi la modulele potrivite rolului tau.' },
     { value: 'Date reale', title: 'Informatii persistente', text: 'Orarul, catalogul si notificarile raman disponibile intre sesiuni.' },
     { value: 'Flux unitar', title: 'Lucru organizat', text: 'Elevii, profesorii si administratia folosesc acelasi spatiu de lucru.' },
@@ -44,12 +44,12 @@ export default function LoginPage({ onLogin }) {
   return (
     <div className="loginPage">
       <div className="authLayout authLayoutCompact">
-        <AuthShowcasePage
+        <AuthIntroPanel
           eyebrow="Acces in platforma"
           title="Autentificare pentru conturile existente"
           description="Introdu datele contului pentru a ajunge in zona ta de lucru, cu acces la orar, catalog si notificarile relevante."
           badges={['Orar', 'Catalog', 'Notificari']}
-          cards={showcaseCards}
+          cards={overviewCards}
           variant="compact"
         />
 
@@ -93,8 +93,8 @@ export default function LoginPage({ onLogin }) {
               {loading ? 'Se conecteaza...' : 'Login'}
             </button>
 
-            <div className="quickLoginGrid">
-              {CONFIG.quickUsers.map((user) => (
+            <div className="presetAccountGrid">
+              {CONFIG.presetAccounts.map((user) => (
                 <button
                   key={user.label}
                   className="btn btnSmall"
