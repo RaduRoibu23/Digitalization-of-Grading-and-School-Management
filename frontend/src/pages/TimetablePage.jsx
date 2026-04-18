@@ -117,6 +117,11 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
     const schoolClass = classes.find((item) => item.id === selectedClassId);
     return schoolClass?.name ?? schoolClass?.class_name ?? "";
   }, [classes, selectedClassId]);
+  const timetableTitle = mode === "class"
+    ? `Orar pe clasa${selectedClassName ? ` - ${selectedClassName}` : ""}`
+    : isParentView
+      ? "Orarul elevului"
+      : "Orarul meu";
 
   async function loadSubjects() {
     const data = await apiGet("/subjects", accessToken);
@@ -418,7 +423,7 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
       <div className="contentHeader">
         <div>
           <div className="title">
-            {mode === "class" ? `Orar pe clasa${selectedClassName ? ` - ${selectedClassName}` : ""}` : "Orarul meu"}
+            {timetableTitle}
           </div>
           <div className="subtitle">
             {isEditing ? "Modul editare este activ." : isTeacherView ? "Programul profesorului pe zile, intervale, clase si sali." : isParentView ? "Vizualizare a orarului copilului asociat, pe zile si intervale." : "Vizualizare orar pe zile si intervale."}

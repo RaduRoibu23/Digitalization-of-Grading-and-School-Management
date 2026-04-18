@@ -16,12 +16,12 @@ export const CONFIG = {
   },
 
   presetAccounts: [
-    { label: 'Sysadmin', username: 'sysadmin01' },
-    { label: 'Admin', username: 'admin01' },
-    { label: 'Secretariat', username: 'secretariat01' },
-    { label: 'Profesor', username: 'romana01' },
-    { label: 'Student', username: 'student001' },
-    { label: 'Parinte', username: 'parinte001' },
-    { label: 'Scheduler', username: 'scheduler01' },
+    { label: 'Sysadmin', username: 'sysadmin01', password: 'sysadmin01' },
+    { label: 'Admin', username: 'admin01', password: 'admin01' },
+    { label: 'Secretariat', username: 'secretariat01', password: 'secretariat01' },
+    { label: 'Profesor', username: 'romana01', password: 'romana01' },
+    { label: 'Student', username: 'student001', password: 'student001' },
+    { label: 'Parinte', username: 'parinte001', password: 'parinte001' },
+    { label: 'Scheduler', username: 'scheduler01', password: 'scheduler01' },
   ],
 }

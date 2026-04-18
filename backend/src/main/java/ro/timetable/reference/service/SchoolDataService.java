@@ -123,6 +123,18 @@ public class SchoolDataService {
             "Constantin", "Lazar", "Nedelcu", "Dragomir", "Serban", "Coman", "Neagu", "Manole", "Ene", "Pavel",
             "Oprea", "Tudor", "Florea", "Apostol", "Dobre", "Tudose", "Matei", "Mocanu", "Avram", "Rosu"
     };
+    private static final String[] PARENT_FIRST_NAMES = {
+            "Adrian", "Mihaela", "Sorin", "Camelia", "Bogdan", "Anca", "Florin", "Raluca", "Lucian", "Monica",
+            "Ciprian", "Loredana", "Claudiu", "Corina", "Dan", "Cristina", "Iulian", "Alina", "Ovidiu", "Simona",
+            "Laurentiu", "Elisabeta", "Gabriel", "Andreea", "Marius", "Daniela", "Paul", "Nadia", "Cosmin", "Iulia",
+            "Valentin", "Georgiana", "Razvan", "Catalina", "Aurelian", "Mariana", "Sebastian", "Laura", "Dorin", "Irina"
+    };
+    private static final String[] PARENT_LAST_NAMES = {
+            "Balan", "Calinescu", "Dima", "Fratila", "Ghinea", "Jianu", "Lungu", "Maftei", "Nita", "Petrache",
+            "Rizescu", "Sava", "Tanase", "Udrea", "Vasilescu", "Zaharia", "Banciu", "Cernat", "Dragu", "Fodoreanu",
+            "Grigore", "Ignat", "Leonte", "Mitrea", "Nicolau", "Oancea", "Paraschiv", "Rotaru", "Stanciu", "Turcu",
+            "Arsene", "Bratu", "Costache", "Dobrescu", "Epure", "Filip", "Hangan", "Iacob", "Manea", "Ungureanu"
+    };
     private static final String STUDENT_CITY = "Campulung Muscel";
     private static final String STUDENT_COUNTY = "Arges";
     private static final int ARGES_COUNTY_CODE = 3;
@@ -788,6 +800,8 @@ public class SchoolDataService {
         rebuildDerivedIndexes();
         backfillMissingStudentIdentityData();
         backfillMissingParentProfiles();
+        refreshGeneratedParentProfiles();
+        refreshGeneratedStudentFamilyNames();
     }
 
     private void rebuildDerivedIndexes() {
@@ -2151,7 +2165,7 @@ public class SchoolDataService {
             SchoolClass schoolClass = requireClass(classId);
             String username = String.format(Locale.ROOT, "student%03d", index);
             String firstName = FIRST_NAMES[(index - 1) % FIRST_NAMES.length];
-            String lastName = LAST_NAMES[((index - 1) * 3) % LAST_NAMES.length];
+            String lastName = generatedFamilyLastName(index);
             String address = generateUniqueStudentAddress(usedAddresses, identityRandom);
             String cnp = generateUniqueStudentCnp(usedCnps, identityRandom, schoolClass.name());
             StudentIdentityDocument identityDocument = generateUniqueStudentIdentityDocument(usedIdentityDocumentKeys, identityRandom);
@@ -2205,8 +2219,8 @@ public class SchoolDataService {
                 1,
                 username,
                 "parent",
-                "Parinte",
-                studentProfile.lastName(),
+                generatedParentFirstName(index),
+                generatedFamilyLastName(index),
                 username + "@timetable.local",
                 null,
                 null,
@@ -2357,13 +2371,14 @@ public class SchoolDataService {
             String parentUsername = "parinte" + suffix;
             UserProfile existingParent = profilesByUsername.get(parentUsername);
             if (existingParent == null) {
+                int parentIndex = generatedParentIndex(parentUsername);
                 UserProfile createdParent = new UserProfile(
                         profileIds.getAndIncrement(),
                         1,
                         parentUsername,
                         "parent",
-                        "Parinte",
-                        student.lastName(),
+                        generatedParentFirstName(parentIndex),
+                        generatedFamilyLastName(parentIndex),
                         parentUsername + "@timetable.local",
                         null,
                         null,
@@ -2405,6 +2420,86 @@ public class SchoolDataService {
                 );
                 updates.add(updatedParent);
             }
+        }
+
+        for (UserProfile updated : updates) {
+            profilesByUsername.put(updated.username(), updated);
+            referenceDataPersistenceService.saveUserProfile(updated);
+        }
+    }
+
+    private void refreshGeneratedParentProfiles() {
+        List<UserProfile> updates = new ArrayList<>();
+
+        for (UserProfile profile : new ArrayList<>(profilesByUsername.values())) {
+            if (!"parent".equals(profile.role()) || !isGeneratedParentUsername(profile.username()) || !hasLegacyGeneratedParentName(profile)) {
+                continue;
+            }
+
+            int parentIndex = generatedParentIndex(profile.username());
+            UserProfile updatedProfile = new UserProfile(
+                    profile.id(),
+                    (profile.version() == null ? 1 : profile.version()) + 1,
+                    profile.username(),
+                    profile.role(),
+                    generatedParentFirstName(parentIndex),
+                    generatedFamilyLastName(parentIndex),
+                    profile.email(),
+                    profile.address(),
+                    profile.cnp(),
+                    profile.idSeries(),
+                    profile.serialNumber(),
+                    profile.fatherInitial(),
+                    profile.classId(),
+                    profile.className(),
+                    profile.subjectsTaught(),
+                    profile.linkedStudentUsername()
+            );
+            updates.add(updatedProfile);
+        }
+
+        for (UserProfile updated : updates) {
+            profilesByUsername.put(updated.username(), updated);
+            referenceDataPersistenceService.saveUserProfile(updated);
+        }
+    }
+
+    private void refreshGeneratedStudentFamilyNames() {
+        List<UserProfile> updates = new ArrayList<>();
+
+        for (UserProfile profile : new ArrayList<>(profilesByUsername.values())) {
+            if (!"student".equals(profile.role()) || !isGeneratedStudentUsername(profile.username())) {
+                continue;
+            }
+
+            int studentIndex = generatedStudentIndex(profile.username());
+            String targetLastName = generatedFamilyLastName(studentIndex);
+            if (Objects.equals(profile.lastName(), targetLastName)) {
+                continue;
+            }
+            if (!hasLegacyGeneratedStudentLastName(profile, studentIndex)) {
+                continue;
+            }
+
+            UserProfile updatedProfile = new UserProfile(
+                    profile.id(),
+                    (profile.version() == null ? 1 : profile.version()) + 1,
+                    profile.username(),
+                    profile.role(),
+                    profile.firstName(),
+                    targetLastName,
+                    profile.email(),
+                    profile.address(),
+                    profile.cnp(),
+                    profile.idSeries(),
+                    profile.serialNumber(),
+                    profile.fatherInitial(),
+                    profile.classId(),
+                    profile.className(),
+                    profile.subjectsTaught(),
+                    profile.linkedStudentUsername()
+            );
+            updates.add(updatedProfile);
         }
 
         for (UserProfile updated : updates) {
@@ -2525,6 +2620,57 @@ public class SchoolDataService {
 
     private String generateStudentFatherInitial(Random random) {
         return String.valueOf(ID_SERIES_LETTERS.charAt(random.nextInt(ID_SERIES_LETTERS.length())));
+    }
+
+    private String generatedParentFirstName(int index) {
+        int normalizedIndex = Math.max(index, 1) - 1;
+        return PARENT_FIRST_NAMES[normalizedIndex % PARENT_FIRST_NAMES.length];
+    }
+
+    private String generatedFamilyLastName(int index) {
+        int normalizedIndex = Math.max(index, 1) - 1;
+        int firstNameIndex = normalizedIndex % PARENT_FIRST_NAMES.length;
+        int generationGroup = normalizedIndex / PARENT_FIRST_NAMES.length;
+        int lastNameIndex = Math.floorMod(generationGroup + (firstNameIndex * 7), PARENT_LAST_NAMES.length);
+        return PARENT_LAST_NAMES[lastNameIndex];
+    }
+
+    private boolean isGeneratedParentUsername(String username) {
+        return username != null && username.matches("parinte\\d{3}");
+    }
+
+    private boolean isGeneratedStudentUsername(String username) {
+        return username != null && username.matches("student\\d{3}");
+    }
+
+    private int generatedParentIndex(String username) {
+        if (!isGeneratedParentUsername(username)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Username de parinte generat invalid");
+        }
+        return Integer.parseInt(username.substring("parinte".length()));
+    }
+
+    private int generatedStudentIndex(String username) {
+        if (!isGeneratedStudentUsername(username)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Username de elev generat invalid");
+        }
+        return Integer.parseInt(username.substring("student".length()));
+    }
+
+    private boolean hasLegacyGeneratedParentName(UserProfile profile) {
+        String normalizedFirstName = normalizeOptionalProfileField(profile.firstName());
+        return normalizedFirstName == null || "Parinte".equalsIgnoreCase(normalizedFirstName);
+    }
+
+    private boolean hasLegacyGeneratedStudentLastName(UserProfile profile, int studentIndex) {
+        String normalizedLastName = normalizeOptionalProfileField(profile.lastName());
+        return normalizedLastName == null
+                || normalizedLastName.equalsIgnoreCase(legacyGeneratedStudentLastName(studentIndex));
+    }
+
+    private String legacyGeneratedStudentLastName(int index) {
+        int normalizedIndex = Math.max(index, 1) - 1;
+        return LAST_NAMES[(normalizedIndex * 3) % LAST_NAMES.length];
     }
 
     private boolean hasPreferredGeneratedStudentCnpFormat(String cnp) {

@@ -19,6 +19,13 @@ function hasAnyRole(userRoles, allowedRoles) {
   return userRoles.some((role) => allowedRoles.includes(role))
 }
 
+function resolveLabel(item, roles) {
+  if (item.id === 'my-timetable' && roles.includes('parent') && !roles.includes('professor')) {
+    return 'Orarul elevului'
+  }
+  return item.label
+}
+
 export default function Sidebar({ roles }) {
   const visible = NAV_ITEMS.filter((item) => hasAnyRole(roles, item.allowedRoles))
 
@@ -39,7 +46,7 @@ export default function Sidebar({ roles }) {
             end={!item.path}
           >
             <span className="navIndex">{String(index + 1).padStart(2, '0')}</span>
-            <span className="navText">{item.label}</span>
+            <span className="navText">{resolveLabel(item, roles)}</span>
           </NavLink>
         ))}
       </div>

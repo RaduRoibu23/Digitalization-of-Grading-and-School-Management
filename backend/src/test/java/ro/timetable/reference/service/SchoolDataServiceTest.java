@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Map;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -92,10 +93,17 @@ class SchoolDataServiceTest {
 
         assertThat(parent.role()).isEqualTo("parent");
         assertThat(parent.linkedStudentUsername()).isEqualTo("student001");
+        assertThat(parent.firstName()).isNotEqualTo("Parinte");
+        assertThat(student.lastName()).isEqualTo(parent.lastName());
+        assertThat(service.getUserProfilesByRole("parent"))
+                .extracting(profile -> profile.firstName() + " " + profile.lastName())
+                .doesNotHaveDuplicates();
         assertThat(service.resolveAcademicStudentProfile("parinte001", List.of("parent")).username()).isEqualTo("student001");
         assertThat(service.academicNotificationRecipients("student001"))
                 .contains("student001", "parinte001");
         assertThat(service.canAccessTimetableForClass("parinte001", List.of("parent"), student.classId())).isTrue();
+        assertThat(service.meResponse("parinte001", List.of("parent"), Map.of()).linked_student_class_id()).isEqualTo(student.classId());
+        assertThat(service.meResponse("parinte001", List.of("parent"), Map.of()).linked_student_class_name()).isEqualTo(student.className());
         if (otherClassId != null) {
             assertThat(service.canAccessTimetableForClass("parinte001", List.of("parent"), otherClassId)).isFalse();
         }
