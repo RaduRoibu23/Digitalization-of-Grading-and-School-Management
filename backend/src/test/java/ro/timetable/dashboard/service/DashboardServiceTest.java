@@ -1,8 +1,10 @@
 package ro.timetable.dashboard.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -23,6 +25,7 @@ import ro.timetable.documents.service.DocumentService;
 import ro.timetable.feedback.service.FeedbackService;
 import ro.timetable.notifications.service.NotificationService;
 import ro.timetable.reference.service.SchoolDataService;
+import ro.timetable.timetable.model.TimetableEntry;
 
 @ExtendWith(MockitoExtension.class)
 class DashboardServiceTest {
@@ -67,6 +70,10 @@ class DashboardServiceTest {
                 List.of(),
                 Map.of(),
                 new ProfileSettingsResponse(true, true),
+                null,
+                null,
+                null,
+                null,
                 null
         );
 
@@ -114,6 +121,10 @@ class DashboardServiceTest {
                 List.of(),
                 Map.of(),
                 new ProfileSettingsResponse(true, true),
+                null,
+                null,
+                null,
+                null,
                 null
         );
 
@@ -137,5 +148,50 @@ class DashboardServiceTest {
         assertThat(summary.can_publish_announcements()).isTrue();
         assertThat(summary.quick_actions()).extracting("path")
                 .contains("/app/orar-pe-clasa", "/app/genereaza-orar", "/app/utilizatori", "/app/documente");
+    }
+
+    @Test
+    void buildsAcademicSummaryForParentUsingLinkedStudentClass() {
+        MeResponse me = new MeResponse(
+                3L,
+                1,
+                "parinte001",
+                "Parinte",
+                "Popescu",
+                "parinte001@timetable.local",
+                null,
+                null,
+                null,
+                null,
+                null,
+                "parent",
+                List.of("parent"),
+                null,
+                null,
+                null,
+                List.of(),
+                Map.of(),
+                new ProfileSettingsResponse(true, true),
+                null,
+                "student001",
+                "Ana Popescu",
+                10L,
+                "X A"
+        );
+
+        when(schoolDataService.meResponse("parinte001", List.of("parent"), Map.of())).thenReturn(me);
+        when(notificationService.getNotificationsForUser("parinte001", false, 4)).thenReturn(List.of());
+        when(notificationService.getUnreadCount("parinte001")).thenReturn(new UnreadNotificationCountResponse(1));
+        when(announcementService.listAnnouncements("parinte001", List.of("parent"), 6)).thenReturn(List.of());
+        when(announcementService.canPublish(List.of("parent"))).thenReturn(false);
+        when(schoolDataService.getTimetableForClass(10L)).thenReturn(List.of(
+                new TimetableEntry(1L, 10L, "X A", 1L, "Matematica", 101L, "Sala 1", "mate01", "Mihai Ionescu", LocalDate.now().getDayOfWeek().getValue(), 2, 1)
+        ));
+
+        DashboardSummaryResponse summary = dashboardService.buildSummary("parinte001", List.of("parent"), Map.of());
+
+        assertThat(summary.role_context()).isEqualTo("academic");
+        assertThat(summary.title()).isEqualTo("Panoul parintelui");
+        verify(schoolDataService).getTimetableForClass(10L);
     }
 }

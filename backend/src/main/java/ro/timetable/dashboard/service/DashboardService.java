@@ -87,7 +87,7 @@ public class DashboardService {
         );
         long unreadNotifications = notificationService.getUnreadCount(me.username()).unread_count();
 
-        if (roles.contains("student") || roles.contains("professor")) {
+        if (roles.contains("student") || roles.contains("parent") || roles.contains("professor")) {
             return buildAcademicSummary(me, roles, unreadNotifications, recentNotifications, announcements);
         }
 
@@ -103,7 +103,7 @@ public class DashboardService {
     ) {
         List<TimetableEntry> sourceEntries = roles.contains("professor")
                 ? schoolDataService.getTimetableForTeacher(me.username())
-                : me.class_id() == null ? List.of() : schoolDataService.getTimetableForClass(me.class_id());
+                : academicClassId(me) == null ? List.of() : schoolDataService.getTimetableForClass(academicClassId(me));
 
         int todayWeekday = schoolWeekday(LocalDate.now(ZoneId.systemDefault()).getDayOfWeek());
         List<TimetableEntry> todayEntries = sourceEntries.stream()
@@ -137,9 +137,11 @@ public class DashboardService {
 
         return new DashboardSummaryResponse(
                 "academic",
-                roles.contains("professor") ? "Panoul profesorului" : "Panoul elevului",
+                roles.contains("professor") ? "Panoul profesorului" : roles.contains("parent") ? "Panoul parintelui" : "Panoul elevului",
                 roles.contains("professor")
                         ? "Vezi programul de astazi, urmatorul interval si actualizarile care necesita atentie."
+                        : roles.contains("parent")
+                        ? "Ai intr-un singur loc programul, catalogul, documentele si notificarile relevante pentru copilul asociat."
                         : "Toate informatiile esentiale din ziua curenta, fara sa intri in fiecare modul separat.",
                 metrics,
                 academicQuickActions(),
@@ -323,5 +325,9 @@ public class DashboardService {
             }
         }
         return false;
+    }
+
+    private Long academicClassId(MeResponse me) {
+        return me.class_id() != null ? me.class_id() : me.linked_student_class_id();
     }
 }

@@ -16,7 +16,7 @@ function formFromProfile(profile) {
 }
 
 function fallback(value) {
-  return value == null || String(value).trim() === '' ? '—' : value
+  return value == null || String(value).trim() === '' ? 'â€”' : value
 }
 
 export default function ProfileScreen({ accessToken, roles = [] }) {
@@ -44,10 +44,13 @@ export default function ProfileScreen({ accessToken, roles = [] }) {
   }, [accessToken])
 
   const isStudent = roles.includes('student') || me?.role === 'student'
+  const isParent = roles.includes('parent') || me?.role === 'parent'
   const isProfessor = roles.includes('professor') || me?.role === 'professor'
   const requiresAddress = isStudent
-  const classText = me?.class_name || me?.class?.name || (me?.class_id ? `Clasa ${me.class_id}` : '—')
-  const subjectText = Array.isArray(me?.subjects_taught) && me.subjects_taught.length > 0 ? me.subjects_taught.join(', ') : '—'
+  const classText = me?.class_name || me?.class?.name || (me?.class_id ? `Clasa ${me.class_id}` : 'â€”')
+  const linkedStudentText = me?.linked_student_name || me?.linked_student_username || 'â€”'
+  const linkedStudentClassText = me?.linked_student_class_name || (me?.linked_student_class_id ? `Clasa ${me.linked_student_class_id}` : 'â€”')
+  const subjectText = Array.isArray(me?.subjects_taught) && me.subjects_taught.length > 0 ? me.subjects_taught.join(', ') : 'â€”'
   const roleText = Array.isArray(me?.roles) && me.roles.length > 0 ? me.roles.join(', ') : fallback(me?.role)
 
   const canSubmit = useMemo(() => {
@@ -150,6 +153,7 @@ export default function ProfileScreen({ accessToken, roles = [] }) {
               <span className="statPill">Roluri: <strong>{roleText}</strong></span>
               <span className="statPill">Clasa: <strong>{classText}</strong></span>
               <span className="statPill">Email: <strong>{fallback(me?.email)}</strong></span>
+              {isParent && <span className="statPill">Copil asociat: <strong>{linkedStudentText}</strong></span>}
             </div>
           </aside>
 
@@ -227,7 +231,9 @@ export default function ProfileScreen({ accessToken, roles = [] }) {
               <div><strong>Username</strong><span>{fallback(me?.username)}</span></div>
               <div><strong>Rol</strong><span>{roleText}</span></div>
               <div><strong>Clasa</strong><span>{classText}</span></div>
-              <div><strong>Materii predate</strong><span>{isProfessor ? subjectText : '—'}</span></div>
+              <div><strong>Materii predate</strong><span>{isProfessor ? subjectText : 'â€”'}</span></div>
+              <div><strong>Elev asociat</strong><span>{isParent ? linkedStudentText : 'â€”'}</span></div>
+              <div><strong>Clasa elev asociat</strong><span>{isParent ? linkedStudentClassText : 'â€”'}</span></div>
               <div><strong>CNP</strong><span>{fallback(me?.cnp)}</span></div>
               <div><strong>Serie</strong><span>{fallback(me?.series)}</span></div>
               <div><strong>Numar serie</strong><span>{fallback(me?.serial_number)}</span></div>

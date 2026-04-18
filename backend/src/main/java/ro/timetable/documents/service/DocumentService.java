@@ -91,8 +91,9 @@ public class DocumentService {
                     .map(entity -> toResponse(entity, actorUsername, roles))
                     .toList();
         }
-        if (roles.contains("student")) {
-            return documentRequestRepository.findByStudentUsernameOrderByCreatedAtDescIdDesc(actorUsername).stream()
+        if (roles.contains("student") || roles.contains("parent")) {
+            String studentUsername = schoolDataService.resolveAcademicStudentProfile(actorUsername, roles).username();
+            return documentRequestRepository.findByStudentUsernameOrderByCreatedAtDescIdDesc(studentUsername).stream()
                     .map(entity -> toResponse(entity, actorUsername, roles))
                     .toList();
         }
@@ -101,14 +102,11 @@ public class DocumentService {
 
     @Transactional
     public DocumentRequestResponse createStudentRequest(String actorUsername, List<String> roles, String type, String purpose) {
-        if (!roles.contains("student")) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar elevii pot solicita documente");
+        if (!roles.contains("student") && !roles.contains("parent")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar elevii si parintii pot solicita documente");
         }
 
-        UserProfile student = schoolDataService.getProfile(actorUsername);
-        if (!"student".equals(student.role())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar elevii pot solicita documente");
-        }
+        UserProfile student = schoolDataService.resolveAcademicStudentProfile(actorUsername, roles);
 
         String normalizedType = normalizeType(type);
         String normalizedPurpose = normalizePurpose(purpose);
@@ -117,16 +115,16 @@ public class DocumentService {
         entity.setDocumentType(normalizedType);
         entity.setStatus(STATUS_PENDING);
         entity.setRequestedByUsername(actorUsername);
-        entity.setStudentUsername(actorUsername);
+        entity.setStudentUsername(student.username());
         entity.setPurpose(normalizedPurpose);
         entity.setCreatedAt(Instant.now());
 
         DocumentRequestEntity saved = documentRequestRepository.save(entity);
-        notificationService.sendToUser(
-                actorUsername,
+        notificationService.createNotifications(
+                schoolDataService.academicNotificationRecipients(student.username()),
                 new NotificationService.NotificationPayload(
                         "Cerere document inregistrata",
-                        "Cererea pentru " + labelForType(normalizedType) + " a fost inregistrata si trimisa spre procesare.",
+                        "Cererea pentru " + labelForType(normalizedType) + " a fost inregistrata pentru elevul " + student.username() + ".",
                         "documents",
                         "/app/documente"
                 )
@@ -135,7 +133,7 @@ public class DocumentService {
                 reviewerUsernames(),
                 new NotificationService.NotificationPayload(
                         "Cerere document noua",
-                        "Solicitare noua: " + labelForType(normalizedType) + " pentru elevul " + actorUsername,
+                        "Solicitare noua: " + labelForType(normalizedType) + " pentru elevul " + student.username(),
                         "documents",
                         "/app/documente"
                 )
@@ -165,8 +163,8 @@ public class DocumentService {
         entity.setSnapshotJson(serializeSnapshot(buildSnapshot(entity)));
 
         DocumentRequestEntity saved = documentRequestRepository.save(entity);
-        notificationService.sendToUser(
-                saved.getStudentUsername(),
+        notificationService.createNotifications(
+                schoolDataService.academicNotificationRecipients(saved.getStudentUsername()),
                 new NotificationService.NotificationPayload(
                         "Cerere document procesata",
                         "Cererea pentru " + labelForType(saved.getDocumentType()) + " a fost aprobata.",
@@ -197,8 +195,8 @@ public class DocumentService {
         entity.setResolutionNote(normalizedReason);
 
         DocumentRequestEntity saved = documentRequestRepository.save(entity);
-        notificationService.sendToUser(
-                saved.getStudentUsername(),
+        notificationService.createNotifications(
+                schoolDataService.academicNotificationRecipients(saved.getStudentUsername()),
                 new NotificationService.NotificationPayload(
                         "Cerere document procesata",
                         "Cererea pentru " + labelForType(saved.getDocumentType()) + " a fost respinsa: " + normalizedReason,
@@ -252,7 +250,8 @@ public class DocumentService {
     private boolean canDownload(DocumentRequestEntity entity, String actorUsername, List<String> roles) {
         return canReview(roles)
                 || Objects.equals(actorUsername, entity.getStudentUsername())
-                || Objects.equals(actorUsername, entity.getRequestedByUsername());
+                || Objects.equals(actorUsername, entity.getRequestedByUsername())
+                || (roles.contains("parent") && schoolDataService.isParentOfStudent(actorUsername, entity.getStudentUsername()));
     }
 
     private String normalizeType(String type) {
@@ -379,10 +378,14 @@ public class DocumentService {
 
         List<Map<String, Object>> subjectSnapshots = new ArrayList<>();
         int subjectsWithGrades = 0;
+        List<Double> computedAverages = new ArrayList<>();
         for (CatalogSubjectResponse row : catalog.subjects()) {
             List<GradeResponse> grades = row.grades() == null ? List.of() : row.grades();
             if (!grades.isEmpty()) {
                 subjectsWithGrades++;
+            }
+            if (row.average() != null) {
+                computedAverages.add(row.average());
             }
 
             List<String> gradeValues = grades.stream()
@@ -396,6 +399,10 @@ public class DocumentService {
             subjectSnapshot.put("average", formatAverage(row.average()));
             subjectSnapshots.add(subjectSnapshot);
         }
+
+        Double overallAverage = computedAverages.isEmpty()
+                ? null
+                : computedAverages.stream().mapToDouble(Double::doubleValue).average().orElse(0);
 
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("inspectorate", SCHOOL_INSPECTORATE);
@@ -415,6 +422,7 @@ public class DocumentService {
         snapshot.put("purpose", entity.getPurpose());
         snapshot.put("subject_count", subjectSnapshots.size());
         snapshot.put("subjects_with_grades", subjectsWithGrades);
+        snapshot.put("overall_average", formatAverage(overallAverage));
         snapshot.put("subjects", subjectSnapshots);
         snapshot.put("verification_code", verificationCode(entity));
         return snapshot;
@@ -502,6 +510,10 @@ public class DocumentService {
             builder.append("<td>").append(escapeHtml(row.get("average"))).append("</td>");
             builder.append("</tr>");
         }
+        builder.append("<tr>");
+        builder.append("<td colspan=\"3\"><strong>Media totala</strong></td>");
+        builder.append("<td><strong>").append(escapeHtml(snapshot.get("overall_average"))).append("</strong></td>");
+        builder.append("</tr>");
         return builder.toString();
     }
 

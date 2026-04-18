@@ -4,6 +4,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -42,14 +43,16 @@ public class CatalogController {
             @NotBlank String student_username,
             @NotBlank String subject_name,
             @NotNull @Min(value = 1, message = "Nota invalida") @Max(value = 10, message = "Nota invalida") Integer grade_value,
-            @NotBlank String grade_date
+            @NotBlank String grade_date,
+            @Size(max = 1000, message = "Comentariul poate avea maximum 1000 de caractere") String comment
     ) {
     }
 
     public record UpdateGradeRequest(
             @NotNull Integer version,
             @NotNull @Min(value = 1, message = "Nota invalida") @Max(value = 10, message = "Nota invalida") Integer grade_value,
-            @NotBlank String grade_date
+            @NotBlank String grade_date,
+            @Size(max = 1000, message = "Comentariul poate avea maximum 1000 de caractere") String comment
     ) {
     }
 
@@ -61,7 +64,8 @@ public class CatalogController {
     }
 
     public record MotivateAbsenceRequest(
-            @NotNull Integer version
+            @NotNull Integer version,
+            @Size(max = 1000, message = "Motivul poate avea maximum 1000 de caractere") String reason
     ) {
     }
 
@@ -98,7 +102,8 @@ public class CatalogController {
                 request.student_username(),
                 request.subject_name(),
                 request.grade_value(),
-                request.grade_date()
+                request.grade_date(),
+                request.comment()
         );
     }
 
@@ -114,7 +119,8 @@ public class CatalogController {
                 gradeId,
                 request.version(),
                 request.grade_value(),
-                request.grade_date()
+                request.grade_date(),
+                request.comment()
         );
     }
 
@@ -148,7 +154,8 @@ public class CatalogController {
                 authenticatedRequestService.username(authentication),
                 authenticatedRequestService.roles(authentication),
                 absenceId,
-                request.version()
+                request.version(),
+                request.reason()
         );
     }
 }

@@ -9,7 +9,7 @@ import ro.timetable.reference.service.SchoolDataService;
 @Service
 public class AuthenticatedRequestService {
 
-    private static final List<String> APP_ROLES = List.of("student", "professor", "secretariat", "scheduler", "admin", "sysadmin");
+    private static final List<String> APP_ROLES = List.of("student", "parent", "professor", "secretariat", "scheduler", "admin", "sysadmin");
 
     private final SchoolDataService schoolDataService;
 

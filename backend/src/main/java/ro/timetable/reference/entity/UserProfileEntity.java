@@ -58,6 +58,9 @@ public class UserProfileEntity {
     @Column(name = "father_initial", length = 1)
     private String fatherInitial;
 
+    @Column(name = "linked_student_username")
+    private String linkedStudentUsername;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "class_id")
     private SchoolClassEntity schoolClass;
@@ -179,6 +182,14 @@ public class UserProfileEntity {
 
     public void setFatherInitial(String fatherInitial) {
         this.fatherInitial = fatherInitial;
+    }
+
+    public String getLinkedStudentUsername() {
+        return linkedStudentUsername;
+    }
+
+    public void setLinkedStudentUsername(String linkedStudentUsername) {
+        this.linkedStudentUsername = linkedStudentUsername;
     }
 
     public SchoolClassEntity getSchoolClass() {

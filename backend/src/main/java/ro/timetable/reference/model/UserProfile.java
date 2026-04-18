@@ -17,6 +17,7 @@ public record UserProfile(
         String fatherInitial,
         Long classId,
         String className,
-        List<String> subjectsTaught
+        List<String> subjectsTaught,
+        String linkedStudentUsername
 ) {
 }

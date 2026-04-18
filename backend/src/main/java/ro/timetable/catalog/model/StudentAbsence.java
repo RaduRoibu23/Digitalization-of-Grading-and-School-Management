@@ -15,6 +15,7 @@ public record StudentAbsence(
         String motivatedByUsername,
         String motivatedByName,
         String motivatedAt,
+        String motivationReason,
         Integer version
 ) {
 }

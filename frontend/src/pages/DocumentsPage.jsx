@@ -70,7 +70,7 @@ function extractFilename(response) {
 }
 
 export default function DocumentsScreen({ accessToken, roles = [] }) {
-  const canRequest = roles.includes('student')
+  const canRequest = roles.includes('student') || roles.includes('parent')
   const canReview = roles.includes('secretariat') || roles.includes('sysadmin')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -208,7 +208,7 @@ export default function DocumentsScreen({ accessToken, roles = [] }) {
         <div className="contentHeader">
           <div>
             <div className="title">Documente</div>
-            <div className="subtitle">Modul disponibil doar pentru elevi, secretariat si sysadmin.</div>
+            <div className="subtitle">Modul disponibil doar pentru elevi, parinti, secretariat si sysadmin.</div>
           </div>
         </div>
         <div className="banner error">Nu ai acces la aceasta sectiune.</div>
@@ -221,7 +221,7 @@ export default function DocumentsScreen({ accessToken, roles = [] }) {
       <div className="contentHeader">
         <div>
           <div className="title">Documente</div>
-          <div className="subtitle">Cereri, aprobari si descarcare PDF intr-un flux clar pentru elev, secretariat si sysadmin.</div>
+          <div className="subtitle">Cereri, aprobari si descarcare PDF intr-un flux clar pentru elev, parinte, secretariat si sysadmin.</div>
         </div>
         <div className="headerActions">
           <button className="btn" type="button" onClick={() => refreshRequests()} disabled={loading}>
@@ -243,7 +243,11 @@ export default function DocumentsScreen({ accessToken, roles = [] }) {
           <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', alignItems: 'end' }}>
             <div>
               <div style={{ fontWeight: 700, marginBottom: 6 }}>Solicita un document</div>
-              <div className="mutedSmall">{selectedDocument.helper}</div>
+              <div className="mutedSmall">
+                {roles.includes('parent')
+                  ? `Cererea se emite pentru copilul asociat. ${selectedDocument.helper}`
+                  : selectedDocument.helper}
+              </div>
             </div>
             <div className="field">
               <label className="label">Tip document</label>

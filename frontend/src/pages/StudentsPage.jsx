@@ -6,6 +6,7 @@ const PAGE_SIZE = 15
 const STUDENTS_VIEW_STATE_KEY = 'students'
 const ROLE_OPTIONS = [
   { value: 'student', label: 'Studenti' },
+  { value: 'parent', label: 'Parinti' },
   { value: 'professor', label: 'Profesori' },
   { value: 'secretariat', label: 'Secretariat' },
   { value: 'scheduler', label: 'Scheduler' },
@@ -29,14 +30,26 @@ function buildInitials(name) {
     .join('')
 }
 
+function linkedStudentLabel(profile) {
+  return profile.linked_student_name || profile.linked_student_username || '-'
+}
+
 function classLabel(profile) {
-  return profile.class_name || profile.className || profile.homeroom_class_name || profile.homeroomClassName || (profile.class_id ? `Clasa ${profile.class_id}` : '-')
+  return profile.class_name
+    || profile.className
+    || profile.linked_student_class_name
+    || profile.linkedStudentClassName
+    || profile.homeroom_class_name
+    || profile.homeroomClassName
+    || (profile.class_id ? `Clasa ${profile.class_id}` : profile.linked_student_class_id ? `Clasa ${profile.linked_student_class_id}` : '-')
 }
 
 function roleLabel(role) {
   switch (role) {
     case 'student':
       return 'Student'
+    case 'parent':
+      return 'Parinte'
     case 'professor':
       return 'Profesor'
     case 'secretariat':
@@ -60,12 +73,19 @@ function formFromProfile(profile) {
     email: profile?.email || '',
     class_id: profile?.class_id ? String(profile.class_id) : '',
     homeroom_class_id: profile?.homeroom_class_id ? String(profile.homeroom_class_id) : '',
+    linked_student_username: profile?.linked_student_username || '',
     address: profile?.address || '',
     cnp: profile?.cnp || '',
     series: profile?.series || '',
     serial_number: profile?.serial_number || profile?.serialNumber || '',
     father_initial: profile?.father_initial || profile?.fatherInitial || '',
   }
+}
+
+function studentOptionLabel(profile) {
+  if (!profile) return '-'
+  const fullName = buildProfileName(profile)
+  return `${fullName} (${profile.username}) - ${classLabel(profile)}`
 }
 
 export default function StudentsScreen({ accessToken, roles = [] }) {
@@ -84,6 +104,7 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
   const [banner, setBanner] = useState(null)
   const [profiles, setProfiles] = useState([])
   const [classes, setClasses] = useState([])
+  const [students, setStudents] = useState([])
   const [sortBy, setSortBy] = useState(initialViewState.sortBy)
   const [search, setSearch] = useState(initialViewState.search)
   const [page, setPage] = useState(initialViewState.page)
@@ -95,17 +116,25 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
     ;(async () => {
       setLoading(true)
       try {
-        const [profileData, classData] = await Promise.all([
+        const [profileData, classData, studentData] = await Promise.all([
           apiGet(`/profiles${roleFilter ? `?role=${encodeURIComponent(roleFilter)}` : ''}`, accessToken),
           canManageProfiles ? apiGet('/classes', accessToken) : Promise.resolve([]),
+          canManageProfiles ? apiGet('/profiles?role=student', accessToken) : Promise.resolve([]),
         ])
-        setProfiles(Array.isArray(profileData) ? profileData : [])
-        setClasses(Array.isArray(classData) ? classData : [])
+        const nextProfiles = Array.isArray(profileData) ? profileData : []
+        const nextClasses = Array.isArray(classData) ? classData : []
+        const nextStudents = Array.isArray(studentData) ? studentData : []
+
+        setProfiles(nextProfiles)
+        setClasses(nextClasses)
+        setStudents(nextStudents)
         if (editingUsername) {
-          const freshProfile = (Array.isArray(profileData) ? profileData : []).find((profile) => profile.username === editingUsername)
+          const freshProfile = nextProfiles.find((profile) => profile.username === editingUsername)
           if (!freshProfile) {
             setEditingUsername('')
             setForm(formFromProfile(null))
+          } else {
+            setForm(formFromProfile(freshProfile))
           }
         }
       } catch (error) {
@@ -138,7 +167,8 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
         const series = profile.series || ''
         const serialNumber = profile.serial_number || profile.serialNumber || ''
         const fatherInitial = profile.father_initial || profile.fatherInitial || ''
-        return `${username} ${buildProfileName(profile)} ${classLabel(profile)} ${role} ${email} ${address} ${cnp} ${series} ${serialNumber} ${fatherInitial}`
+        const linkedStudent = linkedStudentLabel(profile)
+        return `${username} ${buildProfileName(profile)} ${classLabel(profile)} ${role} ${email} ${address} ${cnp} ${series} ${serialNumber} ${fatherInitial} ${linkedStudent}`
           .toLowerCase()
           .includes(query)
       })
@@ -216,6 +246,7 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
           email: form.email.trim(),
           class_id: editingProfile.role === 'student' && form.class_id ? Number(form.class_id) : null,
           homeroom_class_id: editingProfile.role === 'professor' && form.homeroom_class_id ? Number(form.homeroom_class_id) : null,
+          linked_student_username: editingProfile.role === 'parent' ? (form.linked_student_username || null) : null,
           address: form.address.trim() || null,
           cnp: form.cnp.trim() || null,
           series: editingProfile.role === 'student' ? (form.series.trim().toUpperCase() || null) : null,
@@ -266,7 +297,7 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
           )}
           <input
             className="input"
-            placeholder="Cauta dupa nume, username, rol, email, adresa, CNP sau clasa"
+            placeholder="Cauta dupa nume, username, rol, email, adresa, CNP, clasa sau elev asociat"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -365,6 +396,19 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
                 </select>
               </div>
             )}
+            {editingProfile.role === 'parent' && (
+              <div className="field">
+                <label className="label">Elev asociat</label>
+                <select className="select" value={form.linked_student_username} onChange={(event) => updateField('linked_student_username', event.target.value)} disabled={saving}>
+                  <option value="">Selecteaza elevul</option>
+                  {students.map((student) => (
+                    <option key={student.username} value={student.username}>
+                      {studentOptionLabel(student)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="field">
               <label className="label">Adresa</label>
               <input className="input" value={form.address} onChange={(event) => updateField('address', event.target.value)} disabled={saving} />
@@ -436,7 +480,8 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
               <tbody>
                 {paginatedProfiles.map((profile, index) => {
                   const fullName = buildProfileName(profile)
-                  const className = classLabel(profile)
+                  const currentClassName = classLabel(profile)
+                  const associationText = profile.role === 'parent' ? `Parinte pentru ${linkedStudentLabel(profile)}` : null
                   return (
                     <tr key={profile.id || profile.username}>
                       <td className="thin">{pageStart + index + 1}</td>
@@ -445,7 +490,7 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
                           <div className="studentInitials">{buildInitials(fullName)}</div>
                           <div>
                             <div className="studentName">{fullName}</div>
-                            <div className="studentMeta">{profile.email || 'Fara email'}</div>
+                            <div className="studentMeta">{associationText || profile.email || 'Fara email'}</div>
                           </div>
                         </div>
                       </td>
@@ -458,7 +503,7 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
                         </td>
                       )}
                       <td>
-                        <span className="studentClassBadge">{className}</span>
+                        <span className="studentClassBadge">{currentClassName}</span>
                       </td>
                       {canManageProfiles && <td>{profile.address || '-'}</td>}
                       {canManageProfiles && <td>{profile.cnp || '-'}</td>}

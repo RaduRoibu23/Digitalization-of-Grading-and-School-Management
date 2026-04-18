@@ -66,6 +66,9 @@ public class StudentGradeEntity {
     @Column(name = "teacher_name", nullable = false)
     private String teacherName;
 
+    @Column(name = "comment", columnDefinition = "TEXT")
+    private String comment;
+
     @Column(nullable = false)
     private Integer version;
 
@@ -187,6 +190,14 @@ public class StudentGradeEntity {
 
     public void setTeacherName(String teacherName) {
         this.teacherName = teacherName;
+    }
+
+    public String getComment() {
+        return comment;
+    }
+
+    public void setComment(String comment) {
+        this.comment = comment;
     }
 
     public Integer getVersion() {

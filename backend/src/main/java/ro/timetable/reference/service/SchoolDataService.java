@@ -209,13 +209,15 @@ public class SchoolDataService {
             String lastName,
             String email,
             Long classId,
-            List<String> subjectsTaught
+            List<String> subjectsTaught,
+            String linkedStudentUsername
     ) {
         String normalizedUsername = normalizeUsername(username, "Username-ul este obligatoriu");
         String normalizedRole = normalizeRequiredProfileField(role, "Rolul este obligatoriu").toLowerCase(Locale.ROOT);
         String normalizedFirstName = normalizeRequiredProfileField(firstName, "Prenumele este obligatoriu");
         String normalizedLastName = normalizeRequiredProfileField(lastName, "Numele este obligatoriu");
         String normalizedEmail = normalizeRequiredProfileField(email, "Email-ul este obligatoriu");
+        String normalizedLinkedStudentUsername = normalizeLinkedStudentUsername(linkedStudentUsername);
 
         if (hasProfile(normalizedUsername)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Username folosit deja");
@@ -227,6 +229,7 @@ public class SchoolDataService {
 
         if (!(normalizedRole.equals("student")
                 || normalizedRole.equals("professor")
+                || normalizedRole.equals("parent")
                 || normalizedRole.equals("secretariat")
                 || normalizedRole.equals("scheduler")
                 || normalizedRole.equals("admin")
@@ -265,10 +268,18 @@ public class SchoolDataService {
             if (classId != null) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Doar elevii pot avea clasa setata la creare");
             }
-            if (!"professor".equals(normalizedRole)) {
+            if ("parent".equals(normalizedRole)) {
+                normalizedLinkedStudentUsername = requireParentLinkedStudentUsername(normalizedLinkedStudentUsername, normalizedUsername);
+                normalizedSubjects = List.of();
+            } else if (!"professor".equals(normalizedRole)) {
+                if (normalizedLinkedStudentUsername != null) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Doar parintii pot avea elev asociat");
+                }
                 normalizedSubjects = List.of();
             } else if (normalizedSubjects.isEmpty()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Profesorii trebuie sa aiba cel putin o materie");
+            } else if (normalizedLinkedStudentUsername != null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Doar parintii pot avea elev asociat");
             }
         }
 
@@ -287,7 +298,8 @@ public class SchoolDataService {
                 generatedFatherInitial,
                 schoolClass == null ? null : schoolClass.id(),
                 schoolClass == null ? null : schoolClass.name(),
-                normalizedSubjects
+                normalizedSubjects,
+                normalizedLinkedStudentUsername
         );
         profilesByUsername.put(normalizedUsername, profile);
         referenceDataPersistenceService.saveUserProfile(profile);
@@ -307,7 +319,8 @@ public class SchoolDataService {
             String series,
             String serialNumber,
             String fatherInitial,
-            Long homeroomClassId
+            Long homeroomClassId,
+            String linkedStudentUsername
     ) {
         UserProfile existing = getProfile(username);
         int existingVersion = existing.version() == null ? 1 : existing.version();
@@ -322,6 +335,7 @@ public class SchoolDataService {
         String normalizedSeries = normalizeStudentIdentitySeries(series);
         String normalizedSerialNumber = normalizeStudentIdentitySerialNumber(serialNumber);
         String normalizedFatherInitial = normalizeStudentFatherInitial(fatherInitial);
+        String normalizedLinkedStudentUsername = normalizeLinkedStudentUsername(linkedStudentUsername);
         SchoolClass schoolClass = classId == null ? null : requireClass(classId);
 
         if (referenceDataPersistenceService.emailUsedByAnotherProfile(normalizedEmail, existing.username())) {
@@ -343,6 +357,13 @@ public class SchoolDataService {
             }
             if (!hasValidStudentFatherInitial(normalizedFatherInitial)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Initiala tatalui este invalida");
+            }
+            if (normalizedLinkedStudentUsername != null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Elevii nu pot avea elev asociat");
+            }
+        } else {
+            if (schoolClass != null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Doar elevii pot avea clasa setata");
             }
         }
 
@@ -366,6 +387,12 @@ public class SchoolDataService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Doar profesorii pot fi diriginti");
         }
 
+        if ("parent".equals(existing.role())) {
+            normalizedLinkedStudentUsername = requireParentLinkedStudentUsername(normalizedLinkedStudentUsername, existing.username());
+        } else if (normalizedLinkedStudentUsername != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Doar parintii pot avea elev asociat");
+        }
+
         UserProfile updated = new UserProfile(
                 existing.id(),
                 existingVersion + 1,
@@ -381,7 +408,8 @@ public class SchoolDataService {
                 "student".equals(existing.role()) ? normalizedFatherInitial : existing.fatherInitial(),
                 schoolClass == null ? null : schoolClass.id(),
                 schoolClass == null ? null : schoolClass.name(),
-                existing.subjectsTaught()
+                existing.subjectsTaught(),
+                "parent".equals(existing.role()) ? normalizedLinkedStudentUsername : existing.linkedStudentUsername()
         );
 
         profilesByUsername.put(existing.username(), updated);
@@ -418,7 +446,8 @@ public class SchoolDataService {
                 existing.idSeries(),
                 existing.serialNumber(),
                 existing.fatherInitial(),
-                homeroomClass == null ? null : homeroomClass.id()
+                homeroomClass == null ? null : homeroomClass.id(),
+                existing.linkedStudentUsername()
         );
         referenceDataPersistenceService.updateProfileSettings(username, emailNotificationsEnabled, inAppNotificationsEnabled);
         return meResponse(username, roles, claims);
@@ -436,6 +465,36 @@ public class SchoolDataService {
                 .sorted(Comparator.comparing(UserProfile::username))
                 .map(UserProfile::username)
                 .toList();
+    }
+
+    public UserProfile resolveAcademicStudentProfile(String username, List<String> roles) {
+        if (roles.contains("student")) {
+            UserProfile profile = getProfile(username);
+            if (!"student".equals(profile.role())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Contul autentificat nu este elev");
+            }
+            return profile;
+        }
+        if (roles.contains("parent")) {
+            return requireLinkedStudentProfile(getProfile(username));
+        }
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Rolul curent nu are context academic de elev");
+    }
+
+    public boolean isParentOfStudent(String parentUsername, String studentUsername) {
+        UserProfile profile = getProfile(parentUsername);
+        return "parent".equals(profile.role()) && Objects.equals(profile.linkedStudentUsername(), studentUsername);
+    }
+
+    public List<String> academicNotificationRecipients(String studentUsername) {
+        LinkedHashSet<String> recipients = new LinkedHashSet<>();
+        recipients.add(requireStudentProfile(studentUsername).username());
+        profilesByUsername.values().stream()
+                .filter(profile -> "parent".equals(profile.role()))
+                .filter(profile -> Objects.equals(studentUsername, profile.linkedStudentUsername()))
+                .map(UserProfile::username)
+                .forEach(recipients::add);
+        return List.copyOf(recipients);
     }
 
 
@@ -496,6 +555,12 @@ public class SchoolDataService {
         if (roles.contains("student")) {
             UserProfile profile = getProfile(username);
             return Objects.equals(profile.classId(), classId);
+        }
+
+        if (roles.contains("parent")) {
+            UserProfile parent = getProfile(username);
+            UserProfile linkedStudent = requireLinkedStudentProfile(parent);
+            return Objects.equals(linkedStudent.classId(), classId);
         }
 
         return roles.contains("professor") && teachesClass(username, classId);
@@ -722,6 +787,7 @@ public class SchoolDataService {
 
         rebuildDerivedIndexes();
         backfillMissingStudentIdentityData();
+        backfillMissingParentProfiles();
     }
 
     private void rebuildDerivedIndexes() {
@@ -834,7 +900,8 @@ public class SchoolDataService {
                 existing == null ? null : existing.fatherInitial(),
                 null,
                 null,
-                teacher.subjectNames()
+                teacher.subjectNames(),
+                null
         );
     }
 
@@ -908,6 +975,7 @@ public class SchoolDataService {
                     grade.gradeDate(),
                     teacher.username(),
                     displayName(teacher),
+                    grade.comment(),
                     grade.version()
             ));
         }
@@ -938,6 +1006,7 @@ public class SchoolDataService {
                     absence.motivatedByUsername(),
                     absence.motivatedByName(),
                     absence.motivatedAt(),
+                    absence.motivationReason(),
                     absence.version()
             ));
         }
@@ -949,6 +1018,8 @@ public class SchoolDataService {
         UserProfile profile = resolveAuthenticatedProfile(username, emailClaim == null ? null : String.valueOf(emailClaim));
         SchoolClass schoolClass = profile.classId() == null ? null : requireClass(profile.classId());
         ProfileSettingsResponse settings = referenceDataPersistenceService.loadProfileSettings(profile.username());
+        UserProfile linkedStudent = linkedStudentProfile(profile);
+        SchoolClass linkedStudentClass = linkedStudent == null || linkedStudent.classId() == null ? null : requireClass(linkedStudent.classId());
         return new MeResponse(
                 profile.id(),
                 profile.version(),
@@ -969,7 +1040,11 @@ public class SchoolDataService {
                 profile.subjectsTaught(),
                 claims,
                 settings,
-                schoolClass == null ? null : new ClassSummaryResponse(profile.classId(), profile.className(), schoolClass.profile())
+                schoolClass == null ? null : new ClassSummaryResponse(profile.classId(), profile.className(), schoolClass.profile()),
+                linkedStudent == null ? null : linkedStudent.username(),
+                linkedStudent == null ? null : displayName(linkedStudent),
+                linkedStudent == null ? null : linkedStudent.classId(),
+                linkedStudentClass == null ? linkedStudent == null ? null : linkedStudent.className() : linkedStudentClass.name()
         );
     }
 
@@ -980,6 +1055,8 @@ public class SchoolDataService {
     public ProfileResponse toProfileResponse(UserProfile profile, boolean includeSensitive) {
         SchoolClass schoolClass = profile.classId() == null ? null : requireClass(profile.classId());
         SchoolClass homeroomClass = "professor".equals(profile.role()) ? homeroomClassForTeacher(profile.username()) : null;
+        UserProfile linkedStudent = linkedStudentProfile(profile);
+        SchoolClass linkedStudentClass = linkedStudent == null || linkedStudent.classId() == null ? null : requireClass(linkedStudent.classId());
         return new ProfileResponse(
                 profile.id(),
                 profile.version(),
@@ -998,7 +1075,11 @@ public class SchoolDataService {
                 schoolClass == null ? null : schoolClass.profile(),
                 profile.subjectsTaught(),
                 homeroomClass == null ? null : homeroomClass.id(),
-                homeroomClass == null ? null : homeroomClass.name()
+                homeroomClass == null ? null : homeroomClass.name(),
+                linkedStudent == null ? null : linkedStudent.username(),
+                linkedStudent == null ? null : displayName(linkedStudent),
+                linkedStudent == null ? null : linkedStudent.classId(),
+                linkedStudentClass == null ? linkedStudent == null ? null : linkedStudent.className() : linkedStudentClass.name()
         );
     }
 
@@ -2089,8 +2170,10 @@ public class SchoolDataService {
                     generateStudentFatherInitial(identityRandom),
                     classId,
                     schoolClass.name(),
-                    List.of()
+                    List.of(),
+                    null
             ));
+            addParentProfile(index, profilesByUsername.get(username));
         }
     }
 
@@ -2110,7 +2193,30 @@ public class SchoolDataService {
                 null,
                 null,
                 null,
-                List.of()
+                List.of(),
+                null
+        ));
+    }
+
+    private void addParentProfile(int index, UserProfile studentProfile) {
+        String username = String.format(Locale.ROOT, "parinte%03d", index);
+        profilesByUsername.put(username, new UserProfile(
+                profileIds.getAndIncrement(),
+                1,
+                username,
+                "parent",
+                "Parinte",
+                studentProfile.lastName(),
+                username + "@timetable.local",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                studentProfile.username()
         ));
     }
 
@@ -2130,7 +2236,8 @@ public class SchoolDataService {
                 null,
                 null,
                 null,
-                teacher.subjectNames()
+                teacher.subjectNames(),
+                null
         ));
         teacher.subjectNames().forEach(subjectName -> {
             Long subjectId = subjectIdsByName.get(subjectName);
@@ -2220,8 +2327,83 @@ public class SchoolDataService {
                         fatherInitial,
                         profile.classId(),
                         profile.className(),
-                        profile.subjectsTaught()
+                        profile.subjectsTaught(),
+                        profile.linkedStudentUsername()
                 ));
+            }
+        }
+
+        for (UserProfile updated : updates) {
+            profilesByUsername.put(updated.username(), updated);
+            referenceDataPersistenceService.saveUserProfile(updated);
+        }
+    }
+
+    private void backfillMissingParentProfiles() {
+        List<UserProfile> updates = new ArrayList<>();
+
+        for (UserProfile student : getUserProfilesByRole("student")) {
+            if (!student.username().startsWith("student") || student.username().length() <= "student".length()) {
+                continue;
+            }
+            boolean alreadyLinked = profilesByUsername.values().stream()
+                    .filter(profile -> "parent".equals(profile.role()))
+                    .anyMatch(profile -> Objects.equals(student.username(), profile.linkedStudentUsername()));
+            if (alreadyLinked) {
+                continue;
+            }
+
+            String suffix = student.username().substring("student".length());
+            String parentUsername = "parinte" + suffix;
+            UserProfile existingParent = profilesByUsername.get(parentUsername);
+            if (existingParent == null) {
+                UserProfile createdParent = new UserProfile(
+                        profileIds.getAndIncrement(),
+                        1,
+                        parentUsername,
+                        "parent",
+                        "Parinte",
+                        student.lastName(),
+                        parentUsername + "@timetable.local",
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of(),
+                        student.username()
+                );
+                profilesByUsername.put(parentUsername, createdParent);
+                referenceDataPersistenceService.saveUserProfile(createdParent);
+                continue;
+            }
+
+            if (!"parent".equals(existingParent.role())) {
+                continue;
+            }
+
+            if (!Objects.equals(existingParent.linkedStudentUsername(), student.username())) {
+                UserProfile updatedParent = new UserProfile(
+                        existingParent.id(),
+                        (existingParent.version() == null ? 1 : existingParent.version()) + 1,
+                        existingParent.username(),
+                        existingParent.role(),
+                        existingParent.firstName(),
+                        existingParent.lastName(),
+                        existingParent.email(),
+                        existingParent.address(),
+                        existingParent.cnp(),
+                        existingParent.idSeries(),
+                        existingParent.serialNumber(),
+                        existingParent.fatherInitial(),
+                        existingParent.classId(),
+                        existingParent.className(),
+                        existingParent.subjectsTaught(),
+                        student.username()
+                );
+                updates.add(updatedParent);
             }
         }
 
@@ -2462,6 +2644,11 @@ public class SchoolDataService {
         return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
     }
 
+    private String normalizeLinkedStudentUsername(String value) {
+        String normalized = normalizeOptionalProfileField(value);
+        return normalized == null ? null : normalized.toLowerCase(Locale.ROOT);
+    }
+
     private List<String> normalizeSubjectNames(List<String> subjectsTaught) {
         if (subjectsTaught == null || subjectsTaught.isEmpty()) {
             return List.of();
@@ -2509,6 +2696,17 @@ public class SchoolDataService {
                 .findFirst();
     }
 
+    private UserProfile linkedStudentProfile(UserProfile profile) {
+        if (profile == null || profile.linkedStudentUsername() == null || profile.linkedStudentUsername().isBlank()) {
+            return null;
+        }
+        UserProfile linkedStudent = profilesByUsername.get(profile.linkedStudentUsername());
+        if (linkedStudent == null || !"student".equals(linkedStudent.role())) {
+            return null;
+        }
+        return linkedStudent;
+    }
+
     private String displayName(UserProfile profile) {
         return profile.firstName() + " " + profile.lastName();
     }
@@ -2520,6 +2718,42 @@ public class SchoolDataService {
             }
         }
         return false;
+    }
+
+    private UserProfile requireStudentProfile(String username) {
+        UserProfile profile = getProfile(username);
+        if (!"student".equals(profile.role())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Elevul nu exista");
+        }
+        return profile;
+    }
+
+    private UserProfile requireLinkedStudentProfile(UserProfile profile) {
+        if (profile == null || !"parent".equals(profile.role())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Contul nu este parinte");
+        }
+        if (profile.linkedStudentUsername() == null || profile.linkedStudentUsername().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Parintele nu are un elev asociat");
+        }
+        return requireStudentProfile(profile.linkedStudentUsername());
+    }
+
+    private String requireParentLinkedStudentUsername(String linkedStudentUsername, String parentUsername) {
+        if (linkedStudentUsername == null || linkedStudentUsername.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Elevul asociat este obligatoriu pentru parinti");
+        }
+        if (Objects.equals(linkedStudentUsername, parentUsername)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Parintele nu se poate asocia cu propriul cont");
+        }
+
+        UserProfile linkedStudent = requireStudentProfile(linkedStudentUsername);
+        boolean alreadyLinked = profilesByUsername.values().stream()
+                .filter(profile -> !Objects.equals(profile.username(), parentUsername))
+                .anyMatch(profile -> Objects.equals(linkedStudent.username(), profile.linkedStudentUsername()));
+        if (alreadyLinked || referenceDataPersistenceService.linkedStudentUsedByAnotherProfile(linkedStudent.username(), parentUsername)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Elevul selectat este deja asociat altui parinte");
+        }
+        return linkedStudent.username();
     }
 }
 

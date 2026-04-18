@@ -142,6 +142,7 @@ public class PersistentStateService {
                 entity.getGradeDate(),
                 entity.getTeacherUsername(),
                 entity.getTeacherName(),
+                entity.getComment(),
                 entity.getVersion()
         );
     }
@@ -159,6 +160,7 @@ public class PersistentStateService {
         entity.setGradeDate(grade.gradeDate());
         entity.setTeacherUsername(grade.teacherUsername());
         entity.setTeacherName(grade.teacherName());
+        entity.setComment(grade.comment());
         entity.setVersion(grade.version());
         return entity;
     }
@@ -179,6 +181,7 @@ public class PersistentStateService {
                 entity.getMotivatedByUsername(),
                 entity.getMotivatedByName(),
                 entity.getMotivatedAt(),
+                entity.getMotivationReason(),
                 entity.getVersion()
         );
     }
@@ -199,6 +202,7 @@ public class PersistentStateService {
         entity.setMotivatedByUsername(absence.motivatedByUsername());
         entity.setMotivatedByName(absence.motivatedByName());
         entity.setMotivatedAt(absence.motivatedAt());
+        entity.setMotivationReason(absence.motivationReason());
         entity.setVersion(absence.version());
         return entity;
     }

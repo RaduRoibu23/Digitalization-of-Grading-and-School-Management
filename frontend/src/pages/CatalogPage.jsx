@@ -1,10 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
+import TextPromptDialog from '../components/ui/TextPromptDialog'
 import { apiDelete, apiGet, apiPatch, apiPost } from '../services/apiService'
 import { loadViewState, saveViewState } from '../services/viewState'
-import ConfirmDialog from '../components/ui/ConfirmDialog'
 
 const PAGE_SIZE = 6
 const CATALOG_VIEW_STATE_KEY = 'catalog'
+const GRADE_COMMENT_LIMIT = 1000
+const ABSENCE_REASON_LIMIT = 1000
 
 function studentLabel(student) {
   if (!student) return ''
@@ -31,6 +34,11 @@ function gradeTone(value) {
   return 'gradeBadge warn'
 }
 
+function normalizeOptionalText(value) {
+  const normalized = String(value || '').trim()
+  return normalized.length > 0 ? normalized : null
+}
+
 export default function CatalogScreen({ accessToken, roles }) {
   const initialViewState = useMemo(
     () => loadViewState(CATALOG_VIEW_STATE_KEY, {
@@ -52,6 +60,7 @@ export default function CatalogScreen({ accessToken, roles }) {
   const [addingSubject, setAddingSubject] = useState(null)
   const [addingAbsenceSubject, setAddingAbsenceSubject] = useState(null)
   const [motivatingAbsenceId, setMotivatingAbsenceId] = useState(null)
+  const [motivationDialog, setMotivationDialog] = useState({ open: false, absence: null, reason: '' })
   const [search, setSearch] = useState(initialViewState.search)
   const [page, setPage] = useState(initialViewState.page)
   const [deleteTarget, setDeleteTarget] = useState(null)
@@ -60,6 +69,7 @@ export default function CatalogScreen({ accessToken, roles }) {
     () => roles.some((role) => ['professor', 'secretariat', 'admin', 'sysadmin'].includes(role)),
     [roles]
   )
+  const requiresMotivationReason = useMemo(() => roles.includes('parent'), [roles])
 
   useEffect(() => {
     if (canBrowseStudents) {
@@ -141,12 +151,14 @@ export default function CatalogScreen({ accessToken, roles }) {
         nextDrafts[grade.id] = {
           grade_value: grade.grade_value,
           grade_date: grade.grade_date,
+          comment: grade.comment || '',
           version: grade.version,
         }
       })
       nextNewGrades[row.subject_name] = {
         grade_value: '',
         grade_date: '',
+        comment: '',
       }
       nextNewAbsences[row.subject_name] = {
         absence_date: '',
@@ -163,7 +175,7 @@ export default function CatalogScreen({ accessToken, roles }) {
       ...current,
       [gradeId]: {
         ...current[gradeId],
-        [field]: field === 'grade_value' ? Number(value) : value,
+        [field]: field === 'grade_value' ? (value === '' ? '' : Number(value)) : value,
       },
     }))
   }
@@ -173,7 +185,7 @@ export default function CatalogScreen({ accessToken, roles }) {
       ...current,
       [subjectName]: {
         ...current[subjectName],
-        [field]: value,
+        [field]: field === 'grade_value' ? (value === '' ? '' : Number(value)) : value,
       },
     }))
   }
@@ -190,6 +202,7 @@ export default function CatalogScreen({ accessToken, roles }) {
 
   async function reloadCurrentCatalog() {
     if (canBrowseStudents) {
+      if (!selectedStudent) return
       await loadStudentCatalog(selectedStudent)
       return
     }
@@ -203,7 +216,16 @@ export default function CatalogScreen({ accessToken, roles }) {
     setSavingId(grade.id)
     setBanner(null)
     try {
-      await apiPatch(`/catalog/grades/${grade.id}`, draft, accessToken)
+      await apiPatch(
+        `/catalog/grades/${grade.id}`,
+        {
+          version: draft.version,
+          grade_value: Number(draft.grade_value),
+          grade_date: draft.grade_date,
+          comment: normalizeOptionalText(draft.comment),
+        },
+        accessToken
+      )
       await reloadCurrentCatalog()
       setBanner({ type: 'ok', text: 'Nota a fost actualizata.' })
     } catch (error) {
@@ -232,6 +254,7 @@ export default function CatalogScreen({ accessToken, roles }) {
           subject_name: row.subject_name,
           grade_value: Number(draft.grade_value),
           grade_date: draft.grade_date,
+          comment: normalizeOptionalText(draft.comment),
         },
         accessToken
       )
@@ -270,15 +293,29 @@ export default function CatalogScreen({ accessToken, roles }) {
     }
   }
 
-  async function motivateAbsence(absence) {
-    setMotivatingAbsenceId(absence.id)
+  function openMotivationDialog(absence) {
+    setMotivationDialog({
+      open: true,
+      absence,
+      reason: absence?.motivation_reason || '',
+    })
+  }
+
+  async function motivateAbsence(reason) {
+    if (!motivationDialog.absence) return
+
+    setMotivatingAbsenceId(motivationDialog.absence.id)
     setBanner(null)
     try {
       await apiPatch(
-        `/catalog/absences/${absence.id}/motivate`,
-        { version: absence.version },
+        `/catalog/absences/${motivationDialog.absence.id}/motivate`,
+        {
+          version: motivationDialog.absence.version,
+          reason: normalizeOptionalText(reason),
+        },
         accessToken
       )
+      setMotivationDialog({ open: false, absence: null, reason: '' })
       await reloadCurrentCatalog()
       setBanner({ type: 'ok', text: 'Absenta a fost motivata.' })
     } catch (error) {
@@ -346,7 +383,7 @@ export default function CatalogScreen({ accessToken, roles }) {
       <div className="contentHeader">
         <div>
           <div className="title">Catalog</div>
-          <div className="subtitle">Media se afiseaza doar daca exista minim numarul de note cerut pentru materia respectiva.</div>
+          <div className="subtitle">Media se afiseaza doar daca exista minim numarul de note cerut pentru materia respectiva. Comentariile profesorului apar doar utilizatorilor autorizati.</div>
         </div>
         <div className="headerActions">
           {canBrowseStudents && (
@@ -427,7 +464,7 @@ export default function CatalogScreen({ accessToken, roles }) {
                   const grades = Array.isArray(row.grades) ? row.grades : []
                   const absences = Array.isArray(row.absences) ? row.absences : []
                   const teachers = Array.isArray(row.teacher_names) ? row.teacher_names : []
-                  const addDraft = newGrades[row.subject_name] || { grade_value: '', grade_date: '' }
+                  const addDraft = newGrades[row.subject_name] || { grade_value: '', grade_date: '', comment: '' }
                   const addAbsenceDraft = newAbsences[row.subject_name] || { absence_date: '' }
 
                   return (
@@ -451,8 +488,10 @@ export default function CatalogScreen({ accessToken, roles }) {
                               const draft = drafts[grade.id] || {
                                 grade_value: grade.grade_value,
                                 grade_date: grade.grade_date,
+                                comment: grade.comment || '',
                                 version: grade.version,
                               }
+                              const visibleComment = normalizeOptionalText(grade.comment)
                               return (
                                 <div key={grade.id} className="catalogGradeItem">
                                   {grade.editable ? (
@@ -471,6 +510,15 @@ export default function CatalogScreen({ accessToken, roles }) {
                                         value={draft.grade_date}
                                         onChange={(event) => updateDraft(grade.id, 'grade_date', event.target.value)}
                                       />
+                                      <textarea
+                                        className="input small"
+                                        rows={3}
+                                        maxLength={GRADE_COMMENT_LIMIT}
+                                        value={draft.comment}
+                                        onChange={(event) => updateDraft(grade.id, 'comment', event.target.value)}
+                                        placeholder="Comentariu optional vizibil pentru elev, parinte si staff autorizat"
+                                        style={{ resize: 'vertical', minHeight: 84 }}
+                                      />
                                       <button
                                         className="btn primary"
                                         onClick={() => saveGrade(grade)}
@@ -487,10 +535,17 @@ export default function CatalogScreen({ accessToken, roles }) {
                                       </button>
                                     </div>
                                   ) : (
-                                    <div className="catalogPair">
-                                      <span className={gradeTone(Number(grade.grade_value || 0))}>{grade.grade_value}</span>
-                                      <span className="catalogDate">{formatDate(grade.grade_date)}</span>
-                                    </div>
+                                    <>
+                                      <div className="catalogPair">
+                                        <span className={gradeTone(Number(grade.grade_value || 0))}>{grade.grade_value}</span>
+                                        <span className="catalogDate">{formatDate(grade.grade_date)}</span>
+                                      </div>
+                                      {visibleComment && (
+                                        <div className="catalogHint" style={{ whiteSpace: 'pre-wrap' }}>
+                                          Comentariu: {visibleComment}
+                                        </div>
+                                      )}
+                                    </>
                                   )}
                                 </div>
                               )
@@ -513,6 +568,15 @@ export default function CatalogScreen({ accessToken, roles }) {
                                     type="date"
                                     value={addDraft.grade_date}
                                     onChange={(event) => updateNewGrade(row.subject_name, 'grade_date', event.target.value)}
+                                  />
+                                  <textarea
+                                    className="input small"
+                                    rows={3}
+                                    maxLength={GRADE_COMMENT_LIMIT}
+                                    value={addDraft.comment}
+                                    onChange={(event) => updateNewGrade(row.subject_name, 'comment', event.target.value)}
+                                    placeholder="Comentariu optional vizibil pentru elev, parinte si staff autorizat"
+                                    style={{ resize: 'vertical', minHeight: 84 }}
                                   />
                                   <button
                                     className="btn primary"
@@ -545,10 +609,15 @@ export default function CatalogScreen({ accessToken, roles }) {
                                     ? `de ${absence.motivated_by_name || absence.motivated_by_username || '-'}`
                                     : `adaugata de ${absence.teacher_name || '-'}`}
                                 </div>
+                                {absence.motivation_reason && (
+                                  <div className="catalogHint" style={{ whiteSpace: 'pre-wrap' }}>
+                                    Motiv: {absence.motivation_reason}
+                                  </div>
+                                )}
                                 {absence.motivatable && (
                                   <button
                                     className="btn primary"
-                                    onClick={() => motivateAbsence(absence)}
+                                    onClick={() => openMotivationDialog(absence)}
                                     disabled={motivatingAbsenceId === absence.id}
                                   >
                                     Motiveaza
@@ -607,6 +676,25 @@ export default function CatalogScreen({ accessToken, roles }) {
         loading={Boolean(deleteTarget) && savingId === deleteTarget.id}
         onCancel={() => setDeleteTarget(null)}
         onConfirm={deleteGrade}
+      />
+
+      <TextPromptDialog
+        open={motivationDialog.open}
+        title="Motiveaza absenta"
+        description={requiresMotivationReason
+          ? 'Introdu motivul motivarii. Pentru parinte, acest camp este obligatoriu.'
+          : 'Poti adauga optional un motiv pentru motivarea absentei.'}
+        label={requiresMotivationReason ? 'Motiv' : 'Motiv optional'}
+        placeholder="ex: consult medical, problema familiala, document justificativ"
+        confirmLabel="Motiveaza absenta"
+        tone="primary"
+        value={motivationDialog.reason}
+        onValueChange={(reason) => setMotivationDialog((current) => ({ ...current, reason }))}
+        maxLength={ABSENCE_REASON_LIMIT}
+        requireValue={requiresMotivationReason}
+        loading={motivatingAbsenceId === motivationDialog.absence?.id}
+        onCancel={() => setMotivationDialog({ open: false, absence: null, reason: '' })}
+        onConfirm={motivateAbsence}
       />
     </section>
   )

@@ -3,13 +3,13 @@ import { NavLink } from 'react-router-dom'
 
 export const NAV_ITEMS = [
   { id: 'dashboard-home', path: '', label: 'Panou', allowedRoles: [] },
-  { id: 'my-timetable', path: 'orarul-meu', label: 'Orarul meu', allowedRoles: ['student', 'professor'] },
+  { id: 'my-timetable', path: 'orarul-meu', label: 'Orarul meu', allowedRoles: ['student', 'parent', 'professor'] },
   { id: 'class-timetable', path: 'orar-pe-clasa', label: 'Orar pe clasa', allowedRoles: ['secretariat', 'scheduler', 'admin', 'sysadmin'] },
   { id: 'generate', path: 'genereaza-orar', label: 'Genereaza orar', allowedRoles: ['secretariat', 'scheduler', 'admin', 'sysadmin'] },
   { id: 'users', path: 'utilizatori', label: 'Utilizatori', allowedRoles: ['secretariat', 'sysadmin'] },
   { id: 'create-account', path: 'creeaza-cont', label: 'Creeaza cont', allowedRoles: ['sysadmin'] },
-  { id: 'catalog', path: 'catalog', label: 'Catalog', allowedRoles: ['student', 'professor', 'secretariat', 'admin', 'sysadmin'] },
-  { id: 'documents', path: 'documente', label: 'Documente', allowedRoles: ['student', 'secretariat', 'sysadmin'] },
+  { id: 'catalog', path: 'catalog', label: 'Catalog', allowedRoles: ['student', 'parent', 'professor', 'secretariat', 'admin', 'sysadmin'] },
+  { id: 'documents', path: 'documente', label: 'Documente', allowedRoles: ['student', 'parent', 'secretariat', 'sysadmin'] },
   { id: 'feedback', path: 'feedback', label: 'Asistenta', allowedRoles: [] },
   { id: 'profile', path: 'profil', label: 'Date personale', allowedRoles: [] },
 ]

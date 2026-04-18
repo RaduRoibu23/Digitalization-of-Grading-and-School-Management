@@ -58,7 +58,8 @@ public class AccountProvisioningService {
             String lastName,
             String email,
             Long classId,
-            List<String> subjectsTaught
+            List<String> subjectsTaught,
+            String linkedStudentUsername
     ) {
         String normalizedUsername = username == null ? null : username.trim().toLowerCase(Locale.ROOT);
         String accessToken = adminAccessToken();
@@ -74,7 +75,8 @@ public class AccountProvisioningService {
                     lastName,
                     email,
                     classId,
-                    subjectsTaught
+                    subjectsTaught,
+                    linkedStudentUsername
             );
         } catch (RuntimeException exception) {
             deleteKeycloakUser(accessToken, userId);

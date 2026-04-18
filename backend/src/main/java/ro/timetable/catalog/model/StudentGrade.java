@@ -12,6 +12,7 @@ public record StudentGrade(
         String gradeDate,
         String teacherUsername,
         String teacherName,
+        String comment,
         Integer version
 ) {
 }

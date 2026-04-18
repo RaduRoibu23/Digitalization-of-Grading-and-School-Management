@@ -72,7 +72,11 @@ class AuthControllerTest {
                 List.of(),
                 Map.of("email", "student001@timetable.local"),
                 new ProfileSettingsResponse(true, false),
-                new ClassSummaryResponse(1L, "IX A", "Filologie")
+                new ClassSummaryResponse(1L, "IX A", "Filologie"),
+                null,
+                null,
+                null,
+                null
         );
 
         when(authenticatedRequestService.username(authentication)).thenReturn("student001");

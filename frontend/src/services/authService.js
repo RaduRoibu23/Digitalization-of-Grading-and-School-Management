@@ -2,7 +2,7 @@ import { CONFIG } from '../config/config'
 import { requestJson } from './apiClient'
 
 const STORAGE_KEY = CONFIG.auth.storageKey
-const APP_ROLES = ['student', 'professor', 'secretariat', 'scheduler', 'admin', 'sysadmin']
+const APP_ROLES = ['student', 'parent', 'professor', 'secretariat', 'scheduler', 'admin', 'sysadmin']
 
 function sessionStorageRef() {
   if (typeof window === 'undefined') return null

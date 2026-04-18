@@ -102,6 +102,7 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
 
   const editingAllowed = canEdit(roles);
   const isTeacherView = mode === "my" && roles.includes("professor");
+  const isParentView = mode === "my" && roles.includes("parent") && !isTeacherView;
   const showEntryVersion = !(mode === "my" && roles.includes("student") && !isTeacherView);
 
   const filteredClasses = useMemo(() => {
@@ -170,12 +171,12 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
     }
 
     const me = await apiGet("/me", accessToken);
-    const classId = me?.class_id ?? me?.classId ?? me?.class?.id;
+    const classId = me?.class_id ?? me?.classId ?? me?.class?.id ?? me?.linked_student_class_id ?? me?.linkedStudentClassId;
     if (!classId) {
       setEntries([]);
       setOriginal([]);
       setLastSig("");
-      setBanner({ type: "warn", text: "Nu pot determina clasa ta din profil." });
+      setBanner({ type: "warn", text: isParentView ? "Nu pot determina clasa copilului asociat din profil." : "Nu pot determina clasa ta din profil." });
       return;
     }
 
@@ -272,7 +273,7 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
         }
 
         const me = await apiGet("/me", accessToken);
-        const classId = me?.class_id ?? me?.classId ?? me?.class?.id;
+        const classId = me?.class_id ?? me?.classId ?? me?.class?.id ?? me?.linked_student_class_id ?? me?.linkedStudentClassId;
         if (!classId) return;
 
         const data = await apiGet(`/timetables/classes/${classId}`, accessToken);
@@ -420,7 +421,7 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
             {mode === "class" ? `Orar pe clasa${selectedClassName ? ` - ${selectedClassName}` : ""}` : "Orarul meu"}
           </div>
           <div className="subtitle">
-            {isEditing ? "Modul editare este activ." : isTeacherView ? "Programul profesorului pe zile, intervale, clase si sali." : "Vizualizare orar pe zile si intervale."}
+            {isEditing ? "Modul editare este activ." : isTeacherView ? "Programul profesorului pe zile, intervale, clase si sali." : isParentView ? "Vizualizare a orarului copilului asociat, pe zile si intervale." : "Vizualizare orar pe zile si intervale."}
           </div>
         </div>
 
@@ -496,7 +497,7 @@ export default function TimetableScreen({ accessToken, roles, mode }) {
       {loading ? (
         <div className="mutedBlock">Se incarca...</div>
       ) : entries.length === 0 ? (
-        <div className="mutedBlock">{isTeacherView ? "Nu exista intrari in orarul profesorului." : "Nu exista intrari de orar."}</div>
+        <div className="mutedBlock">{isTeacherView ? "Nu exista intrari in orarul profesorului." : isParentView ? "Nu exista intrari in orarul copilului asociat." : "Nu exista intrari de orar."}</div>
       ) : (
         <div className="tableWrap">
           <table className="tbl tblGrid">

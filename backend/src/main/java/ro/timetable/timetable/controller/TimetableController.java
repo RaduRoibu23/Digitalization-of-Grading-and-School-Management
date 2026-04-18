@@ -114,16 +114,20 @@ public class TimetableController {
             );
         }
 
-        if (roles.contains("student")) {
-            UserProfile profile = schoolDataService.getProfile(actorUsername);
+        if (roles.contains("student") || roles.contains("parent")) {
+            UserProfile profile = schoolDataService.resolveAcademicStudentProfile(actorUsername, roles);
             if (profile.classId() == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Nu pot determina clasa elevului");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, roles.contains("parent")
+                        ? "Nu pot determina clasa elevului asociat"
+                        : "Nu pot determina clasa elevului");
             }
             String className = schoolDataService.getClassById(profile.classId()).name();
             auditService.record(
                     "Descarcare PDF orar propriu",
                     actorUsername,
-                    "PDF generat pentru orarul elevului din clasa " + className
+                    roles.contains("parent")
+                            ? "PDF generat pentru orarul elevului asociat din clasa " + className
+                            : "PDF generat pentru orarul elevului din clasa " + className
             );
             return timetablePdfService.renderClassTimetablePdf(className, schoolDataService.getTimetableForClass(profile.classId()));
         }

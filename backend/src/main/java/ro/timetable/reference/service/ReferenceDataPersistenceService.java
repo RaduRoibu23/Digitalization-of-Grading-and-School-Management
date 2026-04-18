@@ -69,6 +69,13 @@ public class ReferenceDataPersistenceService {
                 && userProfileRepository.existsByIdSeriesAndSerialNumberAndUsernameNot(idSeries, serialNumber, username);
     }
 
+    @Transactional(readOnly = true)
+    public boolean linkedStudentUsedByAnotherProfile(String linkedStudentUsername, String username) {
+        return linkedStudentUsername != null
+                && !linkedStudentUsername.isBlank()
+                && userProfileRepository.existsByLinkedStudentUsernameAndUsernameNot(linkedStudentUsername, username);
+    }
+
     @Transactional
     public void saveReferenceData(List<SchoolClass> classes, List<Subject> subjects, List<Room> rooms, List<UserProfile> profiles) {
         schoolClassRepository.saveAll(classes.stream().map(this::toEntity).toList());
@@ -176,7 +183,8 @@ public class ReferenceDataPersistenceService {
                 entity.getFatherInitial(),
                 entity.getSchoolClass() == null ? null : entity.getSchoolClass().getId(),
                 entity.getSchoolClass() == null ? null : entity.getSchoolClass().getName(),
-                toSortedSubjectNames(entity)
+                toSortedSubjectNames(entity),
+                entity.getLinkedStudentUsername()
         );
     }
 
@@ -219,6 +227,7 @@ public class ReferenceDataPersistenceService {
         entity.setIdSeries(profile.idSeries());
         entity.setSerialNumber(profile.serialNumber());
         entity.setFatherInitial(profile.fatherInitial());
+        entity.setLinkedStudentUsername(profile.linkedStudentUsername());
         entity.setTeachingSubjects(resolveTeachingSubjects(profile.subjectsTaught()));
         entity.setSettings(resolveSettings(profile.id(), preserveExistingSettings));
         if (profile.classId() != null) {

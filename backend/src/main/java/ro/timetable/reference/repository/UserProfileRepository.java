@@ -8,8 +8,10 @@ import ro.timetable.reference.entity.UserProfileEntity;
 public interface UserProfileRepository extends JpaRepository<UserProfileEntity, Long> {
     boolean existsByUsername(String username);
     Optional<UserProfileEntity> findByUsername(String username);
+    Optional<UserProfileEntity> findByLinkedStudentUsername(String linkedStudentUsername);
     boolean existsByEmailAndUsernameNot(String email, String username);
     boolean existsByCnpAndUsernameNot(String cnp, String username);
     boolean existsByIdSeriesAndSerialNumberAndUsernameNot(String idSeries, String serialNumber, String username);
+    boolean existsByLinkedStudentUsernameAndUsernameNot(String linkedStudentUsername, String username);
     void deleteAllByUsernameIn(Collection<String> usernames);
 }

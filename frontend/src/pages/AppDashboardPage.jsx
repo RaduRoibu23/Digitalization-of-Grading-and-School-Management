@@ -150,6 +150,7 @@ export default function AppDashboardPage({ accessToken, roles = [] }) {
 
   const roleLabel = useMemo(() => {
     if (roles.includes('student')) return 'Elev'
+    if (roles.includes('parent')) return 'Parinte'
     if (roles.includes('professor')) return 'Profesor'
     if (roles.includes('sysadmin')) return 'Sysadmin'
     if (roles.includes('admin')) return 'Admin'

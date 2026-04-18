@@ -12,6 +12,7 @@ export default function TextPromptDialog({
   value = '',
   onValueChange,
   maxLength = 255,
+  requireValue = true,
   loading = false,
   onCancel,
   onConfirm,
@@ -45,7 +46,7 @@ export default function TextPromptDialog({
           <button
             className={`btn ${tone}`}
             onClick={() => onConfirm(value.trim())}
-            disabled={loading || value.trim().length === 0}
+            disabled={loading || (requireValue && value.trim().length === 0)}
           >
             {confirmLabel}
           </button>

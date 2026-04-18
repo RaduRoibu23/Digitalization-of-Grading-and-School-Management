@@ -34,7 +34,7 @@ function hasAnyRole(userRoles, allowedRoles) {
 
 function defaultPathForRoles(roles, visibleItems) {
   const navigableItems = visibleItems.filter((item) => item.path)
-  const preferred = roles.includes('student') || roles.includes('professor') ? 'orarul-meu' : 'orar-pe-clasa'
+  const preferred = roles.includes('student') || roles.includes('parent') || roles.includes('professor') ? 'orarul-meu' : 'orar-pe-clasa'
   return navigableItems.some((item) => item.path === preferred) ? preferred : navigableItems[0]?.path || 'profil'
 }
 

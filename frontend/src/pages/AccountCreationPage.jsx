@@ -3,6 +3,7 @@ import { apiGet, apiPost } from '../services/apiService'
 
 const CREATE_ROLE_OPTIONS = [
   { value: 'student', label: 'Student' },
+  { value: 'parent', label: 'Parinte' },
   { value: 'professor', label: 'Profesor' },
   { value: 'secretariat', label: 'Secretariat' },
   { value: 'scheduler', label: 'Scheduler' },
@@ -20,6 +21,7 @@ function createFormState() {
     email: '',
     class_id: '',
     subject_name: '',
+    linked_student_username: '',
   }
 }
 
@@ -27,6 +29,8 @@ function roleLabel(role) {
   switch (role) {
     case 'student':
       return 'Student'
+    case 'parent':
+      return 'Parinte'
     case 'professor':
       return 'Profesor'
     case 'secretariat':
@@ -42,6 +46,13 @@ function roleLabel(role) {
   }
 }
 
+function studentLabel(profile) {
+  if (!profile) return '-'
+  const fullName = `${profile.last_name || ''} ${profile.first_name || ''}`.trim()
+  const className = profile.class_name || '-'
+  return `${fullName} (${profile.username}) - ${className}`
+}
+
 export default function AccountCreationScreen({ accessToken, roles = [] }) {
   const canCreateAccounts = roles.includes('sysadmin')
   const [loading, setLoading] = useState(false)
@@ -49,6 +60,7 @@ export default function AccountCreationScreen({ accessToken, roles = [] }) {
   const [banner, setBanner] = useState(null)
   const [classes, setClasses] = useState([])
   const [subjects, setSubjects] = useState([])
+  const [students, setStudents] = useState([])
   const [createdProfile, setCreatedProfile] = useState(null)
   const [form, setForm] = useState(createFormState())
 
@@ -60,20 +72,24 @@ export default function AccountCreationScreen({ accessToken, roles = [] }) {
     ;(async () => {
       setLoading(true)
       try {
-        const [classData, subjectData] = await Promise.all([
+        const [classData, subjectData, studentData] = await Promise.all([
           apiGet('/classes', accessToken),
           apiGet('/subjects', accessToken),
+          apiGet('/profiles?role=student', accessToken),
         ])
 
         const nextClasses = Array.isArray(classData) ? classData : []
         const nextSubjects = Array.isArray(subjectData) ? subjectData : []
+        const nextStudents = Array.isArray(studentData) ? studentData : []
 
         setClasses(nextClasses)
         setSubjects(nextSubjects)
+        setStudents(nextStudents)
         setForm((current) => ({
           ...current,
           class_id: current.class_id || (nextClasses[0] ? String(nextClasses[0].id) : ''),
           subject_name: current.subject_name || (nextSubjects[0]?.name || ''),
+          linked_student_username: current.linked_student_username || (nextStudents[0]?.username || ''),
         }))
       } catch (error) {
         setBanner({ type: 'error', text: String(error?.message || error) })
@@ -91,6 +107,7 @@ export default function AccountCreationScreen({ accessToken, roles = [] }) {
           role: value,
           class_id: value === 'student' ? (current.class_id || (classes[0] ? String(classes[0].id) : '')) : '',
           subject_name: value === 'professor' ? (current.subject_name || (subjects[0]?.name || '')) : '',
+          linked_student_username: value === 'parent' ? (current.linked_student_username || (students[0]?.username || '')) : '',
         }
       }
 
@@ -113,6 +130,7 @@ export default function AccountCreationScreen({ accessToken, roles = [] }) {
       ...createFormState(),
       class_id: classes[0] ? String(classes[0].id) : '',
       subject_name: subjects[0]?.name || '',
+      linked_student_username: students[0]?.username || '',
     })
   }
 
@@ -131,6 +149,7 @@ export default function AccountCreationScreen({ accessToken, roles = [] }) {
           email: form.email.trim(),
           class_id: form.role === 'student' && form.class_id ? Number(form.class_id) : null,
           subjects_taught: form.role === 'professor' && form.subject_name ? [form.subject_name] : [],
+          linked_student_username: form.role === 'parent' ? (form.linked_student_username || null) : null,
         },
         accessToken
       )
@@ -154,6 +173,7 @@ export default function AccountCreationScreen({ accessToken, roles = [] }) {
       && form.email.trim()
       && (form.role !== 'student' || form.class_id)
       && (form.role !== 'professor' || form.subject_name)
+      && (form.role !== 'parent' || form.linked_student_username)
   )
 
   if (!canCreateAccounts) {
@@ -190,7 +210,7 @@ export default function AccountCreationScreen({ accessToken, roles = [] }) {
       {banner && <div className={`banner ${banner.type}`}>{banner.text}</div>}
 
       <div className="mutedBlock" style={{ marginBottom: 18 }}>
-        Username-ul se salveaza automat cu litere mici pentru compatibilitate cu autentificarea. Pentru elevi, adresa, CNP-ul, seria, numarul de serie si initiala prenumelui tatalui se genereaza automat la creare.
+        Username-ul se salveaza automat cu litere mici pentru compatibilitate cu autentificarea. Pentru elevi, adresa, CNP-ul, seria, numarul de serie si initiala prenumelui tatalui se genereaza automat la creare. Pentru parinti, elevul asociat este obligatoriu.
       </div>
 
       {loading ? (
@@ -260,6 +280,20 @@ export default function AccountCreationScreen({ accessToken, roles = [] }) {
               </select>
             </div>
           )}
+
+          {form.role === 'parent' && (
+            <div className="field">
+              <label className="label">Elev asociat</label>
+              <select className="select" value={form.linked_student_username} onChange={(event) => updateField('linked_student_username', event.target.value)} disabled={creating}>
+                <option value="">Selecteaza elevul</option>
+                {students.map((student) => (
+                  <option key={student.username} value={student.username}>
+                    {studentLabel(student)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       )}
 
@@ -269,7 +303,8 @@ export default function AccountCreationScreen({ accessToken, roles = [] }) {
             <div><strong>Ultimul cont creat:</strong> {createdProfile.username}</div>
             <div><strong>Rol:</strong> {roleLabel(createdProfile.role)}</div>
             <div><strong>Email:</strong> {createdProfile.email || '-'}</div>
-            <div><strong>Clasa:</strong> {createdProfile.class_name || '-'}</div>
+            <div><strong>Clasa:</strong> {createdProfile.class_name || createdProfile.linked_student_class_name || '-'}</div>
+            {createdProfile.role === 'parent' && <div><strong>Elev asociat:</strong> {createdProfile.linked_student_name || createdProfile.linked_student_username || '-'}</div>}
             {createdProfile.role === 'student' && <div><strong>Serie:</strong> {createdProfile.series || '-'}</div>}
             {createdProfile.role === 'student' && <div><strong>Nr. serie:</strong> {createdProfile.serial_number || '-'}</div>}
             {createdProfile.role === 'student' && <div><strong>Initiala prenumelui tatalui:</strong> {createdProfile.father_initial || '-'}</div>}

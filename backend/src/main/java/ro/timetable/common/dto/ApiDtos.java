@@ -78,7 +78,11 @@ public final class ApiDtos {
             String class_profile,
             List<String> subjects_taught,
             Long homeroom_class_id,
-            String homeroom_class_name
+            String homeroom_class_name,
+            String linked_student_username,
+            String linked_student_name,
+            Long linked_student_class_id,
+            String linked_student_class_name
     ) {
     }
 
@@ -115,7 +119,11 @@ public final class ApiDtos {
             List<String> subjects_taught,
             Map<String, Object> claims,
             ProfileSettingsResponse settings,
-            @JsonProperty("class") ClassSummaryResponse school_class
+            @JsonProperty("class") ClassSummaryResponse school_class,
+            String linked_student_username,
+            String linked_student_name,
+            Long linked_student_class_id,
+            String linked_student_class_name
     ) {
     }
 
@@ -309,6 +317,7 @@ public final class ApiDtos {
             String grade_date,
             String teacher_username,
             String teacher_name,
+            String comment,
             Integer version,
             boolean editable
     ) {
@@ -329,6 +338,7 @@ public final class ApiDtos {
             String motivated_by_username,
             String motivated_by_name,
             String motivated_at,
+            String motivation_reason,
             Integer version,
             boolean motivatable
     ) {

@@ -79,6 +79,8 @@ public class CatalogService {
         List<UserProfile> students;
         if (hasRole(roles, "student")) {
             students = List.of(requireStudentProfile(requesterUsername));
+        } else if (hasRole(roles, "parent")) {
+            students = List.of(schoolDataService.resolveAcademicStudentProfile(requesterUsername, roles));
         } else if (hasRole(roles, "professor")) {
             students = getStudentsForProfessor(requesterUsername);
         } else {
@@ -96,10 +98,10 @@ public class CatalogService {
 
     public CatalogResponse getMyCatalog(String requesterUsername, List<String> roles) {
         ensureCatalogVisible(roles);
-        if (!hasRole(roles, "student")) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only students can access their own catalog endpoint");
+        if (!hasRole(roles, "student") && !hasRole(roles, "parent")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only students and parents can access their own catalog endpoint");
         }
-        return buildCatalogResponse(requireStudentProfile(requesterUsername), requesterUsername, roles);
+        return buildCatalogResponse(schoolDataService.resolveAcademicStudentProfile(requesterUsername, roles), requesterUsername, roles);
     }
 
     public CatalogResponse getCatalogForStudent(String requesterUsername, List<String> roles, String studentUsername) {
@@ -111,13 +113,22 @@ public class CatalogService {
         return buildCatalogResponse(student, requesterUsername, roles);
     }
 
-    public GradeResponse createGrade(String requesterUsername, List<String> roles, String studentUsername, String subjectName, Integer gradeValue, String gradeDate) {
+    public GradeResponse createGrade(
+            String requesterUsername,
+            List<String> roles,
+            String studentUsername,
+            String subjectName,
+            Integer gradeValue,
+            String gradeDate,
+            String comment
+    ) {
         if (!hasRole(roles, "secretariat") && !hasRole(roles, "professor")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only secretariat and professors can add grades");
         }
 
         ensureValidGradeValue(gradeValue);
         LocalDate.parse(gradeDate);
+        String normalizedComment = normalizeOptionalText(comment);
         UserProfile student = requireStudentProfile(studentUsername);
         Long subjectId = schoolDataService.subjectIdByName(subjectName);
         if (schoolDataService.weeklyHoursForSubject(student.classId(), subjectName) <= 0) {
@@ -144,6 +155,7 @@ public class CatalogService {
                 gradeDate,
                 teacherAssignment.teacherUsername(),
                 teacherAssignment.teacherName(),
+                normalizedComment,
                 1
         );
 
@@ -152,7 +164,7 @@ public class CatalogService {
         sortGrades(studentGrades);
         persistentStateService.saveGrade(created);
         notificationService.createNotifications(
-                List.of(student.username()),
+                schoolDataService.academicNotificationRecipients(student.username()),
                 new NotificationService.NotificationPayload(
                         "Catalog actualizat",
                         "Ai primit nota " + gradeValue + " la materia " + subjectName + ".",
@@ -168,13 +180,22 @@ public class CatalogService {
         return gradeResponse(created, requesterUsername, roles);
     }
 
-    public GradeResponse updateGrade(String requesterUsername, List<String> roles, Long gradeId, Integer version, Integer gradeValue, String gradeDate) {
+    public GradeResponse updateGrade(
+            String requesterUsername,
+            List<String> roles,
+            Long gradeId,
+            Integer version,
+            Integer gradeValue,
+            String gradeDate,
+            String comment
+    ) {
         if (!hasRole(roles, "secretariat") && !hasRole(roles, "professor")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only secretariat and professors can update grades");
         }
 
         ensureValidGradeValue(gradeValue);
         LocalDate.parse(gradeDate);
+        String normalizedComment = normalizeOptionalText(comment);
 
         for (Map.Entry<String, List<StudentGrade>> bucket : gradesByStudentUsername.entrySet()) {
             List<StudentGrade> grades = bucket.getValue();
@@ -202,13 +223,14 @@ public class CatalogService {
                         gradeDate,
                         existing.teacherUsername(),
                         existing.teacherName(),
+                        normalizedComment,
                         existing.version() + 1
                 );
                 grades.set(index, updated);
                 sortGrades(grades);
                 persistentStateService.saveGrade(updated);
                 notificationService.createNotifications(
-                        List.of(existing.studentUsername()),
+                        schoolDataService.academicNotificationRecipients(existing.studentUsername()),
                         new NotificationService.NotificationPayload(
                                 "Catalog actualizat",
                                 "Nota la materia " + existing.subjectName() + " a fost actualizata. Valoarea curenta este " + gradeValue + ".",
@@ -246,7 +268,7 @@ public class CatalogService {
                 grades.remove(index);
                 persistentStateService.deleteGrade(gradeId);
                 notificationService.createNotifications(
-                        List.of(existing.studentUsername()),
+                        schoolDataService.academicNotificationRecipients(existing.studentUsername()),
                         new NotificationService.NotificationPayload(
                                 "Catalog actualizat",
                                 "O nota la materia " + existing.subjectName() + " a fost stearsa.",
@@ -304,6 +326,7 @@ public class CatalogService {
                 null,
                 null,
                 null,
+                null,
                 1
         );
 
@@ -312,7 +335,7 @@ public class CatalogService {
         sortAbsences(studentAbsences);
         persistentStateService.saveAbsence(created);
         notificationService.createNotifications(
-                List.of(student.username()),
+                schoolDataService.academicNotificationRecipients(student.username()),
                 new NotificationService.NotificationPayload(
                         "Catalog actualizat",
                         "Ai primit o absenta la materia " + subjectName + ".",
@@ -328,7 +351,7 @@ public class CatalogService {
         return absenceResponse(created, requesterUsername, roles);
     }
 
-    public AbsenceResponse motivateAbsence(String requesterUsername, List<String> roles, Long absenceId, Integer version) {
+    public AbsenceResponse motivateAbsence(String requesterUsername, List<String> roles, Long absenceId, Integer version, String reason) {
         for (Map.Entry<String, List<StudentAbsence>> bucket : absencesByStudentUsername.entrySet()) {
             List<StudentAbsence> absences = bucket.getValue();
             for (int index = 0; index < absences.size(); index++) {
@@ -347,6 +370,10 @@ public class CatalogService {
                 }
 
                 UserProfile motivator = schoolDataService.getProfile(requesterUsername);
+                String normalizedReason = normalizeOptionalText(reason);
+                if (hasRole(roles, "parent") && normalizedReason == null) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Parintele trebuie sa adauge un motiv pentru motivarea absentei");
+                }
                 StudentAbsence updated = new StudentAbsence(
                         existing.id(),
                         existing.studentUsername(),
@@ -362,13 +389,14 @@ public class CatalogService {
                         motivator.username(),
                         motivator.firstName() + " " + motivator.lastName(),
                         LocalDate.now().toString(),
+                        normalizedReason,
                         existing.version() + 1
                 );
                 absences.set(index, updated);
                 sortAbsences(absences);
                 persistentStateService.saveAbsence(updated);
                 notificationService.createNotifications(
-                        List.of(existing.studentUsername()),
+                        schoolDataService.academicNotificationRecipients(existing.studentUsername()),
                         new NotificationService.NotificationPayload(
                                 "Catalog actualizat",
                                 "O absenta la materia " + existing.subjectName() + " a fost motivata.",
@@ -471,6 +499,7 @@ public class CatalogService {
                 grade.gradeDate(),
                 grade.teacherUsername(),
                 grade.teacherName(),
+                canViewGradeComment(requesterUsername, roles, grade) ? grade.comment() : null,
                 grade.version(),
                 canEditGrade(requesterUsername, roles, grade)
         );
@@ -492,6 +521,7 @@ public class CatalogService {
                 absence.motivatedByUsername(),
                 absence.motivatedByName(),
                 absence.motivatedAt(),
+                absence.motivationReason(),
                 absence.version(),
                 canMotivateAbsence(requesterUsername, roles, absence) && !absence.motivated()
         );
@@ -500,6 +530,9 @@ public class CatalogService {
     private boolean canAccessStudentCatalog(String requesterUsername, List<String> roles, UserProfile student) {
         if (hasRole(roles, "student")) {
             return requesterUsername.equals(student.username());
+        }
+        if (hasRole(roles, "parent")) {
+            return schoolDataService.isParentOfStudent(requesterUsername, student.username());
         }
         if (hasRole(roles, "professor")) {
             return student.classId() != null && classesForProfessor(requesterUsername).contains(student.classId());
@@ -511,6 +544,9 @@ public class CatalogService {
         if (hasRole(roles, "student")) {
             return requesterUsername.equals(grade.studentUsername());
         }
+        if (hasRole(roles, "parent")) {
+            return schoolDataService.isParentOfStudent(requesterUsername, grade.studentUsername());
+        }
         if (hasRole(roles, "professor")) {
             return professorCanManageGrade(requesterUsername, grade.classId(), grade.subjectId(), grade.teacherUsername());
         }
@@ -521,10 +557,27 @@ public class CatalogService {
         if (hasRole(roles, "student")) {
             return requesterUsername.equals(absence.studentUsername());
         }
+        if (hasRole(roles, "parent")) {
+            return schoolDataService.isParentOfStudent(requesterUsername, absence.studentUsername());
+        }
         if (hasRole(roles, "professor")) {
             return classesForProfessor(requesterUsername).contains(absence.classId());
         }
         return hasRole(roles, "secretariat") || hasRole(roles, "admin") || hasRole(roles, "sysadmin");
+    }
+
+    private boolean canViewGradeComment(String requesterUsername, List<String> roles, StudentGrade grade) {
+        if (hasRole(roles, "secretariat") || hasRole(roles, "sysadmin")) {
+            return true;
+        }
+        if (hasRole(roles, "student")) {
+            return requesterUsername.equals(grade.studentUsername());
+        }
+        if (hasRole(roles, "parent")) {
+            return schoolDataService.isParentOfStudent(requesterUsername, grade.studentUsername());
+        }
+        return hasRole(roles, "professor")
+                && professorCanManageGrade(requesterUsername, grade.classId(), grade.subjectId(), grade.teacherUsername());
     }
 
     private boolean canEditGrade(String requesterUsername, List<String> roles, StudentGrade grade) {
@@ -560,6 +613,9 @@ public class CatalogService {
     private boolean canMotivateAbsence(String requesterUsername, List<String> roles, StudentAbsence absence) {
         if (hasRole(roles, "secretariat") || hasRole(roles, "admin") || hasRole(roles, "sysadmin")) {
             return true;
+        }
+        if (hasRole(roles, "parent")) {
+            return schoolDataService.isParentOfStudent(requesterUsername, absence.studentUsername());
         }
         if (!hasRole(roles, "professor")) {
             return false;
@@ -615,6 +671,7 @@ public class CatalogService {
 
     private void ensureCatalogVisible(List<String> roles) {
         if (!(hasRole(roles, "student")
+                || hasRole(roles, "parent")
                 || hasRole(roles, "professor")
                 || hasRole(roles, "secretariat")
                 || hasRole(roles, "admin")
@@ -636,27 +693,7 @@ public class CatalogService {
     }
 
     private ProfileResponse toProfileResponse(UserProfile profile) {
-        SchoolClass schoolClass = profile.classId() == null ? null : schoolDataService.getClassById(profile.classId());
-        return new ProfileResponse(
-                profile.id(),
-                profile.version(),
-                profile.username(),
-                profile.role(),
-                profile.firstName(),
-                profile.lastName(),
-                profile.email(),
-                null,
-                null,
-                null,
-                null,
-                null,
-                profile.classId(),
-                profile.className(),
-                schoolClass == null ? null : schoolClass.profile(),
-                profile.subjectsTaught(),
-                null,
-                null
-        );
+        return schoolDataService.toProfileResponse(profile, false);
     }
 
     private void synchronizeStudentGrades(UserProfile updatedProfile) {
@@ -680,6 +717,7 @@ public class CatalogService {
                     grade.gradeDate(),
                     grade.teacherUsername(),
                     grade.teacherName(),
+                    grade.comment(),
                     grade.version()
             );
             grades.set(index, updatedGrade);
@@ -707,6 +745,7 @@ public class CatalogService {
                         grade.gradeDate(),
                         grade.teacherUsername(),
                         updatedTeacherName,
+                        grade.comment(),
                         grade.version()
                 );
                 grades.set(index, updatedGrade);
@@ -739,6 +778,7 @@ public class CatalogService {
                     absence.motivatedByUsername(),
                     absence.motivatedByName(),
                     absence.motivatedAt(),
+                    absence.motivationReason(),
                     absence.version()
             );
             absences.set(index, updatedAbsence);
@@ -773,6 +813,7 @@ public class CatalogService {
                         absence.motivatedByUsername(),
                         motivatedByName,
                         absence.motivatedAt(),
+                        absence.motivationReason(),
                         absence.version()
                 );
                 absences.set(index, updatedAbsence);
@@ -998,6 +1039,7 @@ public class CatalogService {
                     gradeDate.toString(),
                     teacher.username(),
                     teacher.fullName(),
+                    null,
                     1
             ));
         }
@@ -1083,10 +1125,19 @@ public class CatalogService {
                     motivatedByUsername,
                     motivatedByName,
                     motivatedAt,
+                    null,
                     1
             ));
         }
         return absences;
+    }
+
+    private String normalizeOptionalText(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 
     private void sortGrades(List<StudentGrade> grades) {

@@ -60,7 +60,8 @@ public class ReferenceDataController {
             @NotBlank String last_name,
             @NotBlank @Email String email,
             Long class_id,
-            List<String> subjects_taught
+            List<String> subjects_taught,
+            String linked_student_username
     ) {
     }
 
@@ -75,7 +76,8 @@ public class ReferenceDataController {
             String cnp,
             String series,
             String serial_number,
-            String father_initial
+            String father_initial,
+            String linked_student_username
     ) {
     }
 
@@ -118,7 +120,8 @@ public class ReferenceDataController {
                 request.last_name().trim(),
                 request.email().trim(),
                 request.class_id(),
-                request.subjects_taught() == null ? List.of() : request.subjects_taught()
+                request.subjects_taught() == null ? List.of() : request.subjects_taught(),
+                request.linked_student_username()
         );
         auditService.record(
                 "Creare cont",
@@ -153,7 +156,8 @@ public class ReferenceDataController {
                 request.series(),
                 request.serial_number(),
                 request.father_initial(),
-                request.homeroom_class_id()
+                request.homeroom_class_id(),
+                request.linked_student_username()
         );
         catalogService.syncProfileData(previousProfile, updatedProfile);
         accountProvisioningService.syncManagedAccountProfile(

@@ -51,6 +51,9 @@ public class StudentAbsenceEntity {
     @Column(name = "motivated_at")
     private String motivatedAt;
 
+    @Column(name = "motivation_reason", columnDefinition = "TEXT")
+    private String motivationReason;
+
     @Column(nullable = false)
     private Integer version;
 
@@ -164,6 +167,14 @@ public class StudentAbsenceEntity {
 
     public void setMotivatedAt(String motivatedAt) {
         this.motivatedAt = motivatedAt;
+    }
+
+    public String getMotivationReason() {
+        return motivationReason;
+    }
+
+    public void setMotivationReason(String motivationReason) {
+        this.motivationReason = motivationReason;
     }
 
     public Integer getVersion() {
