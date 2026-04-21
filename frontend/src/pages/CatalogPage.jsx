@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import ConfirmDialog from '../components/ui/ConfirmDialog'
 import TextPromptDialog from '../components/ui/TextPromptDialog'
-import { apiDelete, apiGet, apiPatch, apiPost } from '../services/apiService'
+import { apiDownload, apiGet, apiPatch, apiPost } from '../services/apiService'
 import { loadViewState, saveViewState } from '../services/viewState'
 
 const PAGE_SIZE = 6
@@ -39,6 +38,15 @@ function normalizeOptionalText(value) {
   return normalized.length > 0 ? normalized : null
 }
 
+function extractFilename(response, fallbackName) {
+  const contentDisposition = response.headers.get('content-disposition') || ''
+  const quotedMatch = contentDisposition.match(/filename="([^"]+)"/i)
+  if (quotedMatch?.[1]) {
+    return quotedMatch[1]
+  }
+  return fallbackName
+}
+
 export default function CatalogScreen({ accessToken, roles }) {
   const initialViewState = useMemo(
     () => loadViewState(CATALOG_VIEW_STATE_KEY, {
@@ -56,20 +64,30 @@ export default function CatalogScreen({ accessToken, roles }) {
   const [drafts, setDrafts] = useState({})
   const [newGrades, setNewGrades] = useState({})
   const [newAbsences, setNewAbsences] = useState({})
-  const [savingId, setSavingId] = useState(null)
   const [addingSubject, setAddingSubject] = useState(null)
   const [addingAbsenceSubject, setAddingAbsenceSubject] = useState(null)
   const [motivatingAbsenceId, setMotivatingAbsenceId] = useState(null)
   const [motivationDialog, setMotivationDialog] = useState({ open: false, absence: null, reason: '' })
+  const [gradeRequestDialog, setGradeRequestDialog] = useState({ open: false, grade: null, mode: 'update', reason: '' })
+  const [requestingGradeId, setRequestingGradeId] = useState(null)
+  const [changeRequests, setChangeRequests] = useState([])
+  const [loadingRequests, setLoadingRequests] = useState(false)
+  const [reviewingRequestId, setReviewingRequestId] = useState(null)
+  const [exportClasses, setExportClasses] = useState([])
+  const [exportClassId, setExportClassId] = useState('')
+  const [exportingCatalog, setExportingCatalog] = useState(false)
   const [search, setSearch] = useState(initialViewState.search)
   const [page, setPage] = useState(initialViewState.page)
-  const [deleteTarget, setDeleteTarget] = useState(null)
 
   const canBrowseStudents = useMemo(
-    () => roles.some((role) => ['professor', 'secretariat', 'admin', 'sysadmin'].includes(role)),
+    () => roles.some((role) => ['professor', 'secretariat', 'director', 'sysadmin'].includes(role)),
     [roles]
   )
   const requiresMotivationReason = useMemo(() => roles.includes('parent'), [roles])
+  const canReviewGradeRequests = useMemo(
+    () => roles.some((role) => ['secretariat', 'director'].includes(role)),
+    [roles]
+  )
 
   useEffect(() => {
     if (canBrowseStudents) {
@@ -83,6 +101,16 @@ export default function CatalogScreen({ accessToken, roles }) {
     if (!canBrowseStudents || !selectedStudent) return
     loadStudentCatalog(selectedStudent)
   }, [accessToken, canBrowseStudents, selectedStudent])
+
+  useEffect(() => {
+    if (!accessToken || !(canReviewGradeRequests || roles.includes('professor'))) return
+    loadChangeRequests()
+  }, [accessToken, canReviewGradeRequests, roles])
+
+  useEffect(() => {
+    if (!accessToken || !(roles.includes('director') || roles.includes('sysadmin') || roles.includes('professor'))) return
+    loadExportableClasses()
+  }, [accessToken, roles])
 
   useEffect(() => {
     setPage(1)
@@ -133,6 +161,33 @@ export default function CatalogScreen({ accessToken, roles }) {
       setBanner({ type: 'error', text: String(error?.message || error) })
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadChangeRequests() {
+    setLoadingRequests(true)
+    try {
+      const data = await apiGet('/catalog/grade-change-requests', accessToken)
+      setChangeRequests(Array.isArray(data) ? data : [])
+    } catch (error) {
+      setBanner({ type: 'error', text: String(error?.message || error) })
+    } finally {
+      setLoadingRequests(false)
+    }
+  }
+
+  async function loadExportableClasses() {
+    try {
+      const data = await apiGet('/catalog/exportable-classes', accessToken)
+      const list = Array.isArray(data) ? data : []
+      setExportClasses(list)
+      setExportClassId((current) => {
+        if (list.length === 0) return ''
+        return list.some((item) => String(item.id) === String(current)) ? current : String(list[0].id)
+      })
+    } catch {
+      setExportClasses([])
+      setExportClassId('')
     }
   }
 
@@ -204,38 +259,11 @@ export default function CatalogScreen({ accessToken, roles }) {
     if (canBrowseStudents) {
       if (!selectedStudent) return
       await loadStudentCatalog(selectedStudent)
-      return
+    } else {
+      await loadMyCatalog()
     }
-    await loadMyCatalog()
-  }
-
-  async function saveGrade(grade) {
-    const draft = drafts[grade.id]
-    if (!draft) return
-
-    setSavingId(grade.id)
-    setBanner(null)
-    try {
-      await apiPatch(
-        `/catalog/grades/${grade.id}`,
-        {
-          version: draft.version,
-          grade_value: Number(draft.grade_value),
-          grade_date: draft.grade_date,
-          comment: normalizeOptionalText(draft.comment),
-        },
-        accessToken
-      )
-      await reloadCurrentCatalog()
-      setBanner({ type: 'ok', text: 'Nota a fost actualizata.' })
-    } catch (error) {
-      if ([409, 412, 423].includes(error?.status)) {
-        setBanner({ type: 'error', text: 'Nota a fost modificata intre timp. Actualizeaza catalogul si incearca din nou.' })
-      } else {
-        setBanner({ type: 'error', text: String(error?.message || error) })
-      }
-    } finally {
-      setSavingId(null)
+    if (canReviewGradeRequests || roles.includes('professor')) {
+      await loadChangeRequests()
     }
   }
 
@@ -329,20 +357,82 @@ export default function CatalogScreen({ accessToken, roles }) {
     }
   }
 
-  async function deleteGrade() {
-    if (!deleteTarget) return
 
-    setSavingId(deleteTarget.id)
+  function openGradeRequestDialog(grade, mode) {
+    setGradeRequestDialog({
+      open: true,
+      grade,
+      mode,
+      reason: '',
+    })
+  }
+
+  async function submitGradeRequest(reason) {
+    const grade = gradeRequestDialog.grade
+    if (!grade) return
+
+    const draft = drafts[grade.id] || {
+      grade_value: grade.grade_value,
+      grade_date: grade.grade_date,
+      comment: grade.comment || '',
+    }
+    setRequestingGradeId(grade.id)
     setBanner(null)
     try {
-      await apiDelete(`/catalog/grades/${deleteTarget.id}`, accessToken)
+      await apiPost(
+        `/catalog/grades/${grade.id}/change-requests`,
+        {
+          request_type: gradeRequestDialog.mode === 'delete' ? 'DELETE' : 'UPDATE',
+          proposed_grade_value: gradeRequestDialog.mode === 'delete' ? null : Number(draft.grade_value),
+          proposed_grade_date: gradeRequestDialog.mode === 'delete' ? null : draft.grade_date,
+          proposed_comment: gradeRequestDialog.mode === 'delete' ? null : normalizeOptionalText(draft.comment),
+          reason: normalizeOptionalText(reason),
+        },
+        accessToken
+      )
+      setGradeRequestDialog({ open: false, grade: null, mode: 'update', reason: '' })
       await reloadCurrentCatalog()
-      setBanner({ type: 'ok', text: 'Nota a fost stearsa.' })
+      setBanner({ type: 'ok', text: 'Cererea a fost trimisa pentru aprobare.' })
     } catch (error) {
       setBanner({ type: 'error', text: String(error?.message || error) })
     } finally {
-      setSavingId(null)
-      setDeleteTarget(null)
+      setRequestingGradeId(null)
+    }
+  }
+
+  async function reviewGradeRequest(requestId, action) {
+    setReviewingRequestId(requestId)
+    setBanner(null)
+    try {
+      await apiPatch(`/catalog/grade-change-requests/${requestId}/${action}`, { resolution_note: null }, accessToken)
+      await reloadCurrentCatalog()
+      setBanner({ type: 'ok', text: action === 'approve' ? 'Cererea a fost aprobata.' : 'Cererea a fost respinsa.' })
+    } catch (error) {
+      setBanner({ type: 'error', text: String(error?.message || error) })
+    } finally {
+      setReviewingRequestId(null)
+    }
+  }
+
+  async function downloadClassCatalog() {
+    if (!exportClassId) return
+    setExportingCatalog(true)
+    setBanner(null)
+    try {
+      const response = await apiDownload(`/catalog/classes/${exportClassId}/export`, accessToken)
+      const blob = await response.blob()
+      const objectUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = extractFilename(response, `catalog-${exportClassId}.xlsx`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(objectUrl)
+    } catch (error) {
+      setBanner({ type: 'error', text: String(error?.message || error) })
+    } finally {
+      setExportingCatalog(false)
     }
   }
 
@@ -416,6 +506,67 @@ export default function CatalogScreen({ accessToken, roles }) {
       </div>
 
       {banner && <div className={`banner ${banner.type}`}>{banner.text}</div>}
+
+      {exportClasses.length > 0 && (
+        <div className="mutedBlock" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 18 }}>
+          <strong>Export catalog clasa</strong>
+          <select className="select" value={exportClassId} onChange={(event) => setExportClassId(event.target.value)} disabled={exportingCatalog}>
+            {exportClasses.map((item) => (
+              <option key={item.id} value={String(item.id)}>
+                {item.name} {item.profile ? `- ${item.profile}` : ''}
+              </option>
+            ))}
+          </select>
+          <button className="btn" onClick={downloadClassCatalog} disabled={!exportClassId || exportingCatalog}>
+            {exportingCatalog ? 'Se exporta...' : 'Exporta catalogul clasei'}
+          </button>
+        </div>
+      )}
+
+      {(canReviewGradeRequests || changeRequests.length > 0) && (
+        <div className="mutedBlock" style={{ marginBottom: 18 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
+            <strong>Cereri pentru modificarea notelor</strong>
+            <button className="btn" onClick={loadChangeRequests} disabled={loadingRequests}>
+              {loadingRequests ? 'Se incarca...' : 'Actualizeaza cererile'}
+            </button>
+          </div>
+
+          {changeRequests.length === 0 ? (
+            <div className="mutedSmall">Nu exista cereri vizibile pentru contul curent.</div>
+          ) : (
+            <div style={{ display: 'grid', gap: 10 }}>
+              {changeRequests.map((request) => (
+                <div key={request.id} className="catalogGradeItem">
+                  <div className="catalogPair" style={{ alignItems: 'center' }}>
+                    <strong>{request.request_type === 'DELETE' ? 'Cerere stergere nota' : 'Cerere modificare nota'}</strong>
+                    <span className={`gradeBadge ${request.status === 'PENDING' ? 'warn' : request.status === 'APPROVED' ? 'good' : 'gradeBadge'}`}>
+                      {request.status}
+                    </span>
+                  </div>
+                  <div className="catalogHint">
+                    Curent: {request.current_grade_value ?? '-'} / {formatDate(request.current_grade_date)}.
+                    {request.request_type === 'UPDATE' ? ` Propus: ${request.proposed_grade_value ?? '-'} / ${formatDate(request.proposed_grade_date)}.` : ' Propus: stergere.'}
+                  </div>
+                  <div className="catalogHint">Motiv: {request.reason}</div>
+                  <div className="catalogHint">Solicitat de: {request.requested_by_username}</div>
+                  {request.resolution_note && <div className="catalogHint">Rezolvare: {request.resolution_note}</div>}
+                  {request.can_review && request.status === 'PENDING' && (
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                      <button className="btn primary" onClick={() => reviewGradeRequest(request.id, 'approve')} disabled={reviewingRequestId === request.id}>
+                        Aproba
+                      </button>
+                      <button className="btn danger" onClick={() => reviewGradeRequest(request.id, 'reject')} disabled={reviewingRequestId === request.id}>
+                        Respinge
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {student && (
         <div className="catalogStats">
@@ -494,8 +645,12 @@ export default function CatalogScreen({ accessToken, roles }) {
                               const visibleComment = normalizeOptionalText(grade.comment)
                               return (
                                 <div key={grade.id} className="catalogGradeItem">
-                                  {grade.editable ? (
+                                  {grade.can_request_change ? (
                                     <div className="catalogEditor">
+                                      <div className="catalogPair">
+                                        <span className={gradeTone(Number(grade.grade_value || 0))}>{grade.grade_value}</span>
+                                        <span className="catalogDate">{formatDate(grade.grade_date)}</span>
+                                      </div>
                                       <input
                                         className="input small"
                                         type="number"
@@ -521,17 +676,17 @@ export default function CatalogScreen({ accessToken, roles }) {
                                       />
                                       <button
                                         className="btn primary"
-                                        onClick={() => saveGrade(grade)}
-                                        disabled={savingId === grade.id || !draft.grade_date || !draft.grade_value}
+                                        onClick={() => openGradeRequestDialog(grade, 'update')}
+                                        disabled={requestingGradeId === grade.id || !draft.grade_date || !draft.grade_value || grade.pending_request_id}
                                       >
-                                        Salveaza
+                                        Solicita modificare
                                       </button>
                                       <button
                                         className="btn danger"
-                                        onClick={() => setDeleteTarget(grade)}
-                                        disabled={savingId === grade.id}
+                                        onClick={() => openGradeRequestDialog(grade, 'delete')}
+                                        disabled={requestingGradeId === grade.id || grade.pending_request_id}
                                       >
-                                        Sterge
+                                        Solicita stergere
                                       </button>
                                     </div>
                                   ) : (
@@ -543,6 +698,11 @@ export default function CatalogScreen({ accessToken, roles }) {
                                       {visibleComment && (
                                         <div className="catalogHint" style={{ whiteSpace: 'pre-wrap' }}>
                                           Comentariu: {visibleComment}
+                                        </div>
+                                      )}
+                                      {grade.pending_request_id && (
+                                        <div className="catalogHint">
+                                          Exista o cerere {String(grade.pending_request_type || '').toLowerCase()} in status {String(grade.pending_request_status || '').toLowerCase()}.
                                         </div>
                                       )}
                                     </>
@@ -668,16 +828,6 @@ export default function CatalogScreen({ accessToken, roles }) {
         </>
       )}
 
-      <ConfirmDialog
-        open={Boolean(deleteTarget)}
-        title="Sterge nota"
-        description={deleteTarget ? `Stergi nota ${deleteTarget.grade_value} din ${formatDate(deleteTarget.grade_date)}?` : ''}
-        confirmLabel="Sterge"
-        loading={Boolean(deleteTarget) && savingId === deleteTarget.id}
-        onCancel={() => setDeleteTarget(null)}
-        onConfirm={deleteGrade}
-      />
-
       <TextPromptDialog
         open={motivationDialog.open}
         title="Motiveaza absenta"
@@ -695,6 +845,25 @@ export default function CatalogScreen({ accessToken, roles }) {
         loading={motivatingAbsenceId === motivationDialog.absence?.id}
         onCancel={() => setMotivationDialog({ open: false, absence: null, reason: '' })}
         onConfirm={motivateAbsence}
+      />
+
+      <TextPromptDialog
+        open={gradeRequestDialog.open}
+        title={gradeRequestDialog.mode === 'delete' ? 'Solicita stergerea notei' : 'Solicita modificarea notei'}
+        description={gradeRequestDialog.mode === 'delete'
+          ? 'Introdu motivul pentru care nota ar trebui stearsa. Cererea va ajunge la secretariat si director.'
+          : 'Introdu motivul modificarii. Valorile propuse din editor vor fi trimise pentru aprobare.'}
+        label="Motiv"
+        placeholder="ex: eroare de introducere, re-evaluare aprobata, corectie administrativa"
+        confirmLabel={gradeRequestDialog.mode === 'delete' ? 'Trimite cererea de stergere' : 'Trimite cererea de modificare'}
+        tone="primary"
+        value={gradeRequestDialog.reason}
+        onValueChange={(reason) => setGradeRequestDialog((current) => ({ ...current, reason }))}
+        maxLength={255}
+        requireValue
+        loading={requestingGradeId === gradeRequestDialog.grade?.id}
+        onCancel={() => setGradeRequestDialog({ open: false, grade: null, mode: 'update', reason: '' })}
+        onConfirm={submitGradeRequest}
       />
     </section>
   )

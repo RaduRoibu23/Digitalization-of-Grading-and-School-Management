@@ -17,7 +17,7 @@ export const CONFIG = {
 
   presetAccounts: [
     { label: 'Sysadmin', username: 'sysadmin01', password: 'sysadmin01' },
-    { label: 'Admin', username: 'admin01', password: 'admin01' },
+    { label: 'Director', username: 'admin01', password: 'admin01' },
     { label: 'Secretariat', username: 'secretariat01', password: 'secretariat01' },
     { label: 'Profesor', username: 'romana01', password: 'romana01' },
     { label: 'Student', username: 'student001', password: 'student001' },

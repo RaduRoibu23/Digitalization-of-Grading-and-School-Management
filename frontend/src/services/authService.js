@@ -2,7 +2,7 @@ import { CONFIG } from '../config/config'
 import { requestJson } from './apiClient'
 
 const STORAGE_KEY = CONFIG.auth.storageKey
-const APP_ROLES = ['student', 'parent', 'professor', 'secretariat', 'scheduler', 'admin', 'sysadmin']
+const APP_ROLES = ['student', 'parent', 'professor', 'secretariat', 'scheduler', 'director', 'admin', 'sysadmin']
 
 function sessionStorageRef() {
   if (typeof window === 'undefined') return null
@@ -79,7 +79,10 @@ export function rolesFromToken(accessToken) {
   if (!Array.isArray(roles)) {
     return []
   }
-  return roles.filter((role) => APP_ROLES.includes(role))
+  return roles
+    .filter((role) => APP_ROLES.includes(role))
+    .map((role) => (role === 'admin' ? 'director' : role))
+    .filter((role, index, list) => list.indexOf(role) === index)
 }
 
 export function tokenExpiryText(token) {

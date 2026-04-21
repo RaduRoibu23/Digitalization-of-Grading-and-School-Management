@@ -18,6 +18,7 @@ public record UserProfile(
         Long classId,
         String className,
         List<String> subjectsTaught,
-        String linkedStudentUsername
+        String linkedStudentUsername,
+        boolean isExternal
 ) {
 }

@@ -18,7 +18,7 @@ const POLL_MS = 8000;
 const TIMETABLE_CLASS_VIEW_STATE_KEY = "timetable-class";
 
 function canEdit(roles) {
-  const allowed = ["secretariat", "scheduler", "admin", "sysadmin"];
+  const allowed = ["secretariat", "scheduler", "director", "sysadmin"];
   return roles.some((r) => allowed.includes(r));
 }
 

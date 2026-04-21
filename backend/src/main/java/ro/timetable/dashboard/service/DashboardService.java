@@ -240,7 +240,7 @@ public class DashboardService {
 
     private List<DashboardQuickActionResponse> operationsQuickActions(List<String> roles) {
         List<DashboardQuickActionResponse> actions = new ArrayList<>();
-        if (hasAnyRole(roles, "secretariat", "scheduler", "admin", "sysadmin")) {
+        if (hasAnyRole(roles, "secretariat", "scheduler", "director", "sysadmin")) {
             actions.add(new DashboardQuickActionResponse(
                     "Orar pe clasa",
                     "/app/orar-pe-clasa",
@@ -254,12 +254,12 @@ public class DashboardService {
                     "timetable"
             ));
         }
-        if (hasAnyRole(roles, "secretariat", "sysadmin")) {
+        if (hasAnyRole(roles, "secretariat", "director", "sysadmin")) {
             actions.add(new DashboardQuickActionResponse(
                     "Utilizatori",
                     "/app/utilizatori",
                     "Administreaza profilele si vezi rapid situatia claselor.",
-                    "admin"
+                    "director"
             ));
             actions.add(new DashboardQuickActionResponse(
                     "Documente",
@@ -268,7 +268,7 @@ public class DashboardService {
                     "documents"
             ));
         }
-        if (hasAnyRole(roles, "secretariat", "admin", "sysadmin")) {
+        if (hasAnyRole(roles, "secretariat", "director", "sysadmin")) {
             actions.add(new DashboardQuickActionResponse(
                     "Asistenta",
                     "/app/feedback",
@@ -315,7 +315,7 @@ public class DashboardService {
     }
 
     private boolean canReviewFeedback(List<String> roles) {
-        return hasAnyRole(roles, "secretariat", "admin", "sysadmin");
+        return hasAnyRole(roles, "secretariat", "director", "sysadmin");
     }
 
     private boolean hasAnyRole(List<String> roles, String... expectedRoles) {

@@ -61,6 +61,9 @@ public class UserProfileEntity {
     @Column(name = "linked_student_username")
     private String linkedStudentUsername;
 
+    @Column(name = "is_external", nullable = false)
+    private boolean external;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "class_id")
     private SchoolClassEntity schoolClass;
@@ -190,6 +193,14 @@ public class UserProfileEntity {
 
     public void setLinkedStudentUsername(String linkedStudentUsername) {
         this.linkedStudentUsername = linkedStudentUsername;
+    }
+
+    public boolean isExternal() {
+        return external;
+    }
+
+    public void setExternal(boolean external) {
+        this.external = external;
     }
 
     public SchoolClassEntity getSchoolClass() {

@@ -59,6 +59,14 @@ public class SchoolDataService {
     private record AssignmentCandidate(List<SlotAssignment> assignments, int score) {
     }
 
+    private record PartialAssignmentCandidate(
+            List<SlotAssignment> assignments,
+            Map<Long, Integer> missingHours,
+            Map<Long, Set<String>> reasonCodes,
+            int score
+    ) {
+    }
+
     private record TimetableMoveCandidate(List<TimetableEntry> updatedEntries, List<String> warnings, String mode) {
     }
 
@@ -224,8 +232,32 @@ public class SchoolDataService {
             List<String> subjectsTaught,
             String linkedStudentUsername
     ) {
+        return createManagedProfile(
+                username,
+                role,
+                firstName,
+                lastName,
+                email,
+                classId,
+                subjectsTaught,
+                linkedStudentUsername,
+                false
+        );
+    }
+
+    public ProfileResponse createManagedProfile(
+            String username,
+            String role,
+            String firstName,
+            String lastName,
+            String email,
+            Long classId,
+            List<String> subjectsTaught,
+            String linkedStudentUsername,
+            boolean isExternal
+    ) {
         String normalizedUsername = normalizeUsername(username, "Username-ul este obligatoriu");
-        String normalizedRole = normalizeRequiredProfileField(role, "Rolul este obligatoriu").toLowerCase(Locale.ROOT);
+        String normalizedRole = canonicalRole(normalizeRequiredProfileField(role, "Rolul este obligatoriu").toLowerCase(Locale.ROOT));
         String normalizedFirstName = normalizeRequiredProfileField(firstName, "Prenumele este obligatoriu");
         String normalizedLastName = normalizeRequiredProfileField(lastName, "Numele este obligatoriu");
         String normalizedEmail = normalizeRequiredProfileField(email, "Email-ul este obligatoriu");
@@ -244,7 +276,7 @@ public class SchoolDataService {
                 || normalizedRole.equals("parent")
                 || normalizedRole.equals("secretariat")
                 || normalizedRole.equals("scheduler")
-                || normalizedRole.equals("admin")
+                || normalizedRole.equals("director")
                 || normalizedRole.equals("sysadmin"))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Rol invalid");
         }
@@ -256,6 +288,7 @@ public class SchoolDataService {
         String generatedSerialNumber = null;
         String generatedFatherInitial = null;
         List<String> normalizedSubjects = normalizeSubjectNames(subjectsTaught);
+        boolean normalizedExternal = "professor".equals(normalizedRole) && isExternal;
 
         if ("student".equals(normalizedRole)) {
             if (classId == null) {
@@ -311,12 +344,21 @@ public class SchoolDataService {
                 schoolClass == null ? null : schoolClass.id(),
                 schoolClass == null ? null : schoolClass.name(),
                 normalizedSubjects,
-                normalizedLinkedStudentUsername
+                normalizedLinkedStudentUsername,
+                normalizedExternal
         );
         profilesByUsername.put(normalizedUsername, profile);
         referenceDataPersistenceService.saveUserProfile(profile);
         rebuildDerivedIndexes();
         return profileResponse(profile);
+    }
+
+    private String canonicalRole(String role) {
+        if (role == null) {
+            return null;
+        }
+        String normalized = role.trim().toLowerCase(Locale.ROOT);
+        return "admin".equals(normalized) ? "director" : normalized;
     }
 
     public UserProfile updateProfile(
@@ -421,7 +463,8 @@ public class SchoolDataService {
                 schoolClass == null ? null : schoolClass.id(),
                 schoolClass == null ? null : schoolClass.name(),
                 existing.subjectsTaught(),
-                "parent".equals(existing.role()) ? normalizedLinkedStudentUsername : existing.linkedStudentUsername()
+                "parent".equals(existing.role()) ? normalizedLinkedStudentUsername : existing.linkedStudentUsername(),
+                existing.isExternal()
         );
 
         profilesByUsername.put(existing.username(), updated);
@@ -524,8 +567,9 @@ public class SchoolDataService {
     }
 
     public List<UserProfile> getUserProfilesByRole(String role) {
+        String normalizedRole = canonicalRole(role == null ? null : role.trim().toLowerCase(Locale.ROOT));
         return profilesByUsername.values().stream()
-                .filter(profile -> role == null || role.isBlank() || role.equalsIgnoreCase(profile.role()))
+                .filter(profile -> normalizedRole == null || normalizedRole.isBlank() || normalizedRole.equalsIgnoreCase(canonicalRole(profile.role())))
                 .sorted(Comparator.comparing(UserProfile::className, Comparator.nullsLast(String::compareTo))
                         .thenComparing(UserProfile::lastName)
                         .thenComparing(UserProfile::firstName)
@@ -560,7 +604,7 @@ public class SchoolDataService {
     public boolean canAccessTimetableForClass(String username, List<String> roles, Long classId) {
         requireClass(classId);
 
-        if (hasAnyRole(roles, "secretariat", "scheduler", "admin", "sysadmin")) {
+        if (hasAnyRole(roles, "secretariat", "scheduler", "director", "sysadmin")) {
             return true;
         }
 
@@ -579,16 +623,48 @@ public class SchoolDataService {
     }
 
     public boolean canManageTimetables(List<String> roles) {
-        return hasAnyRole(roles, "secretariat", "scheduler", "admin", "sysadmin");
+        return hasAnyRole(roles, "secretariat", "scheduler", "director", "sysadmin");
     }
 
     public TimetableGenerationResponse generateTimetable(Long classId) {
+        return generateTimetable(classId, false);
+    }
+
+    public TimetableGenerationResponse generateTimetable(Long classId, boolean allowPartial) {
         SchoolClass schoolClass = requireClass(classId);
-        List<TimetableEntry> generated = buildGeneratedTimetable(schoolClass, classId);
+        List<TimetableEntry> generated;
+        boolean partial = false;
+        List<ApiDtos.TimetableUnassignedItemResponse> unassignedItems = List.of();
+        if (allowPartial) {
+            PartialAssignmentCandidate candidate = buildAssignmentsAllowingPartial(schoolClass, classId);
+            generated = buildGeneratedTimetable(schoolClass, classId, candidate.assignments());
+            unassignedItems = candidate.missingHours().entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .map(entry -> {
+                        Subject subject = requireSubject(entry.getKey());
+                        return new ApiDtos.TimetableUnassignedItemResponse(
+                                classId,
+                                schoolClass.name(),
+                                subject.id(),
+                                subject.name(),
+                                entry.getValue(),
+                                new ArrayList<>(candidate.reasonCodes().getOrDefault(subject.id(), Set.of()))
+                        );
+                    })
+                    .toList();
+            partial = !unassignedItems.isEmpty();
+        } else {
+            generated = buildGeneratedTimetable(schoolClass, classId);
+        }
         timetablesByClassId.put(classId, generated);
         persistentStateService.replaceTimetableForClass(classId, generated);
         reconcileHomeroomAssignmentForClass(classId);
-        return new TimetableGenerationResponse("Timetable generated", List.of(jobIds.incrementAndGet()));
+        return new TimetableGenerationResponse(
+                partial ? "Timetable generated partially" : "Timetable generated",
+                List.of(jobIds.incrementAndGet()),
+                partial,
+                unassignedItems
+        );
     }
 
     public void deleteTimetable(Long classId) {
@@ -599,6 +675,10 @@ public class SchoolDataService {
     }
 
     public TimetableEntry updateEntry(Long entryId, Integer version, Long subjectId, Long roomId) {
+        return updateEntry(entryId, version, subjectId, roomId, null);
+    }
+
+    public TimetableEntry updateEntry(Long entryId, Integer version, Long subjectId, Long roomId, String teacherUsername) {
         for (Map.Entry<Long, List<TimetableEntry>> bucket : timetablesByClassId.entrySet()) {
             List<TimetableEntry> entries = bucket.getValue();
             for (int index = 0; index < entries.size(); index++) {
@@ -615,16 +695,21 @@ public class SchoolDataService {
                         ? requireRoom(roomId)
                         : defaultRoomForSubject(existing.classId(), subject.name(), existing.weekday(), existing.indexInDay(), existing.id());
                 String assignedTeacherUsername = assignedTeacherForClassSubject(existing.classId(), subject.id(), existing.id());
-                String teacherUsername;
-                if (assignedTeacherUsername != null) {
-                    teacherUsername = validateTeacherAvailability(assignedTeacherUsername, subject.id(), existing.id(), existing.weekday(), existing.indexInDay());
+                String normalizedTeacherUsername = teacherUsername == null || teacherUsername.isBlank()
+                        ? null
+                        : normalizeUsername(teacherUsername, "Profesorul este obligatoriu");
+                String resolvedTeacherUsername;
+                if (normalizedTeacherUsername != null) {
+                    resolvedTeacherUsername = validateTeacherAvailability(normalizedTeacherUsername, subject.id(), existing.id(), existing.weekday(), existing.indexInDay());
+                } else if (assignedTeacherUsername != null) {
+                    resolvedTeacherUsername = validateTeacherAvailability(assignedTeacherUsername, subject.id(), existing.id(), existing.weekday(), existing.indexInDay());
                 } else if (Objects.equals(subject.id(), existing.subjectId())) {
-                    teacherUsername = validateTeacherAvailability(existing.teacherUsername(), subject.id(), existing.id(), existing.weekday(), existing.indexInDay());
+                    resolvedTeacherUsername = validateTeacherAvailability(existing.teacherUsername(), subject.id(), existing.id(), existing.weekday(), existing.indexInDay());
                 } else {
-                    teacherUsername = selectTeacherForSubject(subject.id(), existing.id(), existing.weekday(), existing.indexInDay());
+                    resolvedTeacherUsername = selectTeacherForSubject(subject.id(), existing.id(), existing.weekday(), existing.indexInDay());
                 }
                 validateRoomAvailability(room.id(), existing.id(), existing.weekday(), existing.indexInDay());
-                UserProfile teacher = profilesByUsername.get(teacherUsername);
+                UserProfile teacher = profilesByUsername.get(resolvedTeacherUsername);
 
                 if (Objects.equals(existing.subjectId(), subject.id())
                         && Objects.equals(existing.roomId(), room.id())
@@ -653,6 +738,59 @@ public class SchoolDataService {
           }
           throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Timetable entry not found");
       }
+
+    public TimetableEntry createEntry(
+            Long classId,
+            Long subjectId,
+            Long roomId,
+            String teacherUsername,
+            Integer weekday,
+            Integer indexInDay
+    ) {
+        SchoolClass schoolClass = requireClass(classId);
+        Subject subject = requireSubject(subjectId);
+        if (weekday == null || weekday < 1 || weekday > WEEK_DAYS) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ziua selectata este invalida");
+        }
+        if (indexInDay == null || indexInDay < 1 || indexInDay > SLOTS_PER_DAY) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Intervalul selectat este invalid");
+        }
+        if (findClassTimetableEntry(classId, weekday, indexInDay, null) != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Clasa are deja o ora pe slotul selectat");
+        }
+
+        String normalizedTeacherUsername = teacherUsername == null || teacherUsername.isBlank()
+                ? assignedTeacherForClassSubject(classId, subjectId, Set.of())
+                : normalizeUsername(teacherUsername, "Profesorul este obligatoriu");
+        String resolvedTeacherUsername = normalizedTeacherUsername == null
+                ? selectTeacherForSubject(subjectId, Set.of(), weekday, indexInDay)
+                : validateTeacherAvailability(normalizedTeacherUsername, subjectId, Set.of(), weekday, indexInDay);
+        Room room = roomId == null
+                ? defaultRoomForSubject(classId, subject.name(), weekday, indexInDay, Set.of())
+                : requireRoom(roomId);
+        validateRoomAvailability(room.id(), Set.of(), weekday, indexInDay);
+        UserProfile teacher = getProfile(resolvedTeacherUsername);
+
+        TimetableEntry created = new TimetableEntry(
+                entryIds.incrementAndGet(),
+                classId,
+                schoolClass.name(),
+                subject.id(),
+                subject.name(),
+                room.id(),
+                room.name(),
+                teacher.username(),
+                teacher.firstName() + " " + teacher.lastName(),
+                weekday,
+                indexInDay,
+                1
+        );
+        List<TimetableEntry> entries = timetablesByClassId.computeIfAbsent(classId, ignored -> new ArrayList<>());
+        entries.add(created);
+        entries.sort(Comparator.comparing(TimetableEntry::weekday).thenComparing(TimetableEntry::indexInDay));
+        persistentStateService.saveTimetableEntry(created);
+        return created;
+    }
 
     public TimetableMoveOptionsResponse moveOptions(Long entryId, Integer entryVersion) {
         TimetableEntry source = requireTimetableEntry(entryId);
@@ -915,7 +1053,8 @@ public class SchoolDataService {
                 null,
                 null,
                 teacher.subjectNames(),
-                null
+                null,
+                existing != null && existing.isExternal()
         );
     }
 
@@ -1046,7 +1185,7 @@ public class SchoolDataService {
                 profile.idSeries(),
                 profile.serialNumber(),
                 profile.fatherInitial(),
-                profile.role(),
+                canonicalRole(profile.role()),
                 roles,
                 profile.classId(),
                 profile.className(),
@@ -1093,12 +1232,21 @@ public class SchoolDataService {
                 linkedStudent == null ? null : linkedStudent.username(),
                 linkedStudent == null ? null : displayName(linkedStudent),
                 linkedStudent == null ? null : linkedStudent.classId(),
-                linkedStudentClass == null ? linkedStudent == null ? null : linkedStudent.className() : linkedStudentClass.name()
+                linkedStudentClass == null ? linkedStudent == null ? null : linkedStudent.className() : linkedStudentClass.name(),
+                profile.isExternal()
         );
     }
 
     private List<TimetableEntry> buildGeneratedTimetable(SchoolClass schoolClass, Long classId) {
         List<SlotAssignment> assignments = buildAssignments(schoolClass, classId);
+        return buildGeneratedTimetable(schoolClass, classId, assignments);
+    }
+
+    private List<TimetableEntry> buildGeneratedTimetable(
+            SchoolClass schoolClass,
+            Long classId,
+            List<SlotAssignment> assignments
+    ) {
         List<TimetableEntry> generated = new ArrayList<>();
         for (SlotAssignment assignment : assignments) {
             Subject subject = requireSubject(assignment.subjectId());
@@ -1166,6 +1314,42 @@ public class SchoolDataService {
         throw new ResponseStatusException(HttpStatus.CONFLICT, "Nu am putut genera un orar valid pentru " + schoolClass.name() + ".");
     }
 
+    private PartialAssignmentCandidate buildAssignmentsAllowingPartial(SchoolClass schoolClass, Long classId) {
+        LinkedHashMap<String, Integer> plan = timetablePlanForClass(schoolClass);
+        List<String> baseOccurrences = new ArrayList<>();
+        for (Map.Entry<String, Integer> entry : plan.entrySet()) {
+            for (int index = 0; index < entry.getValue(); index++) {
+                baseOccurrences.add(entry.getKey());
+            }
+        }
+
+        baseOccurrences.sort(Comparator.comparingInt((String subjectName) -> plan.getOrDefault(subjectName, 0)).reversed()
+                .thenComparing(subjectName -> isHeavySubject(subjectName) ? 0 : 1)
+                .thenComparing(String::compareTo));
+
+        List<Slot> baseSlots = buildSlotsForClass(plan.values().stream().mapToInt(Integer::intValue).sum());
+        PartialAssignmentCandidate bestCandidate = null;
+        for (int attempt = 0; attempt < TIMETABLE_GENERATION_ATTEMPTS; attempt++) {
+            List<String> occurrences = new ArrayList<>(baseOccurrences);
+            List<Slot> slots = new ArrayList<>(baseSlots);
+            if (attempt > 0) {
+                Collections.shuffle(occurrences, new Random(classId * 97 + attempt));
+                Collections.shuffle(slots, new Random(classId * 211 + attempt));
+            }
+            PartialAssignmentCandidate candidate = tryBuildAssignmentsAllowingPartial(classId, occurrences, slots, plan);
+            if (bestCandidate == null
+                    || candidate.assignments().size() > bestCandidate.assignments().size()
+                    || (candidate.assignments().size() == bestCandidate.assignments().size() && candidate.score() > bestCandidate.score())) {
+                bestCandidate = candidate;
+            }
+        }
+
+        if (bestCandidate == null) {
+            return new PartialAssignmentCandidate(List.of(), Map.of(), Map.of(), 0);
+        }
+        return bestCandidate;
+    }
+
     private List<SlotAssignment> tryBuildAssignments(
             SchoolClass schoolClass,
             Long classId,
@@ -1216,6 +1400,62 @@ public class SchoolDataService {
         }
 
         return assignments;
+    }
+
+    private PartialAssignmentCandidate tryBuildAssignmentsAllowingPartial(
+            Long classId,
+            List<String> occurrences,
+            List<Slot> slots,
+            Map<String, Integer> subjectTargets
+    ) {
+        Map<String, String> occupiedTeachers = occupiedTeachers(classId);
+        Map<String, String> occupiedRooms = occupiedRooms(classId);
+        Map<String, Integer> daySubjectCounts = new LinkedHashMap<>();
+        Map<String, Integer> assignedSubjectCounts = new LinkedHashMap<>();
+        Map<Long, String> teacherBySubjectId = new LinkedHashMap<>();
+        Map<Long, Integer> missingHours = new LinkedHashMap<>();
+        Map<Long, Set<String>> reasonCodes = new LinkedHashMap<>();
+        List<SlotAssignment> assignments = new ArrayList<>();
+        Set<String> usedSlots = new HashSet<>();
+
+        for (String subjectName : occurrences) {
+            Long subjectId = subjectIdsByName.get(subjectName);
+            if (subjectId == null) {
+                continue;
+            }
+            String fixedTeacherUsername = teacherBySubjectId.get(subjectId);
+            String preferredTeacherUsername = fixedTeacherUsername != null ? fixedTeacherUsername : preferredTeacherForClassSubject(classId, subjectId);
+            SlotAssignment best = pickBestAssignment(
+                    classId,
+                    subjectId,
+                    subjectName,
+                    fixedTeacherUsername,
+                    preferredTeacherUsername,
+                    slots,
+                    assignments,
+                    usedSlots,
+                    daySubjectCounts,
+                    assignedSubjectCounts,
+                    subjectTargets,
+                    occupiedTeachers,
+                    occupiedRooms
+            );
+            if (best == null) {
+                missingHours.merge(subjectId, 1, Integer::sum);
+                reasonCodes.computeIfAbsent(subjectId, ignored -> new LinkedHashSet<>()).addAll(unassignedReasonCodes(subjectId));
+                continue;
+            }
+            teacherBySubjectId.putIfAbsent(subjectId, best.teacherUsername());
+            assignments.add(best);
+            usedSlots.add(slotKey(best.slot().weekday(), best.slot().indexInDay()));
+            occupiedTeachers.put(slotKey(best.slot().weekday(), best.slot().indexInDay(), best.teacherUsername()), requireClass(classId).name());
+            occupiedRooms.put(slotKey(best.slot().weekday(), best.slot().indexInDay(), best.roomId()), requireClass(classId).name());
+            daySubjectCounts.merge(daySubjectKey(best.slot().weekday(), subjectName), 1, Integer::sum);
+            assignedSubjectCounts.merge(subjectName, 1, Integer::sum);
+        }
+
+        int score = assignments.size() * 1000 + evaluateScheduleQuality(classId, subjectTargets, assignments);
+        return new PartialAssignmentCandidate(assignments, missingHours, reasonCodes, score);
     }
 
     private SlotAssignment pickBestAssignment(
@@ -1798,6 +2038,13 @@ public class SchoolDataService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Nu exista profesor disponibil pentru materia selectata in acest interval."));
     }
 
+    private List<String> unassignedReasonCodes(Long subjectId) {
+        if (teachersBySubjectId.getOrDefault(subjectId, List.of()).isEmpty()) {
+            return List.of("NO_TEACHER");
+        }
+        return List.of("NO_AVAILABLE_SLOT_OR_RESOURCE");
+    }
+
     private void validateRoomAvailability(Long roomId, Long ignoredEntryId, Integer weekday, Integer indexInDay) {
         validateRoomAvailability(roomId, ignoredEntryIds(ignoredEntryId), weekday, indexInDay);
     }
@@ -2152,7 +2399,7 @@ public class SchoolDataService {
         Set<String> usedIdentityDocumentKeys = new LinkedHashSet<>();
 
         addStaffProfile("sysadmin01", "sysadmin", "Marius", "Stoica");
-        addStaffProfile("admin01", "admin", "Roxana", "Marin");
+        addStaffProfile("admin01", "director", "Roxana", "Marin");
         addStaffProfile("secretariat01", "secretariat", "Daniela", "Popa");
         addStaffProfile("scheduler01", "scheduler", "Silviu", "Dobre");
 
@@ -2185,7 +2432,8 @@ public class SchoolDataService {
                     classId,
                     schoolClass.name(),
                     List.of(),
-                    null
+                    null,
+                    false
             ));
             addParentProfile(index, profilesByUsername.get(username));
         }
@@ -2208,7 +2456,8 @@ public class SchoolDataService {
                 null,
                 null,
                 List.of(),
-                null
+                null,
+                false
         ));
     }
 
@@ -2230,7 +2479,8 @@ public class SchoolDataService {
                 null,
                 null,
                 List.of(),
-                studentProfile.username()
+                studentProfile.username(),
+                false
         ));
     }
 
@@ -2251,7 +2501,8 @@ public class SchoolDataService {
                 null,
                 null,
                 teacher.subjectNames(),
-                null
+                null,
+                false
         ));
         teacher.subjectNames().forEach(subjectName -> {
             Long subjectId = subjectIdsByName.get(subjectName);
@@ -2342,7 +2593,8 @@ public class SchoolDataService {
                         profile.classId(),
                         profile.className(),
                         profile.subjectsTaught(),
-                        profile.linkedStudentUsername()
+                        profile.linkedStudentUsername(),
+                        profile.isExternal()
                 ));
             }
         }
@@ -2388,7 +2640,8 @@ public class SchoolDataService {
                         null,
                         null,
                         List.of(),
-                        student.username()
+                        student.username(),
+                        false
                 );
                 profilesByUsername.put(parentUsername, createdParent);
                 referenceDataPersistenceService.saveUserProfile(createdParent);
@@ -2416,7 +2669,8 @@ public class SchoolDataService {
                         existingParent.classId(),
                         existingParent.className(),
                         existingParent.subjectsTaught(),
-                        student.username()
+                        student.username(),
+                        existingParent.isExternal()
                 );
                 updates.add(updatedParent);
             }
@@ -2453,7 +2707,8 @@ public class SchoolDataService {
                     profile.classId(),
                     profile.className(),
                     profile.subjectsTaught(),
-                    profile.linkedStudentUsername()
+                    profile.linkedStudentUsername(),
+                    profile.isExternal()
             );
             updates.add(updatedProfile);
         }
@@ -2497,7 +2752,8 @@ public class SchoolDataService {
                     profile.classId(),
                     profile.className(),
                     profile.subjectsTaught(),
-                    profile.linkedStudentUsername()
+                    profile.linkedStudentUsername(),
+                    profile.isExternal()
             );
             updates.add(updatedProfile);
         }

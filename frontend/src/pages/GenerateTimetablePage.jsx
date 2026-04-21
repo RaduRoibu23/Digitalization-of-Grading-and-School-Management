@@ -84,7 +84,7 @@ function normalizeMoveOptions(options) {
     }))
 }
 
-export default function GenerateTimetableScreen({ accessToken }) {
+export default function GenerateTimetableScreen({ accessToken, roles = [] }) {
   const initialViewState = useMemo(
     () => loadViewState(GENERATE_TIMETABLE_VIEW_STATE_KEY, { classId: '' }),
     []
@@ -95,6 +95,28 @@ export default function GenerateTimetableScreen({ accessToken }) {
   const [loading, setLoading] = useState(false)
   const [boardLoading, setBoardLoading] = useState(false)
   const [banner, setBanner] = useState(null)
+  const [subjects, setSubjects] = useState([])
+  const [rooms, setRooms] = useState([])
+  const [professors, setProfessors] = useState([])
+  const [allowPartial, setAllowPartial] = useState(false)
+  const [unassignedItems, setUnassignedItems] = useState([])
+  const [manualEntry, setManualEntry] = useState({
+    subject_id: '',
+    teacher_username: '',
+    room_id: '',
+    weekday: '1',
+    index_in_day: '1',
+  })
+  const [externalProfessor, setExternalProfessor] = useState({
+    username: '',
+    password: '',
+    first_name: '',
+    last_name: '',
+    email: '',
+    subject_name: '',
+  })
+  const [savingManualEntry, setSavingManualEntry] = useState(false)
+  const [creatingExternalProfessor, setCreatingExternalProfessor] = useState(false)
   const [confirmMode, setConfirmMode] = useState('')
   const [selectedEntry, setSelectedEntry] = useState(null)
   const [draggingEntryId, setDraggingEntryId] = useState(null)
@@ -129,6 +151,13 @@ export default function GenerateTimetableScreen({ accessToken }) {
     blocked: moveOptions.filter((option) => option.status === 'blocked').length,
   }), [moveOptions])
 
+  const availableTeachers = useMemo(() => {
+    if (!manualEntry.subject_id) return professors
+    const subject = subjects.find((item) => String(item.id) === String(manualEntry.subject_id))
+    if (!subject?.name) return professors
+    return professors.filter((profile) => Array.isArray(profile.subjects_taught) && profile.subjects_taught.includes(subject.name))
+  }, [manualEntry.subject_id, professors, subjects])
+
   const activeInspectorOption = useMemo(() => {
     if (pendingMove) {
       return pendingMove
@@ -138,13 +167,23 @@ export default function GenerateTimetableScreen({ accessToken }) {
     }
     return optionsBySlot.get(inspectedSlotKey) ?? null
   }, [inspectedSlotKey, optionsBySlot, pendingMove])
+  const canCreateExternalProfessor = roles.some((role) => ['secretariat', 'director', 'sysadmin'].includes(role))
 
   useEffect(() => {
     ;(async () => {
       try {
-        const data = await apiGet('/classes', accessToken)
-        const list = Array.isArray(data) ? data : []
+        const [classData, subjectData, roomData, professorData] = await Promise.all([
+          apiGet('/classes', accessToken),
+          apiGet('/subjects', accessToken),
+          apiGet('/rooms', accessToken),
+          apiGet('/profiles?role=professor', accessToken).catch(() => []),
+        ])
+        const list = Array.isArray(classData) ? classData : []
         setClasses(list)
+        setSubjects(Array.isArray(subjectData) ? subjectData : [])
+        setRooms(Array.isArray(roomData) ? roomData : [])
+        const nextProfessors = Array.isArray(professorData) ? professorData : []
+        setProfessors(nextProfessors)
         setClassId((current) => {
           if (list.length === 0) {
             return ''
@@ -192,9 +231,15 @@ export default function GenerateTimetableScreen({ accessToken }) {
     setLoading(true)
     setBanner(null)
     try {
-      await apiPost('/timetables/generate', { class_id: Number(classId) }, accessToken)
+      const response = await apiPost('/timetables/generate', { class_id: Number(classId), allow_partial: allowPartial }, accessToken)
+      setUnassignedItems(Array.isArray(response?.unassigned_items) ? response.unassigned_items : [])
       await loadTimetableForClass(classId)
-      setBanner({ type: 'ok', text: 'Orarul a fost generat cu succes.' })
+      setBanner({
+        type: response?.partial ? 'warn' : 'ok',
+        text: response?.partial
+          ? 'Orarul a fost generat partial. Verifica orele ramase nealocate.'
+          : 'Orarul a fost generat cu succes.'
+      })
     } catch (error) {
       setBanner({ type: 'error', text: String(error?.message || error) })
     } finally {
@@ -228,14 +273,79 @@ export default function GenerateTimetableScreen({ accessToken }) {
     setBanner(null)
     try {
       await apiDelete(`/timetables/classes/${classId}`, accessToken)
-      await apiPost('/timetables/generate', { class_id: Number(classId) }, accessToken)
+      const response = await apiPost('/timetables/generate', { class_id: Number(classId), allow_partial: allowPartial }, accessToken)
+      setUnassignedItems(Array.isArray(response?.unassigned_items) ? response.unassigned_items : [])
       await loadTimetableForClass(classId)
-      setBanner({ type: 'ok', text: 'Orarul a fost regenerat cu succes.' })
+      setBanner({
+        type: response?.partial ? 'warn' : 'ok',
+        text: response?.partial ? 'Orarul a fost regenerat partial.' : 'Orarul a fost regenerat cu succes.'
+      })
     } catch (error) {
       setBanner({ type: 'error', text: String(error?.message || error) })
     } finally {
       setLoading(false)
       setConfirmMode('')
+    }
+  }
+
+  async function addManualEntry() {
+    if (!classId || !manualEntry.subject_id || !manualEntry.weekday || !manualEntry.index_in_day) return
+    setSavingManualEntry(true)
+    setBanner(null)
+    try {
+      await apiPost(
+        `/timetables/classes/${classId}/entries`,
+        {
+          subject_id: Number(manualEntry.subject_id),
+          teacher_username: manualEntry.teacher_username || null,
+          room_id: manualEntry.room_id ? Number(manualEntry.room_id) : null,
+          weekday: Number(manualEntry.weekday),
+          index_in_day: Number(manualEntry.index_in_day),
+        },
+        accessToken
+      )
+      await loadTimetableForClass(classId)
+      setBanner({ type: 'ok', text: 'Ora a fost adaugata manual in orar.' })
+    } catch (error) {
+      setBanner({ type: 'error', text: String(error?.message || error) })
+    } finally {
+      setSavingManualEntry(false)
+    }
+  }
+
+  async function createExternalProfessor() {
+    if (!externalProfessor.username || !externalProfessor.password || !externalProfessor.first_name || !externalProfessor.last_name || !externalProfessor.email || !externalProfessor.subject_name) {
+      return
+    }
+    setCreatingExternalProfessor(true)
+    setBanner(null)
+    try {
+      const created = await apiPost(
+        '/profiles/external-professors',
+        {
+          username: externalProfessor.username.trim().toLowerCase(),
+          password: externalProfessor.password,
+          first_name: externalProfessor.first_name.trim(),
+          last_name: externalProfessor.last_name.trim(),
+          email: externalProfessor.email.trim(),
+          subjects_taught: [externalProfessor.subject_name],
+        },
+        accessToken
+      )
+      setProfessors((current) => [...current, created])
+      setExternalProfessor({
+        username: '',
+        password: '',
+        first_name: '',
+        last_name: '',
+        email: '',
+        subject_name: externalProfessor.subject_name,
+      })
+      setBanner({ type: 'ok', text: 'Profesorul extern a fost creat si poate fi folosit in orar.' })
+    } catch (error) {
+      setBanner({ type: 'error', text: String(error?.message || error) })
+    } finally {
+      setCreatingExternalProfessor(false)
     }
   }
 
@@ -361,6 +471,11 @@ export default function GenerateTimetableScreen({ accessToken }) {
             ))}
           </select>
 
+          <label className="label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input type="checkbox" checked={allowPartial} onChange={(event) => setAllowPartial(event.target.checked)} />
+            Permite orar incomplet
+          </label>
+
           <button className="btn primary" type="button" onClick={generate} disabled={loading || !classId}>
             Genereaza
           </button>
@@ -378,7 +493,7 @@ export default function GenerateTimetableScreen({ accessToken }) {
       <div className="timetableAdminHero">
         <div>
           <div className="title">{classLabel(selectedClass)}</div>
-          <div className="subtitle">Selecteaza un card, lasa-l sa leviteze si trage-l direct peste un alt slot. Verde inseamna valid, amber inseamna valid cu warning, gri inseamna blocat.</div>
+          <div className="subtitle">Selecteaza un card, lasa-l sa leviteze si trage-l direct peste un alt slot. Verde inseamna valid, amber inseamna valid cu warning, gri inseamna blocat. Daca generatorul nu poate completa totul, poti continua manual cu orele ramase.</div>
         </div>
 
         <div className="timetableLegend">
@@ -582,6 +697,136 @@ export default function GenerateTimetableScreen({ accessToken }) {
           ) : (
             <div className="mutedBlock">Selecteaza o ora din grid pentru a vedea unde poate fi mutata.</div>
           )}
+        </aside>
+
+        <aside className="timetableInspectorCard">
+          <div className="title">Ore nealocate</div>
+          <div className="subtitle">Apar dupa o generare partiala si te ajuta sa completezi manual ce a ramas in afara orarului.</div>
+          {unassignedItems.length === 0 ? (
+            <div className="mutedBlock">Nu exista ore nealocate pentru clasa selectata.</div>
+          ) : (
+            <div style={{ display: 'grid', gap: 10 }}>
+              {unassignedItems.map((item) => (
+                <button
+                  key={`${item.subject_id}-${item.missing_hours}`}
+                  type="button"
+                  className="plannerEmptySlot"
+                  onClick={() => setManualEntry((current) => ({ ...current, subject_id: String(item.subject_id) }))}
+                >
+                  <strong>{item.subject_name}</strong>
+                  <span>{item.missing_hours} ore lipsa</span>
+                  <small>{Array.isArray(item.reason_codes) && item.reason_codes.length > 0 ? item.reason_codes.join(', ') : 'Fara detalii suplimentare'}</small>
+                </button>
+              ))}
+            </div>
+          )}
+        </aside>
+
+        <aside className="timetableInspectorCard">
+          <div className="title">Completeaza manual o ora</div>
+          <div className="subtitle">Selectezi materia, profesorul si slotul ramas liber, apoi adaugi manual intrarea in orar.</div>
+          <div className="feedbackFieldGrid">
+            <div className="field">
+              <label className="label">Materie</label>
+              <select className="select" value={manualEntry.subject_id} onChange={(event) => setManualEntry((current) => ({ ...current, subject_id: event.target.value, teacher_username: '' }))}>
+                <option value="">Selecteaza materia</option>
+                {subjects.map((subject) => (
+                  <option key={subject.id} value={String(subject.id)}>
+                    {subject.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label className="label">Profesor</label>
+              <select className="select" value={manualEntry.teacher_username} onChange={(event) => setManualEntry((current) => ({ ...current, teacher_username: event.target.value }))}>
+                <option value="">Auto sau selecteaza profesorul</option>
+                {availableTeachers.map((profile) => (
+                  <option key={profile.username} value={profile.username}>
+                    {(profile.last_name || '')} {(profile.first_name || '')}{profile.is_external ? ' (extern)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label className="label">Sala</label>
+              <select className="select" value={manualEntry.room_id} onChange={(event) => setManualEntry((current) => ({ ...current, room_id: event.target.value }))}>
+                <option value="">Sala implicita</option>
+                {rooms.map((room) => (
+                  <option key={room.id} value={String(room.id)}>
+                    {room.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label className="label">Zi</label>
+              <select className="select" value={manualEntry.weekday} onChange={(event) => setManualEntry((current) => ({ ...current, weekday: event.target.value }))}>
+                {WEEKDAY_LABELS.map((label, index) => (
+                  <option key={label} value={String(index + 1)}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label className="label">Interval</label>
+              <select className="select" value={manualEntry.index_in_day} onChange={(event) => setManualEntry((current) => ({ ...current, index_in_day: event.target.value }))}>
+                {TIME_LABELS.map((time) => (
+                  <option key={time.slot} value={String(time.slot)}>
+                    {time.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <button className="btn primary" type="button" onClick={addManualEntry} disabled={savingManualEntry || !manualEntry.subject_id}>
+            {savingManualEntry ? 'Se adauga...' : 'Adauga ora manual'}
+          </button>
+        </aside>
+
+        <aside className="timetableInspectorCard">
+          <div className="title">Profesor extern</div>
+          <div className="subtitle">Creezi rapid un profesor la plata cu ora, apoi il poti selecta direct la completarea manuala.</div>
+          {!canCreateExternalProfessor && (
+            <div className="mutedBlock">Rolul curent poate folosi profesorii existenti, dar nu poate crea profesori externi noi.</div>
+          )}
+          <div className="feedbackFieldGrid">
+            <div className="field">
+              <label className="label">Username</label>
+              <input className="input" value={externalProfessor.username} onChange={(event) => setExternalProfessor((current) => ({ ...current, username: event.target.value }))} disabled={!canCreateExternalProfessor} />
+            </div>
+            <div className="field">
+              <label className="label">Parola</label>
+              <input className="input" type="password" value={externalProfessor.password} onChange={(event) => setExternalProfessor((current) => ({ ...current, password: event.target.value }))} disabled={!canCreateExternalProfessor} />
+            </div>
+            <div className="field">
+              <label className="label">Prenume</label>
+              <input className="input" value={externalProfessor.first_name} onChange={(event) => setExternalProfessor((current) => ({ ...current, first_name: event.target.value }))} disabled={!canCreateExternalProfessor} />
+            </div>
+            <div className="field">
+              <label className="label">Nume</label>
+              <input className="input" value={externalProfessor.last_name} onChange={(event) => setExternalProfessor((current) => ({ ...current, last_name: event.target.value }))} disabled={!canCreateExternalProfessor} />
+            </div>
+            <div className="field">
+              <label className="label">Email</label>
+              <input className="input" value={externalProfessor.email} onChange={(event) => setExternalProfessor((current) => ({ ...current, email: event.target.value }))} disabled={!canCreateExternalProfessor} />
+            </div>
+            <div className="field">
+              <label className="label">Materie</label>
+              <select className="select" value={externalProfessor.subject_name} onChange={(event) => setExternalProfessor((current) => ({ ...current, subject_name: event.target.value }))} disabled={!canCreateExternalProfessor}>
+                <option value="">Selecteaza materia</option>
+                {subjects.map((subject) => (
+                  <option key={subject.id} value={subject.name}>
+                    {subject.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <button className="btn" type="button" onClick={createExternalProfessor} disabled={creatingExternalProfessor || !canCreateExternalProfessor}>
+            {creatingExternalProfessor ? 'Se creeaza...' : 'Adauga profesor extern'}
+          </button>
         </aside>
       </div>
 

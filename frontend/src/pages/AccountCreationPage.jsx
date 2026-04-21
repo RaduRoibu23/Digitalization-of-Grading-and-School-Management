@@ -7,7 +7,7 @@ const CREATE_ROLE_OPTIONS = [
   { value: 'professor', label: 'Profesor' },
   { value: 'secretariat', label: 'Secretariat' },
   { value: 'scheduler', label: 'Scheduler' },
-  { value: 'admin', label: 'Admin' },
+  { value: 'director', label: 'Director' },
   { value: 'sysadmin', label: 'Sysadmin' },
 ]
 
@@ -37,8 +37,8 @@ function roleLabel(role) {
       return 'Secretariat'
     case 'scheduler':
       return 'Scheduler'
-    case 'admin':
-      return 'Admin'
+    case 'director':
+      return 'Director'
     case 'sysadmin':
       return 'Sysadmin'
     default:

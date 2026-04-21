@@ -64,7 +64,7 @@ class DocumentServiceTest {
 
     @Test
     void parentRequestUsesLinkedStudentAndNotifiesAcademicRecipients() {
-        UserProfile studentProfile = new UserProfile(1L, 1, "student001", "student", "Ana", "Popescu", "student001@timetable.local", "Campulung", null, null, null, null, 10L, "X A", List.of(), null);
+        UserProfile studentProfile = new UserProfile(1L, 1, "student001", "student", "Ana", "Popescu", "student001@timetable.local", "Campulung", null, null, null, null, 10L, "X A", List.of(), null, false);
         when(schoolDataService.resolveAcademicStudentProfile("parinte001", List.of("parent"))).thenReturn(studentProfile);
         when(schoolDataService.academicNotificationRecipients("student001")).thenReturn(List.of("student001", "parinte001"));
         when(schoolDataService.getUserProfilesByRole("secretariat")).thenReturn(List.of());
@@ -101,13 +101,13 @@ class DocumentServiceTest {
         entity.setPurpose("bursa");
         entity.setReviewedAt(Instant.parse("2026-04-18T10:15:30Z"));
 
-        UserProfile studentProfile = new UserProfile(1L, 1, "student001", "student", "Ana", "Popescu", "student001@timetable.local", "Campulung", null, null, null, null, 10L, "X A", List.of(), null);
+        UserProfile studentProfile = new UserProfile(1L, 1, "student001", "student", "Ana", "Popescu", "student001@timetable.local", "Campulung", null, null, null, null, 10L, "X A", List.of(), null, false);
         SchoolClass schoolClass = new SchoolClass(10L, "X A", "Matematica-Informatica", null, null);
 
         when(schoolDataService.getProfile("student001")).thenReturn(studentProfile);
         when(schoolDataService.getClassById(10L)).thenReturn(schoolClass);
         when(catalogService.getCatalogForStudent("student001", List.of("student"), "student001")).thenReturn(new CatalogResponse(
-                new ProfileResponse(1L, 1, "student001", "student", "Ana", "Popescu", "student001@timetable.local", null, null, null, null, null, 10L, "X A", "Matematica-Informatica", List.of(), null, null, null, null, null, null),
+                new ProfileResponse(1L, 1, "student001", "student", "Ana", "Popescu", "student001@timetable.local", null, null, null, null, null, 10L, "X A", "Matematica-Informatica", List.of(), null, null, null, null, null, null, false),
                 List.of(
                         new CatalogSubjectResponse(1L, "Matematica", 4, 5, 8.5, List.of("Mihai Ionescu"), List.of(), List.of(), false),
                         new CatalogSubjectResponse(2L, "Informatica", 4, 5, 9.5, List.of("Irina Marin"), List.of(), List.of(), false),

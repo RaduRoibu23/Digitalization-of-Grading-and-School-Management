@@ -97,7 +97,7 @@ public class NotificationController {
     @GetMapping("/mail-status")
     public MailStatusResponse mailStatus(JwtAuthenticationToken authentication) {
         if (!canManageMail(authenticatedRequestService.roles(authentication))) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar adminul si sysadminul pot verifica statusul emailului");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar directorul si sysadminul pot verifica statusul emailului");
         }
         return mailService.getStatus();
     }
@@ -106,7 +106,7 @@ public class NotificationController {
     public ActionResponse sendTestEmail(@Valid @RequestBody TestEmailRequest request, JwtAuthenticationToken authentication) {
         List<String> roles = authenticatedRequestService.roles(authentication);
         if (!canManageMail(roles)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar adminul si sysadminul pot trimite emailuri de test");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar directorul si sysadminul pot trimite emailuri de test");
         }
 
         String requesterUsername = authenticatedRequestService.username(authentication);
@@ -127,7 +127,7 @@ public class NotificationController {
     @PostMapping("/send")
     public NotificationDispatchResponse sendNotification(@Valid @RequestBody SendNotificationRequest request, JwtAuthenticationToken authentication) {
         List<String> roles = authenticatedRequestService.roles(authentication);
-        if (!(roles.contains("professor") || roles.contains("secretariat") || roles.contains("admin") || roles.contains("sysadmin"))) {
+        if (!(roles.contains("professor") || roles.contains("secretariat") || roles.contains("director") || roles.contains("sysadmin"))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not allowed to send notifications");
         }
 
@@ -160,6 +160,6 @@ public class NotificationController {
     }
 
     private boolean canManageMail(List<String> roles) {
-        return roles.contains("admin") || roles.contains("sysadmin");
+        return roles.contains("director") || roles.contains("sysadmin");
     }
 }

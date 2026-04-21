@@ -127,7 +127,7 @@ function FeedbackStatusPill({ status, label }) {
 export default function FeedbackScreen({ accessToken, roles = [] }) {
   const navigate = useNavigate()
   const { feedbackId } = useParams()
-  const canReview = roles.some((role) => ['secretariat', 'admin', 'sysadmin'].includes(role))
+  const canReview = roles.some((role) => ['secretariat', 'director', 'sysadmin'].includes(role))
 
   const [listLoading, setListLoading] = useState(false)
   const [detailLoading, setDetailLoading] = useState(false)
@@ -361,7 +361,7 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
           <div className="feedbackHeroTitle">Trimite o cerere de asistenta si urmareste raspunsul in acelasi loc.</div>
           <div className="feedbackHeroText">
             {canReview
-              ? 'Secretariatul si administratorii pot parcurge cererile de asistenta ca intr-un flux de lucru, pot schimba statusul si pot raspunde direct din panoul dedicat.'
+              ? 'Secretariatul, directorul si sysadminul pot parcurge cererile de asistenta ca intr-un flux de lucru, pot schimba statusul si pot raspunde direct din panoul dedicat.'
               : 'Cererea ta ramane pe ruta proprie, iar daca ai cerut contact, raspunsul primit apare direct in detaliu, in notificari si pe email.'}
           </div>
 

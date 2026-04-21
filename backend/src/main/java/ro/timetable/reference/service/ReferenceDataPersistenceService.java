@@ -172,7 +172,7 @@ public class ReferenceDataPersistenceService {
                 entity.getId(),
                 entity.getVersion(),
                 entity.getUsername(),
-                entity.getRole(),
+                "admin".equals(entity.getRole()) ? "director" : entity.getRole(),
                 entity.getFirstName(),
                 entity.getLastName(),
                 entity.getEmail(),
@@ -184,7 +184,8 @@ public class ReferenceDataPersistenceService {
                 entity.getSchoolClass() == null ? null : entity.getSchoolClass().getId(),
                 entity.getSchoolClass() == null ? null : entity.getSchoolClass().getName(),
                 toSortedSubjectNames(entity),
-                entity.getLinkedStudentUsername()
+                entity.getLinkedStudentUsername(),
+                entity.isExternal()
         );
     }
 
@@ -218,7 +219,7 @@ public class ReferenceDataPersistenceService {
         entity.setId(profile.id());
         entity.setVersion(profile.version());
         entity.setUsername(profile.username());
-        entity.setRole(profile.role());
+        entity.setRole("admin".equals(profile.role()) ? "director" : profile.role());
         entity.setFirstName(profile.firstName());
         entity.setLastName(profile.lastName());
         entity.setEmail(profile.email());
@@ -228,6 +229,7 @@ public class ReferenceDataPersistenceService {
         entity.setSerialNumber(profile.serialNumber());
         entity.setFatherInitial(profile.fatherInitial());
         entity.setLinkedStudentUsername(profile.linkedStudentUsername());
+        entity.setExternal(profile.isExternal());
         entity.setTeachingSubjects(resolveTeachingSubjects(profile.subjectsTaught()));
         entity.setSettings(resolveSettings(profile.id(), preserveExistingSettings));
         if (profile.classId() != null) {

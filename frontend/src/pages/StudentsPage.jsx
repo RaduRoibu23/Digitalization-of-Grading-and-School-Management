@@ -10,7 +10,7 @@ const ROLE_OPTIONS = [
   { value: 'professor', label: 'Profesori' },
   { value: 'secretariat', label: 'Secretariat' },
   { value: 'scheduler', label: 'Scheduler' },
-  { value: 'admin', label: 'Admin' },
+  { value: 'director', label: 'Director' },
   { value: 'sysadmin', label: 'Sysadmin' },
   { value: '', label: 'Toate rolurile' },
 ]
@@ -56,8 +56,8 @@ function roleLabel(role) {
       return 'Secretariat'
     case 'scheduler':
       return 'Scheduler'
-    case 'admin':
-      return 'Admin'
+    case 'director':
+      return 'Director'
     case 'sysadmin':
       return 'Sysadmin'
     default:
@@ -98,7 +98,7 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
     }),
     []
   )
-  const canManageProfiles = roles.includes('secretariat') || roles.includes('sysadmin')
+  const canManageProfiles = roles.includes('secretariat') || roles.includes('director') || roles.includes('sysadmin')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [banner, setBanner] = useState(null)
@@ -270,7 +270,7 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
 
   const title = canManageProfiles ? 'Utilizatori' : 'Lista utilizatori'
   const subtitle = canManageProfiles
-    ? 'Secretariatul si sysadmin-ul pot filtra si modifica profiluri din toate rolurile.'
+    ? 'Secretariatul, directorul si sysadmin-ul pot filtra si modifica profiluri din toate rolurile.'
     : 'Vizualizare clara a utilizatorilor din sistem, cu cautare si paginare.'
 
   return (

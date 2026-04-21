@@ -29,8 +29,8 @@ public class AuditController {
             @RequestParam(required = false) Integer limit,
             JwtAuthenticationToken authentication
     ) {
-        if (!(authenticatedRequestService.hasAnyRole(authentication, "admin", "sysadmin"))) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar adminul si sysadminul pot accesa auditul.");
+        if (!(authenticatedRequestService.hasAnyRole(authentication, "director", "sysadmin"))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar directorul si sysadminul pot accesa auditul.");
         }
         return auditService.latest(limit);
     }

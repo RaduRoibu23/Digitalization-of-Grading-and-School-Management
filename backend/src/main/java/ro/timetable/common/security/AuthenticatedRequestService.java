@@ -9,7 +9,7 @@ import ro.timetable.reference.service.SchoolDataService;
 @Service
 public class AuthenticatedRequestService {
 
-    private static final List<String> APP_ROLES = List.of("student", "parent", "professor", "secretariat", "scheduler", "admin", "sysadmin");
+    private static final List<String> APP_ROLES = List.of("student", "parent", "professor", "secretariat", "scheduler", "director", "admin", "sysadmin");
 
     private final SchoolDataService schoolDataService;
 
@@ -37,7 +37,9 @@ public class AuthenticatedRequestService {
             if (roleValues instanceof List<?> roleList) {
                 return roleList.stream()
                         .map(String::valueOf)
+                        .map(this::normalizeRole)
                         .filter(APP_ROLES::contains)
+                        .distinct()
                         .toList();
             }
         }
@@ -52,5 +54,9 @@ public class AuthenticatedRequestService {
             }
         }
         return false;
+    }
+
+    private String normalizeRole(String role) {
+        return "admin".equals(role) ? "director" : role;
     }
 }

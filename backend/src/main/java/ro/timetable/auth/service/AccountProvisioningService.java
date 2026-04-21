@@ -61,22 +61,50 @@ public class AccountProvisioningService {
             List<String> subjectsTaught,
             String linkedStudentUsername
     ) {
+        return createManagedAccount(
+                username,
+                password,
+                role,
+                firstName,
+                lastName,
+                email,
+                classId,
+                subjectsTaught,
+                linkedStudentUsername,
+                false
+        );
+    }
+
+    public ProfileResponse createManagedAccount(
+            String username,
+            String password,
+            String role,
+            String firstName,
+            String lastName,
+            String email,
+            Long classId,
+            List<String> subjectsTaught,
+            String linkedStudentUsername,
+            boolean isExternal
+    ) {
         String normalizedUsername = username == null ? null : username.trim().toLowerCase(Locale.ROOT);
+        String normalizedRole = role == null ? null : ("admin".equals(role.trim().toLowerCase(Locale.ROOT)) ? "director" : role.trim().toLowerCase(Locale.ROOT));
         String accessToken = adminAccessToken();
         createKeycloakUser(accessToken, normalizedUsername, password, firstName, lastName, email);
         String userId = findUserId(accessToken, normalizedUsername);
 
         try {
-            assignRealmRole(accessToken, userId, role);
+            assignRealmRole(accessToken, userId, normalizedRole);
             return schoolDataService.createManagedProfile(
                     normalizedUsername,
-                    role,
+                    normalizedRole,
                     firstName,
                     lastName,
                     email,
                     classId,
                     subjectsTaught,
-                    linkedStudentUsername
+                    linkedStudentUsername,
+                    isExternal
             );
         } catch (RuntimeException exception) {
             deleteKeycloakUser(accessToken, userId);

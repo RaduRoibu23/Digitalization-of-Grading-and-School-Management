@@ -52,7 +52,17 @@ public class TimetableController {
     public record UpdateTimetableEntryRequest(
             @NotNull Integer version,
             Long subject_id,
-            Long room_id
+            Long room_id,
+            String teacher_username
+    ) {
+    }
+
+    public record CreateTimetableEntryRequest(
+            @NotNull Long subject_id,
+            Long room_id,
+            String teacher_username,
+            @NotNull Integer weekday,
+            @NotNull Integer index_in_day
     ) {
     }
 
@@ -141,11 +151,12 @@ public class TimetableController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "class_id is required");
         }
         ensureTimetableManagement(authenticatedRequestService.roles(authentication));
-        TimetableGenerationResponse response = schoolDataService.generateTimetable(request.class_id());
+        TimetableGenerationResponse response = schoolDataService.generateTimetable(request.class_id(), Boolean.TRUE.equals(request.allow_partial()));
         auditService.record(
                 "Generare orar",
                 authenticatedRequestService.username(authentication),
-                "Orar generat pentru clasa " + schoolDataService.getClassById(request.class_id()).name()
+                (response.partial() ? "Orar partial generat pentru clasa " : "Orar generat pentru clasa ")
+                        + schoolDataService.getClassById(request.class_id()).name()
         );
         return response;
     }
@@ -170,13 +181,42 @@ public class TimetableController {
             JwtAuthenticationToken authentication
     ) {
         ensureTimetableManagement(authenticatedRequestService.roles(authentication));
-        TimetableEntry updated = schoolDataService.updateEntry(entryId, request.version(), request.subject_id(), request.room_id());
+        TimetableEntry updated = schoolDataService.updateEntry(
+                entryId,
+                request.version(),
+                request.subject_id(),
+                request.room_id(),
+                request.teacher_username()
+        );
         auditService.record(
                 "Actualizare orar",
                 authenticatedRequestService.username(authentication),
                 "Orarul clasei " + updated.className() + " a fost actualizat la " + updated.subjectName() + " in sala " + updated.roomName()
         );
         return updated;
+    }
+
+    @PostMapping("/classes/{classId}/entries")
+    public TimetableEntry createEntry(
+            @PathVariable Long classId,
+            @Valid @RequestBody CreateTimetableEntryRequest request,
+            JwtAuthenticationToken authentication
+    ) {
+        ensureTimetableManagement(authenticatedRequestService.roles(authentication));
+        TimetableEntry created = schoolDataService.createEntry(
+                classId,
+                request.subject_id(),
+                request.room_id(),
+                request.teacher_username(),
+                request.weekday(),
+                request.index_in_day()
+        );
+        auditService.record(
+                "Adaugare manuala ora",
+                authenticatedRequestService.username(authentication),
+                "A fost adaugata manual ora " + created.subjectName() + " pentru clasa " + created.className()
+        );
+        return created;
     }
 
     @PostMapping("/entries/{entryId}/move-options")

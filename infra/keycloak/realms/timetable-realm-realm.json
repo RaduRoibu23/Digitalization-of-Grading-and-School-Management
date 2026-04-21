@@ -5,7 +5,7 @@
     "roles":  {
                   "realm":  [
                                 {
-                                    "name":  "admin"
+                                    "name":  "director"
                                 },
                                 {
                                     "name":  "professor"
@@ -94,7 +94,7 @@
                                           }
                                       ],
                       "realmRoles":  [
-                                         "admin"
+                                         "director"
                                      ]
                   },
                   {

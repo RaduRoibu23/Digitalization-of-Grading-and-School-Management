@@ -82,7 +82,8 @@ public final class ApiDtos {
             String linked_student_username,
             String linked_student_name,
             Long linked_student_class_id,
-            String linked_student_class_name
+            String linked_student_class_name,
+            boolean is_external
     ) {
     }
 
@@ -129,7 +130,19 @@ public final class ApiDtos {
 
     public record TimetableGenerationResponse(
             String detail,
-            List<Long> job_ids
+            List<Long> job_ids,
+            boolean partial,
+            List<TimetableUnassignedItemResponse> unassigned_items
+    ) {
+    }
+
+    public record TimetableUnassignedItemResponse(
+            Long class_id,
+            String class_name,
+            Long subject_id,
+            String subject_name,
+            Integer missing_hours,
+            List<String> reason_codes
     ) {
     }
 
@@ -319,7 +332,11 @@ public final class ApiDtos {
             String teacher_name,
             String comment,
             Integer version,
-            boolean editable
+            boolean editable,
+            boolean can_request_change,
+            Long pending_request_id,
+            String pending_request_status,
+            String pending_request_type
     ) {
     }
 
@@ -361,6 +378,39 @@ public final class ApiDtos {
             ProfileResponse student,
             List<CatalogSubjectResponse> subjects,
             boolean can_edit
+    ) {
+    }
+
+    public record GradeChangeRequestResponse(
+            Long id,
+            Long grade_id,
+            String request_type,
+            String status,
+            Integer base_grade_version,
+            Integer current_grade_value,
+            String current_grade_date,
+            String current_comment,
+            Integer proposed_grade_value,
+            String proposed_grade_date,
+            String proposed_comment,
+            String reason,
+            String requested_by_username,
+            String reviewed_by_username,
+            String resolution_note,
+            String created_at,
+            String reviewed_at,
+            boolean can_review
+    ) {
+    }
+
+    public record CurriculumProfileSummaryResponse(
+            String profile_name,
+            List<String> levels,
+            Map<String, Integer> total_weekly_hours_by_level,
+            List<String> representative_subjects,
+            String summary,
+            List<String> details,
+            String accent
     ) {
     }
 

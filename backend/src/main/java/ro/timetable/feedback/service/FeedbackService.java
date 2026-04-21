@@ -192,7 +192,7 @@ public class FeedbackService {
     }
 
     private boolean canReview(List<String> roles) {
-        return roles.contains("secretariat") || roles.contains("admin") || roles.contains("sysadmin");
+        return roles.contains("secretariat") || roles.contains("director") || roles.contains("sysadmin");
     }
 
     private String normalizeHelpCategory(String category) {
@@ -244,7 +244,7 @@ public class FeedbackService {
     private List<String> reviewerUsernames() {
         List<String> usernames = new ArrayList<>();
         schoolDataService.getUserProfilesByRole("secretariat").forEach(profile -> usernames.add(profile.username()));
-        schoolDataService.getUserProfilesByRole("admin").forEach(profile -> usernames.add(profile.username()));
+        schoolDataService.getUserProfilesByRole("director").forEach(profile -> usernames.add(profile.username()));
         schoolDataService.getUserProfilesByRole("sysadmin").forEach(profile -> usernames.add(profile.username()));
         return usernames.stream().distinct().toList();
     }

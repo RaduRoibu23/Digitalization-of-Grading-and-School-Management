@@ -65,6 +65,16 @@ public class ReferenceDataController {
     ) {
     }
 
+    public record CreateExternalProfessorRequest(
+            @NotBlank String username,
+            @NotBlank String password,
+            @NotBlank String first_name,
+            @NotBlank String last_name,
+            @NotBlank @Email String email,
+            @NotNull List<String> subjects_taught
+    ) {
+    }
+
     public record UpdateProfileRequest(
             @NotNull Integer version,
             @NotBlank String first_name,
@@ -100,7 +110,7 @@ public class ReferenceDataController {
     public List<ProfileResponse> profiles(@RequestParam(required = false) String role, JwtAuthenticationToken authentication) {
         List<String> roles = authenticatedRequestService.roles(authentication);
         if (!canManageProfiles(roles)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar secretariatul si sysadmin-ul pot vedea lista de profiluri");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar secretariatul, directorul si sysadmin-ul pot vedea lista de profiluri");
         }
         return schoolDataService.getProfilesByRole(role, canManageProfiles(roles));
     }
@@ -132,6 +142,36 @@ public class ReferenceDataController {
         return created;
     }
 
+    @PostMapping("/profiles/external-professors")
+    public ProfileResponse createExternalProfessor(
+            @Valid @RequestBody CreateExternalProfessorRequest request,
+            JwtAuthenticationToken authentication
+    ) {
+        List<String> roles = authenticatedRequestService.roles(authentication);
+        if (!(roles.contains("secretariat") || roles.contains("director") || roles.contains("sysadmin"))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar secretariatul, directorul si sysadmin-ul pot crea profesori externi");
+        }
+
+        ProfileResponse created = accountProvisioningService.createManagedAccount(
+                request.username().trim(),
+                request.password(),
+                "professor",
+                request.first_name().trim(),
+                request.last_name().trim(),
+                request.email().trim(),
+                null,
+                request.subjects_taught(),
+                null,
+                true
+        );
+        auditService.record(
+                "Creare profesor extern",
+                authenticatedRequestService.username(authentication),
+                "A fost creat profilul de profesor extern pentru utilizatorul " + created.username()
+        );
+        return created;
+    }
+
     @PutMapping("/profiles/{username}")
     public ProfileResponse updateProfile(
             @PathVariable String username,
@@ -140,7 +180,7 @@ public class ReferenceDataController {
     ) {
         List<String> roles = authenticatedRequestService.roles(authentication);
         if (!canManageProfiles(roles)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar secretariatul si sysadmin-ul pot modifica profiluri");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar secretariatul, directorul si sysadmin-ul pot modifica profiluri");
         }
 
         UserProfile previousProfile = schoolDataService.getProfile(username);
@@ -194,6 +234,6 @@ public class ReferenceDataController {
     }
 
     private boolean canManageProfiles(List<String> roles) {
-        return roles.contains("secretariat") || roles.contains("sysadmin");
+        return roles.contains("secretariat") || roles.contains("director") || roles.contains("sysadmin");
     }
 }

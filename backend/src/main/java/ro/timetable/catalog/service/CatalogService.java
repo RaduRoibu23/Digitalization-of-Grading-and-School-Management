@@ -1,6 +1,8 @@
 package ro.timetable.catalog.service;
 
 import jakarta.annotation.PostConstruct;
+import java.io.ByteArrayOutputStream;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -13,16 +15,23 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import ro.timetable.audit.service.AuditService;
+import ro.timetable.catalog.model.GradeChangeRequest;
 import ro.timetable.catalog.model.StudentAbsence;
 import ro.timetable.catalog.model.StudentGrade;
 import ro.timetable.common.dto.ApiDtos.AbsenceResponse;
 import ro.timetable.common.dto.ApiDtos.ActionResponse;
 import ro.timetable.common.dto.ApiDtos.CatalogResponse;
 import ro.timetable.common.dto.ApiDtos.CatalogSubjectResponse;
+import ro.timetable.common.dto.ApiDtos.ClassSummaryResponse;
+import ro.timetable.common.dto.ApiDtos.GradeChangeRequestResponse;
 import ro.timetable.common.dto.ApiDtos.GradeResponse;
 import ro.timetable.common.dto.ApiDtos.ProfileResponse;
 import ro.timetable.common.util.PersistentStateService;
@@ -40,6 +49,9 @@ public class CatalogService {
     private record SeedTeacher(String username, String fullName) {
     }
 
+    private record GradeLocation(List<StudentGrade> bucket, int index, StudentGrade grade) {
+    }
+
     private static final long CATALOG_SEED = 20260402L;
 
     private final SchoolDataService schoolDataService;
@@ -49,8 +61,10 @@ public class CatalogService {
     private final NotificationService notificationService;
     private final Map<String, List<StudentGrade>> gradesByStudentUsername = new LinkedHashMap<>();
     private final Map<String, List<StudentAbsence>> absencesByStudentUsername = new LinkedHashMap<>();
+    private final Map<Long, GradeChangeRequest> gradeChangeRequestsById = new LinkedHashMap<>();
     private final AtomicLong gradeIds = new AtomicLong(9000);
     private final AtomicLong absenceIds = new AtomicLong(12000);
+    private final AtomicLong gradeChangeRequestIds = new AtomicLong(15000);
 
     public CatalogService(
             SchoolDataService schoolDataService,
@@ -70,6 +84,7 @@ public class CatalogService {
     void init() {
         loadPersistedGrades();
         loadPersistedAbsences();
+        loadPersistedGradeChangeRequests();
         seedCatalogDataIfNeeded();
     }
 
@@ -111,6 +126,87 @@ public class CatalogService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not allowed to access this catalog");
         }
         return buildCatalogResponse(student, requesterUsername, roles);
+    }
+
+    public List<ClassSummaryResponse> getExportableClasses(String requesterUsername, List<String> roles) {
+        return schoolDataService.getClasses().stream()
+                .filter(schoolClass -> canExportClassCatalog(requesterUsername, roles, schoolClass.id()))
+                .map(schoolClass -> new ClassSummaryResponse(schoolClass.id(), schoolClass.name(), schoolClass.profile()))
+                .toList();
+    }
+
+    public byte[] exportClassCatalog(String requesterUsername, List<String> roles, Long classId) {
+        if (!canExportClassCatalog(requesterUsername, roles, classId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Nu poti exporta catalogul acestei clase");
+        }
+
+        SchoolClass schoolClass = schoolDataService.getClassById(classId);
+        List<UserProfile> students = schoolDataService.getUserProfilesByRole("student").stream()
+                .filter(student -> Objects.equals(classId, student.classId()))
+                .sorted(Comparator.comparing(UserProfile::lastName)
+                        .thenComparing(UserProfile::firstName)
+                        .thenComparing(UserProfile::username))
+                .toList();
+        LinkedHashMap<String, Integer> studyPlan = curriculumPlanService.hoursForClass(schoolClass.name(), schoolClass.profile());
+
+        try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            XSSFSheet sheet = workbook.createSheet("Catalog " + schoolClass.name());
+            int headerCell = 0;
+            Row headerRow = sheet.createRow(0);
+            createCell(headerRow, headerCell++, "Nr. crt");
+            createCell(headerRow, headerCell++, "Elev");
+            createCell(headerRow, headerCell++, "Username");
+            for (String subjectName : studyPlan.keySet()) {
+                createCell(headerRow, headerCell++, subjectName + " - Note");
+                createCell(headerRow, headerCell++, subjectName + " - Media");
+            }
+            createCell(headerRow, headerCell, "Media generala");
+
+            int rowIndex = 1;
+            for (UserProfile student : students) {
+                Row row = sheet.createRow(rowIndex);
+                int cellIndex = 0;
+                createCell(row, cellIndex++, String.valueOf(rowIndex));
+                createCell(row, cellIndex++, student.lastName() + " " + student.firstName());
+                createCell(row, cellIndex++, student.username());
+
+                List<Double> subjectAverages = new ArrayList<>();
+                Map<String, List<StudentGrade>> gradesBySubject = gradesBySubject(student.username());
+                for (Map.Entry<String, Integer> subjectEntry : studyPlan.entrySet()) {
+                    String subjectName = subjectEntry.getKey();
+                    List<StudentGrade> subjectGrades = gradesBySubject.getOrDefault(subjectName, List.of()).stream()
+                            .sorted(Comparator.comparing(StudentGrade::gradeDate).thenComparing(StudentGrade::id))
+                            .toList();
+                    String noteValues = subjectGrades.stream()
+                            .map(grade -> String.valueOf(grade.gradeValue()))
+                            .reduce((left, right) -> left + ", " + right)
+                            .orElse("");
+                    createCell(row, cellIndex++, noteValues);
+                    Double average = subjectGrades.size() >= subjectEntry.getValue() + 1
+                            ? subjectGrades.stream().mapToInt(StudentGrade::gradeValue).average().orElse(0)
+                            : null;
+                    if (average != null) {
+                        subjectAverages.add(average);
+                    }
+                    createCell(row, cellIndex++, average == null ? "" : String.format(java.util.Locale.ROOT, "%.2f", average));
+                }
+
+                Double generalAverage = subjectAverages.isEmpty()
+                        ? null
+                        : subjectAverages.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+                createCell(row, cellIndex, generalAverage == null ? "" : String.format(java.util.Locale.ROOT, "%.2f", generalAverage));
+                rowIndex++;
+            }
+
+            for (int columnIndex = 0; columnIndex <= headerCell; columnIndex++) {
+                sheet.autoSizeColumn(columnIndex);
+            }
+
+            workbook.write(outputStream);
+            return outputStream.toByteArray();
+        } catch (Exception exception) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Nu am putut genera catalogul clasei");
+        }
     }
 
     public GradeResponse createGrade(
@@ -180,6 +276,239 @@ public class CatalogService {
         return gradeResponse(created, requesterUsername, roles);
     }
 
+    public GradeChangeRequestResponse createGradeChangeRequest(
+            String requesterUsername,
+            List<String> roles,
+            Long gradeId,
+            String requestType,
+            Integer proposedGradeValue,
+            String proposedGradeDate,
+            String proposedComment,
+            String reason
+    ) {
+        GradeLocation location = requireGradeLocation(gradeId);
+        StudentGrade existing = location.grade();
+        String normalizedRequestType = normalizeRequestType(requestType);
+        if (!canRequestGradeChange(requesterUsername, roles, existing)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Nu poti solicita modificarea acestei note");
+        }
+        if (pendingRequestForGrade(gradeId) != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Exista deja o cerere in asteptare pentru aceasta nota");
+        }
+
+        String normalizedReason = normalizeRequiredReason(reason);
+        Integer nextGradeValue = null;
+        String nextGradeDate = null;
+        String nextComment = null;
+        if ("UPDATE".equals(normalizedRequestType)) {
+            ensureValidGradeValue(proposedGradeValue);
+            if (proposedGradeDate == null || proposedGradeDate.isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Data notei este obligatorie");
+            }
+            LocalDate.parse(proposedGradeDate);
+            nextGradeValue = proposedGradeValue;
+            nextGradeDate = proposedGradeDate;
+            nextComment = normalizeOptionalText(proposedComment);
+        }
+
+        GradeChangeRequest created = new GradeChangeRequest(
+                gradeChangeRequestIds.incrementAndGet(),
+                existing.id(),
+                normalizedRequestType,
+                "PENDING",
+                existing.version(),
+                nextGradeValue,
+                nextGradeDate,
+                nextComment,
+                normalizedReason,
+                requesterUsername,
+                null,
+                null,
+                Instant.now(),
+                null
+        );
+
+        gradeChangeRequestsById.put(created.id(), created);
+        persistentStateService.saveGradeChangeRequest(created);
+        notificationService.createNotifications(
+                reviewRecipients(),
+                new NotificationService.NotificationPayload(
+                        "Cerere modificare nota",
+                        "Profesorul " + requesterUsername + " a trimis o cerere de " + actionLabelForRequestType(created.requestType())
+                                + " pentru nota la " + existing.subjectName() + ".",
+                        "catalog",
+                        "/app/catalog"
+                )
+        );
+        auditService.record(
+                "Cerere modificare nota",
+                requesterUsername,
+                "A fost trimisa o cerere de " + actionLabelForRequestType(created.requestType())
+                        + " pentru nota " + existing.id() + " a elevului " + existing.studentUsername()
+        );
+        return gradeChangeRequestResponse(created, existing, roles);
+    }
+
+    public List<GradeChangeRequestResponse> getGradeChangeRequests(String requesterUsername, List<String> roles, String status) {
+        String normalizedStatus = status == null || status.isBlank() ? null : status.trim().toUpperCase();
+        boolean canReview = canReviewGradeChangeRequests(roles);
+        return gradeChangeRequestsById.values().stream()
+                .filter(request -> normalizedStatus == null || normalizedStatus.equals(request.status()))
+                .filter(request -> canReview || requesterUsername.equals(request.requestedByUsername()))
+                .sorted(Comparator.comparing(GradeChangeRequest::createdAt, Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(GradeChangeRequest::id, Comparator.reverseOrder()))
+                .map(request -> gradeChangeRequestResponse(request, findGradeOrNull(request.gradeId()), roles))
+                .toList();
+    }
+
+    public GradeChangeRequestResponse approveGradeChangeRequest(
+            String requesterUsername,
+            List<String> roles,
+            Long requestId,
+            String resolutionNote
+    ) {
+        GradeChangeRequest request = requirePendingGradeChangeRequest(requestId);
+        if (!canReviewGradeChangeRequests(roles)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar secretariatul sau directorul pot aproba cereri");
+        }
+
+        GradeLocation location = requireGradeLocation(request.gradeId());
+        StudentGrade existing = location.grade();
+        if (!Objects.equals(existing.version(), request.baseGradeVersion())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Nota a fost modificata intre timp. Respinge cererea sau reincarca datele.");
+        }
+
+        String normalizedResolutionNote = normalizeOptionalText(resolutionNote);
+        GradeChangeRequest approved = new GradeChangeRequest(
+                request.id(),
+                request.gradeId(),
+                request.requestType(),
+                "APPROVED",
+                request.baseGradeVersion(),
+                request.proposedGradeValue(),
+                request.proposedGradeDate(),
+                request.proposedComment(),
+                request.reason(),
+                request.requestedByUsername(),
+                requesterUsername,
+                normalizedResolutionNote,
+                request.createdAt(),
+                Instant.now()
+        );
+
+        if ("DELETE".equals(request.requestType())) {
+            location.bucket().remove(location.index());
+            persistentStateService.deleteGrade(existing.id());
+            notificationService.createNotifications(
+                    schoolDataService.academicNotificationRecipients(existing.studentUsername()),
+                    new NotificationService.NotificationPayload(
+                            "Catalog actualizat",
+                            "O nota la materia " + existing.subjectName() + " a fost stearsa dupa aprobarea directorului/secretariatului.",
+                            "catalog",
+                            "/app/catalog"
+                    )
+            );
+            auditService.record(
+                    "Aplicare stergere nota",
+                    requesterUsername,
+                    "Cererea " + request.id() + " a sters nota " + existing.id() + " pentru elevul " + existing.studentUsername()
+            );
+        } else {
+            StudentGrade updated = new StudentGrade(
+                    existing.id(),
+                    existing.studentUsername(),
+                    existing.studentName(),
+                    existing.classId(),
+                    existing.className(),
+                    existing.subjectId(),
+                    existing.subjectName(),
+                    request.proposedGradeValue(),
+                    request.proposedGradeDate(),
+                    existing.teacherUsername(),
+                    existing.teacherName(),
+                    request.proposedComment(),
+                    existing.version() + 1
+            );
+            location.bucket().set(location.index(), updated);
+            sortGrades(location.bucket());
+            persistentStateService.saveGrade(updated);
+            notificationService.createNotifications(
+                    schoolDataService.academicNotificationRecipients(existing.studentUsername()),
+                    new NotificationService.NotificationPayload(
+                            "Catalog actualizat",
+                            "Nota la materia " + existing.subjectName() + " a fost actualizata dupa aprobarea directorului/secretariatului.",
+                            "catalog",
+                            "/app/catalog"
+                    )
+            );
+            auditService.record(
+                    "Aplicare modificare nota",
+                    requesterUsername,
+                    "Cererea " + request.id() + " a actualizat nota " + existing.id() + " pentru elevul " + existing.studentUsername()
+            );
+        }
+
+        gradeChangeRequestsById.put(approved.id(), approved);
+        persistentStateService.saveGradeChangeRequest(approved);
+        notificationService.createNotifications(
+                List.of(request.requestedByUsername()),
+                new NotificationService.NotificationPayload(
+                        "Cerere aprobata",
+                        "Cererea ta pentru nota la " + existing.subjectName() + " a fost aprobata.",
+                        "catalog",
+                        "/app/catalog"
+                )
+        );
+        return gradeChangeRequestResponse(approved, findGradeOrNull(request.gradeId()), roles);
+    }
+
+    public GradeChangeRequestResponse rejectGradeChangeRequest(
+            String requesterUsername,
+            List<String> roles,
+            Long requestId,
+            String resolutionNote
+    ) {
+        GradeChangeRequest request = requirePendingGradeChangeRequest(requestId);
+        if (!canReviewGradeChangeRequests(roles)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Doar secretariatul sau directorul pot respinge cereri");
+        }
+
+        GradeChangeRequest rejected = new GradeChangeRequest(
+                request.id(),
+                request.gradeId(),
+                request.requestType(),
+                "REJECTED",
+                request.baseGradeVersion(),
+                request.proposedGradeValue(),
+                request.proposedGradeDate(),
+                request.proposedComment(),
+                request.reason(),
+                request.requestedByUsername(),
+                requesterUsername,
+                normalizeOptionalText(resolutionNote),
+                request.createdAt(),
+                Instant.now()
+        );
+        gradeChangeRequestsById.put(rejected.id(), rejected);
+        persistentStateService.saveGradeChangeRequest(rejected);
+        StudentGrade currentGrade = requireGradeLocation(request.gradeId()).grade();
+        notificationService.createNotifications(
+                List.of(request.requestedByUsername()),
+                new NotificationService.NotificationPayload(
+                        "Cerere respinsa",
+                        "Cererea ta pentru nota la " + currentGrade.subjectName() + " a fost respinsa.",
+                        "catalog",
+                        "/app/catalog"
+                )
+        );
+        auditService.record(
+                "Respingere cerere nota",
+                requesterUsername,
+                "Cererea " + request.id() + " pentru nota " + request.gradeId() + " a fost respinsa"
+        );
+        return gradeChangeRequestResponse(rejected, currentGrade, roles);
+    }
+
     public GradeResponse updateGrade(
             String requesterUsername,
             List<String> roles,
@@ -189,107 +518,15 @@ public class CatalogService {
             String gradeDate,
             String comment
     ) {
-        if (!hasRole(roles, "secretariat") && !hasRole(roles, "professor")) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only secretariat and professors can update grades");
-        }
-
-        ensureValidGradeValue(gradeValue);
-        LocalDate.parse(gradeDate);
-        String normalizedComment = normalizeOptionalText(comment);
-
-        for (Map.Entry<String, List<StudentGrade>> bucket : gradesByStudentUsername.entrySet()) {
-            List<StudentGrade> grades = bucket.getValue();
-            for (int index = 0; index < grades.size(); index++) {
-                StudentGrade existing = grades.get(index);
-                if (!Objects.equals(existing.id(), gradeId)) {
-                    continue;
-                }
-                if (!Objects.equals(existing.version(), version)) {
-                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Nota a fost modificata intre timp. Da refresh si incearca din nou.");
-                }
-                if (!canEditGrade(requesterUsername, roles, existing)) {
-                    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not allowed to edit this grade");
-                }
-
-                StudentGrade updated = new StudentGrade(
-                        existing.id(),
-                        existing.studentUsername(),
-                        existing.studentName(),
-                        existing.classId(),
-                        existing.className(),
-                        existing.subjectId(),
-                        existing.subjectName(),
-                        gradeValue,
-                        gradeDate,
-                        existing.teacherUsername(),
-                        existing.teacherName(),
-                        normalizedComment,
-                        existing.version() + 1
-                );
-                grades.set(index, updated);
-                sortGrades(grades);
-                persistentStateService.saveGrade(updated);
-                notificationService.createNotifications(
-                        schoolDataService.academicNotificationRecipients(existing.studentUsername()),
-                        new NotificationService.NotificationPayload(
-                                "Catalog actualizat",
-                                "Nota la materia " + existing.subjectName() + " a fost actualizata. Valoarea curenta este " + gradeValue + ".",
-                                "catalog",
-                                "/app/catalog"
-                        )
-                );
-                auditService.record(
-                        "Actualizare nota",
-                        requesterUsername,
-                        "Nota " + updated.id() + " a fost actualizata la valoarea " + gradeValue + " pentru elevul " + updated.studentUsername()
-                );
-                return gradeResponse(updated, requesterUsername, roles);
-            }
-        }
-
-        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Grade not found");
+        throw new ResponseStatusException(HttpStatus.METHOD_NOT_ALLOWED, "Notele existente se modifica doar prin cereri aprobate.");
     }
 
     public ActionResponse deleteGrade(String requesterUsername, List<String> roles, Long gradeId) {
-        if (!hasRole(roles, "secretariat") && !hasRole(roles, "professor")) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only secretariat and professors can delete grades");
-        }
-
-        for (Map.Entry<String, List<StudentGrade>> bucket : gradesByStudentUsername.entrySet()) {
-            List<StudentGrade> grades = bucket.getValue();
-            for (int index = 0; index < grades.size(); index++) {
-                StudentGrade existing = grades.get(index);
-                if (!Objects.equals(existing.id(), gradeId)) {
-                    continue;
-                }
-                if (!canEditGrade(requesterUsername, roles, existing)) {
-                    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not allowed to delete this grade");
-                }
-                grades.remove(index);
-                persistentStateService.deleteGrade(gradeId);
-                notificationService.createNotifications(
-                        schoolDataService.academicNotificationRecipients(existing.studentUsername()),
-                        new NotificationService.NotificationPayload(
-                                "Catalog actualizat",
-                                "O nota la materia " + existing.subjectName() + " a fost stearsa.",
-                                "catalog",
-                                "/app/catalog"
-                        )
-                );
-                auditService.record(
-                        "Stergere nota",
-                        requesterUsername,
-                        "Nota " + gradeId + " a fost stearsa pentru elevul " + existing.studentUsername()
-                );
-                return new ActionResponse("Grade deleted", gradeId, null);
-            }
-        }
-
-        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Grade not found");
+        throw new ResponseStatusException(HttpStatus.METHOD_NOT_ALLOWED, "Notele existente se sterg doar prin cereri aprobate.");
     }
 
     public AbsenceResponse createAbsence(String requesterUsername, List<String> roles, String studentUsername, String subjectName, String absenceDate) {
-        if (!(hasRole(roles, "secretariat") || hasRole(roles, "professor") || hasRole(roles, "admin") || hasRole(roles, "sysadmin"))) {
+        if (!(hasRole(roles, "secretariat") || hasRole(roles, "professor") || hasRole(roles, "director") || hasRole(roles, "sysadmin"))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only secretariat and professors can add absences");
         }
 
@@ -487,6 +724,7 @@ public class CatalogService {
     }
 
     private GradeResponse gradeResponse(StudentGrade grade, String requesterUsername, List<String> roles) {
+        GradeChangeRequest pendingRequest = pendingRequestForGrade(grade.id());
         return new GradeResponse(
                 grade.id(),
                 grade.studentUsername(),
@@ -501,7 +739,11 @@ public class CatalogService {
                 grade.teacherName(),
                 canViewGradeComment(requesterUsername, roles, grade) ? grade.comment() : null,
                 grade.version(),
-                canEditGrade(requesterUsername, roles, grade)
+                false,
+                canRequestGradeChange(requesterUsername, roles, grade) && pendingRequest == null,
+                pendingRequest == null ? null : pendingRequest.id(),
+                pendingRequest == null ? null : pendingRequest.status(),
+                pendingRequest == null ? null : pendingRequest.requestType()
         );
     }
 
@@ -537,7 +779,7 @@ public class CatalogService {
         if (hasRole(roles, "professor")) {
             return student.classId() != null && classesForProfessor(requesterUsername).contains(student.classId());
         }
-        return hasRole(roles, "secretariat") || hasRole(roles, "admin") || hasRole(roles, "sysadmin");
+        return hasRole(roles, "secretariat") || hasRole(roles, "director") || hasRole(roles, "sysadmin");
     }
 
     private boolean canViewGrade(String requesterUsername, List<String> roles, StudentGrade grade) {
@@ -550,7 +792,7 @@ public class CatalogService {
         if (hasRole(roles, "professor")) {
             return professorCanManageGrade(requesterUsername, grade.classId(), grade.subjectId(), grade.teacherUsername());
         }
-        return hasRole(roles, "secretariat") || hasRole(roles, "admin") || hasRole(roles, "sysadmin");
+        return hasRole(roles, "secretariat") || hasRole(roles, "director") || hasRole(roles, "sysadmin");
     }
 
     private boolean canViewAbsence(String requesterUsername, List<String> roles, StudentAbsence absence) {
@@ -563,11 +805,11 @@ public class CatalogService {
         if (hasRole(roles, "professor")) {
             return classesForProfessor(requesterUsername).contains(absence.classId());
         }
-        return hasRole(roles, "secretariat") || hasRole(roles, "admin") || hasRole(roles, "sysadmin");
+        return hasRole(roles, "secretariat") || hasRole(roles, "director") || hasRole(roles, "sysadmin");
     }
 
     private boolean canViewGradeComment(String requesterUsername, List<String> roles, StudentGrade grade) {
-        if (hasRole(roles, "secretariat") || hasRole(roles, "sysadmin")) {
+        if (hasRole(roles, "secretariat") || hasRole(roles, "director") || hasRole(roles, "sysadmin")) {
             return true;
         }
         if (hasRole(roles, "student")) {
@@ -581,11 +823,7 @@ public class CatalogService {
     }
 
     private boolean canEditGrade(String requesterUsername, List<String> roles, StudentGrade grade) {
-        if (hasRole(roles, "secretariat")) {
-            return true;
-        }
-        return hasRole(roles, "professor")
-                && professorCanManageGrade(requesterUsername, grade.classId(), grade.subjectId(), grade.teacherUsername());
+        return canRequestGradeChange(requesterUsername, roles, grade);
     }
 
     private boolean canAddGrade(String requesterUsername, List<String> roles, Long classId, Long subjectId, TimetableEntry teacherAssignment) {
@@ -603,7 +841,7 @@ public class CatalogService {
         if (teacherAssignment == null) {
             return false;
         }
-        if (hasRole(roles, "secretariat") || hasRole(roles, "admin") || hasRole(roles, "sysadmin")) {
+        if (hasRole(roles, "secretariat") || hasRole(roles, "director") || hasRole(roles, "sysadmin")) {
             return true;
         }
         return hasRole(roles, "professor")
@@ -611,7 +849,7 @@ public class CatalogService {
     }
 
     private boolean canMotivateAbsence(String requesterUsername, List<String> roles, StudentAbsence absence) {
-        if (hasRole(roles, "secretariat") || hasRole(roles, "admin") || hasRole(roles, "sysadmin")) {
+        if (hasRole(roles, "secretariat") || hasRole(roles, "director") || hasRole(roles, "sysadmin")) {
             return true;
         }
         if (hasRole(roles, "parent")) {
@@ -674,7 +912,7 @@ public class CatalogService {
                 || hasRole(roles, "parent")
                 || hasRole(roles, "professor")
                 || hasRole(roles, "secretariat")
-                || hasRole(roles, "admin")
+                || hasRole(roles, "director")
                 || hasRole(roles, "sysadmin"))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not allowed to access the catalog");
         }
@@ -682,6 +920,123 @@ public class CatalogService {
 
     private boolean hasRole(List<String> roles, String role) {
         return roles.stream().anyMatch(role::equals);
+    }
+
+    private boolean canRequestGradeChange(String requesterUsername, List<String> roles, StudentGrade grade) {
+        return hasRole(roles, "professor")
+                && professorCanManageGrade(requesterUsername, grade.classId(), grade.subjectId(), grade.teacherUsername());
+    }
+
+    private boolean canReviewGradeChangeRequests(List<String> roles) {
+        return hasRole(roles, "secretariat") || hasRole(roles, "director");
+    }
+
+    private boolean canExportClassCatalog(String requesterUsername, List<String> roles, Long classId) {
+        return hasRole(roles, "director")
+                || hasRole(roles, "sysadmin")
+                || (hasRole(roles, "professor") && isHomeroomTeacherForClass(requesterUsername, classId));
+    }
+
+    private GradeLocation requireGradeLocation(Long gradeId) {
+        for (List<StudentGrade> grades : gradesByStudentUsername.values()) {
+            for (int index = 0; index < grades.size(); index++) {
+                StudentGrade grade = grades.get(index);
+                if (Objects.equals(grade.id(), gradeId)) {
+                    return new GradeLocation(grades, index, grade);
+                }
+            }
+        }
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Nota nu a fost gasita");
+    }
+
+    private StudentGrade findGradeOrNull(Long gradeId) {
+        try {
+            return requireGradeLocation(gradeId).grade();
+        } catch (ResponseStatusException exception) {
+            return null;
+        }
+    }
+
+    private GradeChangeRequest requirePendingGradeChangeRequest(Long requestId) {
+        GradeChangeRequest request = gradeChangeRequestsById.get(requestId);
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Cererea nu a fost gasita");
+        }
+        if (!"PENDING".equals(request.status())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Cererea nu mai este in asteptare");
+        }
+        return request;
+    }
+
+    private GradeChangeRequest pendingRequestForGrade(Long gradeId) {
+        return gradeChangeRequestsById.values().stream()
+                .filter(request -> Objects.equals(request.gradeId(), gradeId))
+                .filter(request -> "PENDING".equals(request.status()))
+                .max(Comparator.comparing(GradeChangeRequest::createdAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(GradeChangeRequest::id))
+                .orElse(null);
+    }
+
+    private GradeChangeRequestResponse gradeChangeRequestResponse(
+            GradeChangeRequest request,
+            StudentGrade currentGrade,
+            List<String> roles
+    ) {
+        return new GradeChangeRequestResponse(
+                request.id(),
+                request.gradeId(),
+                request.requestType(),
+                request.status(),
+                request.baseGradeVersion(),
+                currentGrade == null ? null : currentGrade.gradeValue(),
+                currentGrade == null ? null : currentGrade.gradeDate(),
+                currentGrade == null ? null : currentGrade.comment(),
+                request.proposedGradeValue(),
+                request.proposedGradeDate(),
+                request.proposedComment(),
+                request.reason(),
+                request.requestedByUsername(),
+                request.reviewedByUsername(),
+                request.resolutionNote(),
+                request.createdAt() == null ? null : request.createdAt().toString(),
+                request.reviewedAt() == null ? null : request.reviewedAt().toString(),
+                canReviewGradeChangeRequests(roles)
+        );
+    }
+
+    private String normalizeRequestType(String requestType) {
+        String normalized = requestType == null ? null : requestType.trim().toUpperCase();
+        if (!"UPDATE".equals(normalized) && !"DELETE".equals(normalized)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tipul cererii este invalid");
+        }
+        return normalized;
+    }
+
+    private String normalizeRequiredReason(String reason) {
+        String normalized = normalizeOptionalText(reason);
+        if (normalized == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Motivul este obligatoriu");
+        }
+        if (normalized.length() > 255) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Motivul poate avea maximum 255 de caractere");
+        }
+        return normalized;
+    }
+
+    private String actionLabelForRequestType(String requestType) {
+        return "DELETE".equals(requestType) ? "stergere" : "modificare";
+    }
+
+    private List<String> reviewRecipients() {
+        LinkedHashSet<String> recipients = new LinkedHashSet<>();
+        schoolDataService.getUserProfilesByRole("secretariat").forEach(profile -> recipients.add(profile.username()));
+        schoolDataService.getUserProfilesByRole("director").forEach(profile -> recipients.add(profile.username()));
+        return List.copyOf(recipients);
+    }
+
+    private void createCell(Row row, int index, String value) {
+        Cell cell = row.createCell(index);
+        cell.setCellValue(value == null ? "" : value);
     }
 
     private UserProfile requireStudentProfile(String username) {
@@ -844,6 +1199,15 @@ public class CatalogService {
         }
 
         absencesByStudentUsername.values().forEach(this::sortAbsences);
+    }
+
+    private void loadPersistedGradeChangeRequests() {
+        gradeChangeRequestsById.clear();
+        gradeChangeRequestIds.set(15000);
+        for (GradeChangeRequest request : persistentStateService.loadGradeChangeRequests()) {
+            gradeChangeRequestsById.put(request.id(), request);
+            gradeChangeRequestIds.set(Math.max(gradeChangeRequestIds.get(), request.id()));
+        }
     }
 
     private void seedCatalogDataIfNeeded() {

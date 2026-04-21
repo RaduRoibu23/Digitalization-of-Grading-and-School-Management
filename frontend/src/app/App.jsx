@@ -19,7 +19,7 @@ function resolveModuleTheme(pathname) {
   if (pathname.startsWith('/app/orarul-meu') || pathname.startsWith('/app/orar-pe-clasa') || pathname.startsWith('/app/genereaza-orar')) {
     return 'timetable'
   }
-  if (pathname.startsWith('/app/utilizatori') || pathname.startsWith('/app/creeaza-cont')) return 'admin'
+  if (pathname.startsWith('/app/utilizatori') || pathname.startsWith('/app/creeaza-cont')) return 'director'
   if (pathname.startsWith('/login')) return 'auth'
   return 'home'
 }
@@ -57,7 +57,7 @@ function App() {
   const isCenteredPublicRoute = ['/login'].includes(location.pathname)
   const isLandingRoute = location.pathname === '/'
   const isPublicRoute = isCenteredPublicRoute || isLandingRoute
-  const canViewAudit = roles.includes('admin') || roles.includes('sysadmin')
+  const canViewAudit = roles.includes('director') || roles.includes('sysadmin')
 
   const resetNotificationState = () => {
     setNotifications([])

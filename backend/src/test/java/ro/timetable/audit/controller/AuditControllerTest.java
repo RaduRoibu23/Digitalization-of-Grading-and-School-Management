@@ -18,13 +18,13 @@ import ro.timetable.common.security.AuthenticatedRequestService;
 class AuditControllerTest {
 
     @Test
-    void blocksAuditAccessForNonAdminRoles() {
+    void blocksAuditAccessForNonDirectorRoles() {
         AuditService auditService = mock(AuditService.class);
         AuthenticatedRequestService authenticatedRequestService = mock(AuthenticatedRequestService.class);
         JwtAuthenticationToken authentication = mock(JwtAuthenticationToken.class);
         AuditController controller = new AuditController(auditService, authenticatedRequestService);
 
-        when(authenticatedRequestService.hasAnyRole(authentication, "admin", "sysadmin")).thenReturn(false);
+        when(authenticatedRequestService.hasAnyRole(authentication, "director", "sysadmin")).thenReturn(false);
 
         assertThatThrownBy(() -> controller.auditEntries(50, authentication))
                 .isInstanceOf(ResponseStatusException.class)
@@ -35,7 +35,7 @@ class AuditControllerTest {
     }
 
     @Test
-    void returnsAuditEntriesForAdminAndSysadmin() {
+    void returnsAuditEntriesForDirectorAndSysadmin() {
         AuditService auditService = mock(AuditService.class);
         AuthenticatedRequestService authenticatedRequestService = mock(AuthenticatedRequestService.class);
         JwtAuthenticationToken authentication = mock(JwtAuthenticationToken.class);
@@ -44,7 +44,7 @@ class AuditControllerTest {
                 new AuditEntryResponse(1L, "Actualizare profil", "admin01", "Profil actualizat", "2026-04-07T12:00:00Z")
         );
 
-        when(authenticatedRequestService.hasAnyRole(authentication, "admin", "sysadmin")).thenReturn(true);
+        when(authenticatedRequestService.hasAnyRole(authentication, "director", "sysadmin")).thenReturn(true);
         when(auditService.latest(25)).thenReturn(expected);
 
         List<AuditEntryResponse> result = controller.auditEntries(25, authentication);

@@ -4,6 +4,10 @@ export async function apiGet(path, accessToken) {
   return requestJson(path, { accessToken, requireAuth: true })
 }
 
+export async function apiGetPublic(path) {
+  return requestJson(path)
+}
+
 export async function apiPost(path, body, accessToken) {
   return requestJson(path, { method: 'POST', body, accessToken, requireAuth: true })
 }

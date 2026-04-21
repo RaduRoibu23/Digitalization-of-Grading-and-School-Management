@@ -15,7 +15,7 @@ Aplicatia gestioneaza urmatoarele roluri principale:
 - `professor`
 - `secretariat`
 - `scheduler`
-- `admin`
+- `director`
 - `sysadmin`
 
 ### Rolul `parent`
@@ -56,6 +56,7 @@ Profesorul poate adauga optional un comentariu la nota. Comentariul este vizibil
 - elevul care a primit nota
 - parintele elevului
 - `secretariat`
+- `director`
 - `sysadmin`
 
 Comentariul nu este expus ca text liber in notificarile automate.
@@ -121,6 +122,7 @@ In aceasta varianta, backend-ul ruleaza pe portul `8000`, iar frontend-ul pe por
 Exemple rapide pentru testare:
 
 - `sysadmin01 / sysadmin01`
+- `admin01 / admin01`
 - `secretariat01 / secretariat01`
 - `romana01 / romana01`
 - `student001 / student001`

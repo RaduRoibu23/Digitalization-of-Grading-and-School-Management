@@ -68,10 +68,10 @@ class CatalogServiceTest {
                 notificationService
         );
 
-        studentProfile = new UserProfile(1L, 1, "student001", "student", "Ana", "Popescu", "student001@timetable.local", "Campulung", null, null, null, null, 10L, "X A", List.of(), null);
-        parentProfile = new UserProfile(2L, 1, "parinte001", "parent", "Parinte", "Popescu", "parinte001@timetable.local", null, null, null, null, null, null, null, List.of(), "student001");
-        professorProfile = new UserProfile(3L, 1, "mate01", "professor", "Mihai", "Ionescu", "mate01@timetable.local", null, null, null, null, null, null, null, List.of("Matematica"), null);
-        secretariatProfile = new UserProfile(4L, 1, "secretariat01", "secretariat", "Secretariat", "User", "secretariat01@timetable.local", null, null, null, null, null, null, null, List.of(), null);
+        studentProfile = new UserProfile(1L, 1, "student001", "student", "Ana", "Popescu", "student001@timetable.local", "Campulung", null, null, null, null, 10L, "X A", List.of(), null, false);
+        parentProfile = new UserProfile(2L, 1, "parinte001", "parent", "Parinte", "Popescu", "parinte001@timetable.local", null, null, null, null, null, null, null, List.of(), "student001", false);
+        professorProfile = new UserProfile(3L, 1, "mate01", "professor", "Mihai", "Ionescu", "mate01@timetable.local", null, null, null, null, null, null, null, List.of("Matematica"), null, false);
+        secretariatProfile = new UserProfile(4L, 1, "secretariat01", "secretariat", "Secretariat", "User", "secretariat01@timetable.local", null, null, null, null, null, null, null, List.of(), null, false);
         schoolClass = new SchoolClass(10L, "X A", "Matematica-Informatica", null, null);
         timetableEntry = new TimetableEntry(101L, 10L, "X A", 1L, "Matematica", 201L, "Sala 1", "mate01", "Mihai Ionescu", 1, 1, 1);
 
@@ -79,7 +79,7 @@ class CatalogServiceTest {
         when(schoolDataService.getProfile("parinte001")).thenReturn(parentProfile);
         when(schoolDataService.getProfile("mate01")).thenReturn(professorProfile);
         when(schoolDataService.getProfile("secretariat01")).thenReturn(secretariatProfile);
-        when(schoolDataService.getProfile("admin01")).thenReturn(new UserProfile(5L, 1, "admin01", "admin", "Admin", "User", "admin01@timetable.local", null, null, null, null, null, null, null, List.of(), null));
+        when(schoolDataService.getProfile("admin01")).thenReturn(new UserProfile(5L, 1, "admin01", "director", "Director", "User", "admin01@timetable.local", null, null, null, null, null, null, null, List.of(), null, false));
 
         when(schoolDataService.subjectIdByName("Matematica")).thenReturn(1L);
         when(schoolDataService.weeklyHoursForSubject(10L, "Matematica")).thenReturn(4);
@@ -112,12 +112,13 @@ class CatalogServiceTest {
                 null,
                 null,
                 null,
-                null
+                null,
+                false
         ));
     }
 
     @Test
-    void gradeCommentIsVisibleToParentButHiddenFromAdminAndNotificationsFanOut() {
+    void gradeCommentIsVisibleToParentAndDirectorAndNotificationsFanOut() {
         GradeResponse created = catalogService.createGrade(
                 "mate01",
                 List.of("professor"),
@@ -129,15 +130,15 @@ class CatalogServiceTest {
         );
 
         CatalogResponse parentCatalog = catalogService.getCatalogForStudent("parinte001", List.of("parent"), "student001");
-        CatalogResponse adminCatalog = catalogService.getCatalogForStudent("admin01", List.of("admin"), "student001");
+        CatalogResponse directorCatalog = catalogService.getCatalogForStudent("admin01", List.of("director"), "student001");
 
         assertThat(created.comment()).isEqualTo("Lucreaza mai atent la exercitiile de algebra.");
         assertThat(parentCatalog.subjects()).singleElement()
                 .satisfies(subject -> assertThat(subject.grades()).singleElement()
                         .satisfies(grade -> assertThat(grade.comment()).isEqualTo("Lucreaza mai atent la exercitiile de algebra.")));
-        assertThat(adminCatalog.subjects()).singleElement()
+        assertThat(directorCatalog.subjects()).singleElement()
                 .satisfies(subject -> assertThat(subject.grades()).singleElement()
-                        .satisfies(grade -> assertThat(grade.comment()).isNull()));
+                        .satisfies(grade -> assertThat(grade.comment()).isEqualTo("Lucreaza mai atent la exercitiile de algebra.")));
 
         ArgumentCaptor<List<String>> recipientsCaptor = ArgumentCaptor.forClass(List.class);
         verify(notificationService).createNotifications(recipientsCaptor.capture(), any(NotificationService.NotificationPayload.class));

@@ -2317,7 +2317,7 @@ body::after{
   --module-soft-2: rgba(104, 142, 240, 0.16);
 }
 
-.appRoot[data-module='admin']{
+.appRoot[data-module='director']{
   --module-accent: #d2916a;
   --module-accent-2: #7f8fc8;
   --module-soft: rgba(210, 145, 106, 0.18);
@@ -3452,6 +3452,14 @@ body::after{
   align-items: stretch;
 }
 
+.landingCommandIntro{
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 6px 4px 2px;
+}
+
 .landingCommandLead,
 .landingInfoPanel{
   border: 1px solid rgba(255,255,255,0.08);
@@ -3513,6 +3521,12 @@ body::after{
   font-size: clamp(2.05rem, 4vw, 3.3rem);
 }
 
+.landingTitleWide{
+  max-width: none;
+  font-size: clamp(2.4rem, 4.6vw, 4.4rem);
+  text-wrap: balance;
+}
+
 .landingCopy{
   margin: 16px 0 0;
   max-width: 60ch;
@@ -3523,6 +3537,12 @@ body::after{
 
 .landingCopyCompact{
   max-width: 58ch;
+}
+
+.landingCopyWide{
+  max-width: none;
+  margin-top: 0;
+  font-size: clamp(1rem, 1.35vw, 1.15rem);
 }
 
 .landingActions{
