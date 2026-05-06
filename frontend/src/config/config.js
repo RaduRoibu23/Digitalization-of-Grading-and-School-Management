@@ -8,7 +8,7 @@ export const CONFIG = {
   },
 
   api: {
-    baseUrl: (env.VITE_API_BASE_URL || 'http://localhost:8000/api').replace(/\/$/, ''),
+    baseUrl: (env.VITE_API_BASE_URL || '/api').replace(/\/$/, ''),
   },
 
   auth: {
