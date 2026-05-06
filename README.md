@@ -83,14 +83,16 @@ Prin aceasta comanda sunt pornite toate serviciile necesare:
 
 Dupa pornire, aplicatia este disponibila la urmatoarele adrese:
 
-- Frontend: `http://localhost:3000`
-- Frontend din telefon, in aceeasi retea Wi-Fi: `http://<ip-laptop>:3000`
-- Backend API prin frontend/proxy: `http://localhost:3000/api`
+- Frontend: `http://localhost`
+- Frontend din telefon, in aceeasi retea Wi-Fi: `http://<ip-laptop>`
+- Backend API prin frontend/proxy: `http://localhost/api`
 - Backend API direct: `http://localhost:8000/api`
 - Swagger UI: `http://localhost:8000/swagger-ui.html`
 - Keycloak: `http://localhost:8181`
 
 Frontend-ul servit prin Docker foloseste aceeasi origine pentru API. Cererile la `/api` sunt redirectionate de Nginx catre backend, astfel incat aplicatia poate fi accesata si din browserul telefonului fara URL-uri hardcodate pe `localhost`.
+
+In configuratia Docker curenta, frontend-ul este publicat pe portul standard HTTP `80`, astfel incat nu mai este necesar sufixul `:3000` in link.
 
 Pentru oprirea serviciilor se foloseste comanda:
 
@@ -124,8 +126,8 @@ In aceasta varianta, backend-ul ruleaza pe portul `8000`, iar frontend-ul pe `30
 ### Note pentru accesul din telefon
 
 - Telefonul si laptopul trebuie sa fie conectate la aceeasi retea Wi-Fi.
-- Adresa de test este `http://<ip-laptop>:3000`, unde `<ip-laptop>` este IPv4-ul laptopului din reteaua locala.
-- Daca pagina nu se deschide de pe telefon, verifica mai intai firewall-ul Windows si faptul ca portul `3000` este accesibil in reteaua locala.
+- Adresa de test pentru varianta Docker este `http://<ip-laptop>`, unde `<ip-laptop>` este IPv4-ul laptopului din reteaua locala.
+- Daca pagina nu se deschide de pe telefon, verifica mai intai firewall-ul Windows si faptul ca portul `80` este accesibil in reteaua locala.
 - Valorile `VITE_*` nu mai sunt citite din `infra/.env`. Daca vrei override-uri explicite pentru frontend, foloseste variabile de mediu dedicate pentru Vite, de exemplu intr-un fisier `frontend/.env.local`.
 - Backend-ul accepta implicit origin-uri locale de dezvoltare pentru `localhost`, `127.0.0.1` si IP-uri din retele private uzuale (`192.168.x.x`, `10.x.x.x`, `172.16.x.x` - `172.31.x.x`). Daca folosesti alt tip de retea, extinde `APP_SECURITY_ALLOWED_ORIGIN_PATTERNS`.
 
