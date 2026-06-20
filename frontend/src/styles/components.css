@@ -1,12 +1,12 @@
 .notificationFilterSelect{
   min-width: 164px;
-  background: rgba(255,255,255,0.02);
+  background: rgba(var(--ink-rgb),0.02);
 }
 
 .errorState{
-  border: 1px solid rgba(255, 107, 107, 0.22);
-  color: rgba(255,255,255,0.86);
-  background: rgba(255, 107, 107, 0.1);
+  border: 1px solid rgba(var(--danger-rgb), 0.22);
+  color: rgba(var(--ink-rgb),0.86);
+  background: rgba(var(--danger-rgb), 0.1);
 }
 
 .auditConsoleFilters{
@@ -28,9 +28,9 @@
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  border: 1px solid rgba(255,255,255,0.1);
-  background: rgba(255,255,255,0.06);
-  color: rgba(255,255,255,0.86);
+  border: 1px solid rgba(var(--ink-rgb),0.1);
+  background: rgba(var(--ink-rgb),0.06);
+  color: rgba(var(--ink-rgb),0.86);
 }
 
 .dashboardChip.accent{
@@ -52,11 +52,11 @@
   gap: 18px;
   padding: 20px;
   border-radius: 26px;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(var(--ink-rgb),0.08);
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03)),
-    linear-gradient(145deg, rgba(10, 21, 34, 0.9), rgba(8, 16, 25, 0.78));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+    linear-gradient(180deg, rgba(var(--ink-rgb),0.06), rgba(var(--ink-rgb),0.03)),
+    linear-gradient(145deg, rgba(var(--elev-rgb), 0.9), rgba(var(--elev-rgb), 0.78));
+  box-shadow: inset 0 1px 0 rgba(var(--ink-rgb),0.05);
 }
 
 .dashboardPanelHeader{
@@ -67,7 +67,7 @@
 }
 
 .dashboardPanelEyebrow{
-  color: rgba(255,255,255,0.7);
+  color: rgba(var(--ink-rgb),0.7);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.16em;
@@ -92,8 +92,104 @@
   gap: 6px;
   padding: 18px;
   border-radius: 20px;
-  border: 1px dashed rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.03);
+  border: 1px dashed rgba(var(--ink-rgb),0.12);
+  background: rgba(var(--ink-rgb),0.03);
+}
+
+/* ============================ Theme toggle ============================ */
+.themeToggle{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.themeToggleTrack{
+  position: relative;
+  width: 58px;
+  height: 30px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(var(--ink-rgb), 0.10), rgba(var(--ink-rgb), 0.04));
+  box-shadow: inset 0 1px 2px rgba(var(--shadow-rgb), 0.18);
+  transition: border-color var(--motion-base) var(--ease-out),
+    background var(--motion-base) var(--ease-out);
+}
+
+.themeToggle:hover .themeToggleTrack{
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
+}
+
+.themeToggle:focus-visible{
+  outline: none;
+}
+
+.themeToggle:focus-visible .themeToggleTrack{
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.28);
+}
+
+.themeToggleThumb{
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 23px;
+  height: 23px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  color: var(--on-accent);
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  box-shadow: 0 5px 14px rgba(var(--accent-rgb), 0.5);
+  transform: translateY(-50%);
+  transition: transform var(--motion-base) var(--ease-spring);
+}
+
+[data-theme='light'] .themeToggleThumb{
+  transform: translate(27px, -50%);
+}
+
+.themeToggleIcon{
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  transition: opacity var(--motion-fast) var(--ease-out),
+    transform var(--motion-base) var(--ease-spring);
+}
+
+.themeToggleSun{
+  opacity: 0;
+  transform: rotate(-90deg) scale(0.5);
+}
+
+.themeToggleMoon{
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+
+[data-theme='light'] .themeToggleSun{
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+
+[data-theme='light'] .themeToggleMoon{
+  opacity: 0;
+  transform: rotate(90deg) scale(0.5);
+}
+
+/* Login card header becomes a row so the toggle sits opposite the title */
+.authCardHeader{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
 }
 
 .dashboardPanelEmptyTitle{

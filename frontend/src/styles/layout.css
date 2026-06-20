@@ -10,7 +10,7 @@
   padding: 5px;
   border-radius: 999px;
   background:
-    linear-gradient(180deg, rgba(7, 16, 25, 0.82), rgba(7, 16, 25, 0.58)),
+    linear-gradient(180deg, rgba(var(--elev-rgb), 0.82), rgba(var(--elev-rgb), 0.58)),
     linear-gradient(135deg, var(--module-soft), transparent);
 }
 
@@ -20,7 +20,7 @@
 
 .sidebarIntro{
   padding-bottom: 16px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid rgba(var(--ink-rgb),0.08);
 }
 
 .pageTransitionShell{

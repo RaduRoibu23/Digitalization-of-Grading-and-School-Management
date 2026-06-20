@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiGetPublic } from '../services/apiService'
+import ThemeToggle from '../components/ui/ThemeToggle'
 
 const PROFILE_FALLBACK = [
   {
@@ -104,6 +105,7 @@ export default function HomePage() {
           </div>
 
           <div className="landingActions">
+            <ThemeToggle />
             <Link className="btn btn-primary" to="/login">Login</Link>
           </div>
         </div>

@@ -12,7 +12,7 @@
 }
 
 .dashboardHeroKicker{
-  color: rgba(255,255,255,0.72);
+  color: rgba(var(--ink-rgb),0.72);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.16em;
@@ -56,10 +56,10 @@
   gap: 8px;
   padding: 18px;
   border-radius: 24px;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(var(--ink-rgb),0.08);
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03)),
-    linear-gradient(135deg, rgba(10, 22, 35, 0.92), rgba(8, 16, 25, 0.76));
+    linear-gradient(180deg, rgba(var(--ink-rgb),0.07), rgba(var(--ink-rgb),0.03)),
+    linear-gradient(135deg, rgba(var(--elev-rgb), 0.92), rgba(var(--elev-rgb), 0.76));
   box-shadow: 0 20px 34px rgba(0,0,0,0.18);
   animation: dashboard-stagger var(--motion-slow) ease both;
   animation-delay: calc(var(--card-index, 0) * 70ms);
@@ -67,12 +67,12 @@
 
 .dashboardMetricCard.tone-primary,
 .dashboardQuickAction.tone-timetable{
-  border-color: color-mix(in srgb, var(--module-accent) 34%, rgba(255,255,255,0.08));
+  border-color: color-mix(in srgb, var(--module-accent) 34%, rgba(var(--ink-rgb),0.08));
 }
 
 .dashboardMetricCard.tone-accent,
 .dashboardQuickAction.tone-feedback{
-  border-color: color-mix(in srgb, var(--module-accent-2) 28%, rgba(255,255,255,0.08));
+  border-color: color-mix(in srgb, var(--module-accent-2) 28%, rgba(var(--ink-rgb),0.08));
 }
 
 .dashboardMetricCard.tone-warning{
@@ -80,7 +80,7 @@
 }
 
 .dashboardMetricLabel{
-  color: rgba(255,255,255,0.72);
+  color: rgba(var(--ink-rgb),0.72);
   font-size: 12px;
   font-weight: 700;
 }
@@ -101,12 +101,12 @@
   min-width: 220px;
   padding: 16px 18px;
   border-radius: 22px;
-  border: 1px solid color-mix(in srgb, var(--module-accent) 30%, rgba(255,255,255,0.08));
+  border: 1px solid color-mix(in srgb, var(--module-accent) 30%, rgba(var(--ink-rgb),0.08));
   background: linear-gradient(135deg, var(--module-soft), var(--module-soft-2));
 }
 
 .dashboardHighlightLabel{
-  color: rgba(255,255,255,0.76);
+  color: rgba(var(--ink-rgb),0.76);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.14em;
@@ -121,7 +121,7 @@
 
 .dashboardHighlightText{
   margin-top: 4px;
-  color: rgba(255,255,255,0.86);
+  color: rgba(var(--ink-rgb),0.86);
   font-size: 13px;
 }
 
@@ -144,8 +144,8 @@
   align-items: flex-start;
   padding: 14px 16px;
   border-radius: 20px;
-  border: 1px solid rgba(255,255,255,0.08);
-  background: rgba(255,255,255,0.035);
+  border: 1px solid rgba(var(--ink-rgb),0.08);
+  background: rgba(var(--ink-rgb),0.035);
   color: var(--text);
   text-decoration: none;
   transition: transform var(--motion-fast) ease, border-color var(--motion-fast) ease, background var(--motion-fast) ease;
@@ -156,8 +156,8 @@
 .dashboardQuickAction:hover{
   transform: translateY(-2px);
   text-decoration: none;
-  border-color: color-mix(in srgb, var(--module-accent) 30%, rgba(255,255,255,0.08));
-  background: rgba(255,255,255,0.05);
+  border-color: color-mix(in srgb, var(--module-accent) 30%, rgba(var(--ink-rgb),0.08));
+  background: rgba(var(--ink-rgb),0.05);
 }
 
 .dashboardScheduleTime{
@@ -166,7 +166,7 @@
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(255,255,255,0.74);
+  color: rgba(var(--ink-rgb),0.74);
 }
 
 .dashboardScheduleBody,
@@ -201,7 +201,7 @@
   margin-left: auto;
   justify-items: end;
   font-size: 12px;
-  color: rgba(255,255,255,0.72);
+  color: rgba(var(--ink-rgb),0.72);
 }
 
 .dashboardNotificationItem{
@@ -213,7 +213,7 @@
 }
 
 .dashboardNotificationItem small{
-  color: rgba(255,255,255,0.65);
+  color: rgba(var(--ink-rgb),0.65);
 }
 
 .dashboardQuickAction{
@@ -225,8 +225,8 @@
   gap: 14px;
   padding: 18px;
   border-radius: 22px;
-  border: 1px solid rgba(255,255,255,0.08);
-  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(var(--ink-rgb),0.08);
+  background: rgba(var(--ink-rgb),0.03);
 }
 
 .dashboardAnnouncementActions{
@@ -245,7 +245,7 @@
 }
 
 .dashboardAnnouncementMessage{
-  color: rgba(255,255,255,0.88);
+  color: rgba(var(--ink-rgb),0.88);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -256,7 +256,7 @@
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
-  color: rgba(255,255,255,0.64);
+  color: rgba(var(--ink-rgb),0.64);
   font-size: 12px;
 }
 
@@ -302,8 +302,8 @@
   gap: 8px;
   padding: 28px 22px;
   border-radius: 24px;
-  border: 1px dashed rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.03);
+  border: 1px dashed rgba(var(--ink-rgb),0.12);
+  background: rgba(var(--ink-rgb),0.03);
 }
 
 .dashboardStateTitle{

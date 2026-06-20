@@ -1,26 +1,178 @@
+/* =====================================================================
+   THEME FOUNDATION  ·  single source of truth for design tokens
+   Engine: every "white tint" surface/border/text derives from --ink-rgb.
+   Flipping --ink-rgb (+ a few overrides) is what powers light / dark mode.
+   ===================================================================== */
+
 :root{
+  /* ---- typography ---- */
   --font-sans: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
   --font-display: 'Sora', 'Segoe UI', sans-serif;
-  --motion-fast: 180ms;
+
+  /* ---- motion ---- */
+  --motion-fast: 160ms;
   --motion-base: 280ms;
-  --motion-slow: 460ms;
-  --surface-strong: rgba(7, 16, 25, 0.92);
-  --surface-soft: rgba(255,255,255,0.04);
-  --surface-border: rgba(255,255,255,0.1);
+  --motion-slow: 520ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.5, 1);
+
+  /* ---- shape ---- */
+  --radius: 18px;
+  --radius-sm: 12px;
+  --radius-lg: 26px;
+  --radius-pill: 999px;
+
+  /* ---- semantic tokens derived from the active "ink" + accents ----
+     These resolve at use-time, so they auto-flip when a theme changes
+     --ink-rgb / --accent-rgb below. Define them once, here. */
+  --text:           rgba(var(--ink-rgb), 0.94);
+  --muted:          rgba(var(--ink-rgb), 0.62);
+  --faint:          rgba(var(--ink-rgb), 0.40);
+  --panel:          rgba(var(--ink-rgb), 0.055);
+  --panel-2:        rgba(var(--ink-rgb), 0.09);
+  --border:         rgba(var(--ink-rgb), 0.12);
+  --border-strong:  rgba(var(--ink-rgb), 0.20);
+  --surface-soft:   rgba(var(--ink-rgb), 0.04);
+  --surface-border: rgba(var(--ink-rgb), 0.10);
+
+  --accent:    rgb(var(--accent-rgb));
+  --accent-2:  rgb(var(--accent-2-rgb));
+  --danger:    rgb(var(--danger-rgb));
+  --warning:   rgb(var(--warning-rgb));
+  --ok:        rgb(var(--ok-rgb));
+
+  --shadow:    0 20px 50px rgba(var(--shadow-rgb), var(--shadow-strength));
+  --shadow-sm: 0 10px 26px rgba(var(--shadow-rgb), calc(var(--shadow-strength) * 0.66));
 }
 
+/* ----------------------------- DARK (default) ----------------------------- */
+:root,
+[data-theme='dark']{
+  color-scheme: dark;
+
+  --ink-rgb: 226, 232, 244;       /* near-white foreground */
+  --shadow-rgb: 2, 5, 14;
+  --shadow-strength: 0.5;
+
+  --accent-rgb: 129, 140, 248;    /* indigo 400 */
+  --accent-2-rgb: 45, 212, 191;   /* teal 400 */
+  --accent-strong: #a5b4fc;
+  --on-accent: #0a0e1a;
+
+  --danger-rgb: 251, 113, 133;
+  --warning-rgb: 251, 191, 36;
+  --ok-rgb: 52, 211, 153;
+
+  --bg: #0a0e1a;
+  --bg-rgb: 10, 14, 26;
+  --bg-elev: #0e1426;
+
+  /* elevated panel base — drives every dark-navy surface, flips in light */
+  --elev-rgb: 13, 23, 38;
+  --surface-strong: rgba(7, 16, 25, 0.92);
+  --field-bg: rgba(0, 0, 0, 0.26);
+  --field-border: rgba(var(--ink-rgb), 0.14);
+  --code-bg: rgba(0, 0, 0, 0.28);
+  --scrim: rgba(2, 5, 12, 0.66);
+
+  /* ambient page glows */
+  --glow-1: rgba(var(--accent-rgb), 0.20);
+  --glow-2: rgba(var(--accent-2-rgb), 0.16);
+  --glow-3: rgba(var(--warning-rgb), 0.07);
+}
+
+/* ------------------------------- LIGHT ------------------------------- */
+[data-theme='light']{
+  color-scheme: light;
+
+  --ink-rgb: 28, 37, 59;          /* deep slate foreground */
+  --shadow-rgb: 84, 98, 138;
+  --shadow-strength: 0.16;
+
+  --accent-rgb: 99, 102, 241;     /* indigo 500 */
+  --accent-2-rgb: 13, 148, 136;   /* teal 600 */
+  --accent-strong: #4f46e5;
+  --on-accent: #ffffff;
+
+  --danger-rgb: 225, 29, 72;
+  --warning-rgb: 180, 83, 9;
+  --ok-rgb: 5, 150, 105;
+
+  --bg: #eef1f8;
+  --bg-rgb: 238, 241, 248;
+  --bg-elev: #ffffff;
+
+  /* elevated surfaces read white-on-soft-gray in light mode */
+  --elev-rgb: 255, 255, 255;
+  --panel: rgba(255, 255, 255, 0.82);
+  --panel-2: rgba(255, 255, 255, 0.95);
+  --surface-strong: rgba(255, 255, 255, 0.96);
+  --field-bg: #ffffff;
+  --field-border: rgba(var(--ink-rgb), 0.16);
+  --code-bg: rgba(var(--ink-rgb), 0.05);
+  --scrim: rgba(15, 23, 42, 0.42);
+
+  --glow-1: rgba(var(--accent-rgb), 0.14);
+  --glow-2: rgba(var(--accent-2-rgb), 0.12);
+  --glow-3: rgba(var(--warning-rgb), 0.08);
+}
+
+/* ----------------------- per-module accent identity ----------------------- */
 .appRoot{
-  --module-accent: #66bfc7;
-  --module-accent-2: #8ba4ff;
-  --module-soft: rgba(102, 191, 199, 0.16);
-  --module-soft-2: rgba(139, 164, 255, 0.14);
+  --module-accent: #7c83ff;
+  --module-accent-2: #2dd4bf;
+  --module-ink: rgba(11, 20, 33, 0.72);
+  --module-soft: rgba(124, 131, 255, 0.16);
+  --module-soft-2: rgba(45, 212, 191, 0.14);
 }
 
 .appRoot[data-module='dashboard']{
-  --module-accent: #6abbb3;
-  --module-accent-2: #8ca7ff;
-  --module-soft: rgba(106, 187, 179, 0.18);
-  --module-soft-2: rgba(140, 167, 255, 0.16);
+  --module-accent: #7c83ff;
+  --module-accent-2: #2dd4bf;
+  --module-soft: rgba(124, 131, 255, 0.18);
+  --module-soft-2: rgba(45, 212, 191, 0.16);
+}
+
+.appRoot[data-module='catalog']{
+  --module-accent: #e0a93f;
+  --module-accent-2: #7c83ff;
+  --module-soft: rgba(224, 169, 63, 0.18);
+  --module-soft-2: rgba(124, 131, 255, 0.14);
+}
+
+.appRoot[data-module='documents']{
+  --module-accent: #38bdf8;
+  --module-accent-2: #6366f1;
+  --module-soft: rgba(56, 189, 248, 0.18);
+  --module-soft-2: rgba(99, 102, 241, 0.16);
+}
+
+.appRoot[data-module='feedback']{
+  --module-accent: #fb7185;
+  --module-accent-2: #f59e0b;
+  --module-soft: rgba(251, 113, 133, 0.18);
+  --module-soft-2: rgba(245, 158, 11, 0.16);
+}
+
+.appRoot[data-module='profile']{
+  --module-accent: #818cf8;
+  --module-accent-2: #38bdf8;
+  --module-soft: rgba(129, 140, 248, 0.2);
+  --module-soft-2: rgba(56, 189, 248, 0.16);
+}
+
+.appRoot[data-module='timetable']{
+  --module-accent: #2dd4bf;
+  --module-accent-2: #6366f1;
+  --module-soft: rgba(45, 212, 191, 0.18);
+  --module-soft-2: rgba(99, 102, 241, 0.16);
+}
+
+.appRoot[data-module='director']{
+  --module-accent: #f472b6;
+  --module-accent-2: #818cf8;
+  --module-soft: rgba(244, 114, 182, 0.18);
+  --module-soft-2: rgba(129, 140, 248, 0.16);
 }
 
 .appRoot,
@@ -34,6 +186,21 @@
 .dashboardPanelTitle,
 .dashboardStateTitle{
   font-family: var(--font-display);
+}
+
+/* smooth, contained cross-fade when toggling themes */
+.appRoot,
+.appRoot .card,
+.appRoot .contentCard,
+.appRoot .sidebar,
+.appRoot .header,
+.appRoot .input,
+.appRoot .select,
+.appRoot .btn{
+  transition:
+    background-color var(--motion-base) var(--ease-out),
+    border-color var(--motion-base) var(--ease-out),
+    color var(--motion-base) var(--ease-out);
 }
 
 @media (prefers-reduced-motion: reduce){

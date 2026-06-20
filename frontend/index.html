@@ -4,6 +4,19 @@
   <meta charset="utf-8">
   <title>Digitalization of Grading and School Management</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script>
+    // Apply the saved (or system) theme before first paint to avoid a flash.
+    (function () {
+      try {
+        var t = localStorage.getItem('theme');
+        if (t !== 'light' && t !== 'dark') {
+          t = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        }
+        document.documentElement.setAttribute('data-theme', t);
+        document.documentElement.style.colorScheme = t;
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
 </head>
 <body>
   <div id="root"></div>

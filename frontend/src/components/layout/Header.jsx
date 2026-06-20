@@ -1,5 +1,6 @@
 import AuditConsolePage from '../../pages/AuditConsolePage'
 import NotificationCenter, { NotificationToastStack } from '../ui/NotificationCenter'
+import ThemeToggle from '../ui/ThemeToggle'
 
 export default function Header({
   accessToken,
@@ -47,6 +48,8 @@ export default function Header({
           />
 
           <div className="headerUtilityButtons">
+            <ThemeToggle />
+
             {canViewAudit && <AuditConsolePage accessToken={accessToken} />}
 
             <button className="btn danger" type="button" onClick={onLogout}>

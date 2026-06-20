@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { CONFIG } from '../config/config'
 import { login } from '../services/authService'
 import AuthIntroPanel from './AuthIntroPanel'
+import ThemeToggle from '../components/ui/ThemeToggle'
 
 export default function LoginPage({ onLogin }) {
   const [username, setUsername] = useState('')
@@ -57,8 +58,11 @@ export default function LoginPage({ onLogin }) {
 
         <div className="loginCard authCard">
           <div className="authCardHeader">
-            <div className="title">Autentificare</div>
-            <div className="subtitle">Digitalization of Grading and School Management</div>
+            <div>
+              <div className="title">Autentificare</div>
+              <div className="subtitle">Digitalization of Grading and School Management</div>
+            </div>
+            <ThemeToggle />
           </div>
 
           <form onSubmit={handleSubmit}>
