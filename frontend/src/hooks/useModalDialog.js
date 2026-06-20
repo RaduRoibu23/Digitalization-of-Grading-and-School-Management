@@ -19,7 +19,10 @@ const FOCUSABLE_SELECTOR = [
 export default function useModalDialog({ open, onClose }) {
   const dialogRef = useRef(null)
   const onCloseRef = useRef(onClose)
-  onCloseRef.current = onClose
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+  })
 
   useEffect(() => {
     if (!open) {
