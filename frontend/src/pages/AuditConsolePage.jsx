@@ -136,6 +136,7 @@ export default function AuditConsole({ accessToken }) {
             <input
               className="input"
               type="search"
+              aria-label="Cauta in jurnalul de audit"
               placeholder="Cauta dupa actiune, utilizator sau efect"
               value={search}
               onChange={(event) => setSearch(event.target.value)}

@@ -297,6 +297,7 @@ export default function StudentsScreen({ accessToken, roles = [] }) {
           )}
           <input
             className="input"
+            aria-label="Cauta utilizatori"
             placeholder="Cauta dupa nume, username, rol, email, adresa, CNP, clasa sau elev asociat"
             value={search}
             onChange={(event) => setSearch(event.target.value)}

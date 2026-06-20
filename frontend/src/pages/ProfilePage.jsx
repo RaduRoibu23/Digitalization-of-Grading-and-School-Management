@@ -9,7 +9,7 @@ function formFromProfile(profile) {
     email: profile?.email || '',
     address: profile?.address || '',
     settings: {
-      email_notifications_enabled: profile?.settings?.email_notifications_enabled ?? true,
+      email_notifications_enabled: profile?.settings?.email_notifications_enabled ?? false,
       in_app_notifications_enabled: profile?.settings?.in_app_notifications_enabled ?? true,
     },
   }

@@ -1,6 +1,7 @@
 package ro.timetable.documents.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -16,7 +17,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.server.ResponseStatusException;
 import ro.timetable.audit.service.AuditService;
 import ro.timetable.catalog.service.CatalogService;
 import ro.timetable.common.dto.ApiDtos.CatalogResponse;
@@ -123,5 +126,12 @@ class DocumentServiceTest {
         assertThat(snapshot.get("overall_average")).isEqualTo("9.00");
         assertThat(rows).contains("Media totala");
         assertThat(rows).contains("9.00");
+    }
+
+    @Test
+    void studentCannotApproveDocumentRequest() {
+        assertThatThrownBy(() -> documentService.approveRequest(7L, "student001", List.of("student")))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(exception -> assertThat(((ResponseStatusException) exception).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
     }
 }

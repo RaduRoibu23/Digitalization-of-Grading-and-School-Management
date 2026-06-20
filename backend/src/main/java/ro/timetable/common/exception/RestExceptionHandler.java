@@ -5,9 +5,11 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -67,6 +69,29 @@ public class RestExceptionHandler {
         return ResponseEntity.status(ex.getStatusCode()).body(new ApiErrorResponse(
                 "request_failed",
                 ex.getReason() == null ? "Request failed" : ex.getReason(),
+                null,
+                null,
+                null
+        ));
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiErrorResponse> handleAccessDenied(AccessDeniedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ApiErrorResponse(
+                "access_denied",
+                "Nu ai permisiunea necesara pentru aceasta actiune.",
+                null,
+                null,
+                null
+        ));
+    }
+
+    @ExceptionHandler(DataAccessException.class)
+    public ResponseEntity<ApiErrorResponse> handleDataAccess(DataAccessException ex) {
+        LOGGER.error("Database access error", ex);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ApiErrorResponse(
+                "database_error",
+                "A aparut o eroare la accesarea datelor. Incearca din nou.",
                 null,
                 null,
                 null

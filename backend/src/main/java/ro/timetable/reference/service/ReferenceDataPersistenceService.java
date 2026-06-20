@@ -148,7 +148,7 @@ public class ReferenceDataPersistenceService {
                         settings.isEmailNotificationsEnabled(),
                         settings.isInAppNotificationsEnabled()
                 ))
-                .orElse(new ProfileSettingsResponse(true, true));
+                .orElse(new ProfileSettingsResponse(false, true));
     }
 
     @Transactional
@@ -272,7 +272,7 @@ public class ReferenceDataPersistenceService {
 
     private UserProfileSettingsEntity resolveSettings(Long profileId, boolean preserveExistingSettings) {
         UserProfileSettingsEntity settings = new UserProfileSettingsEntity();
-        boolean emailNotificationsEnabled = true;
+        boolean emailNotificationsEnabled = false;
         boolean inAppNotificationsEnabled = true;
         if (preserveExistingSettings && profileId != null) {
             UserProfileSettingsEntity existingSettings = userProfileRepository.findById(profileId)

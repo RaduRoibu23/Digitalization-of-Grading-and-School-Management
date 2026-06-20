@@ -165,4 +165,29 @@ class CatalogServiceTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(exception -> assertThat(((ResponseStatusException) exception).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
     }
+
+    @Test
+    void studentCannotAccessAnotherStudentsCatalog() {
+        UserProfile otherStudent = new UserProfile(6L, 1, "student002", "student", "Bogdan", "Marin", "student002@timetable.local", "Pitesti", null, null, null, null, 10L, "X A", List.of(), null, false);
+        when(schoolDataService.getProfile("student002")).thenReturn(otherStudent);
+
+        assertThatThrownBy(() -> catalogService.getCatalogForStudent("student001", List.of("student"), "student002"))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(exception -> assertThat(((ResponseStatusException) exception).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+    }
+
+    @Test
+    void studentCannotCreateGrade() {
+        assertThatThrownBy(() -> catalogService.createGrade(
+                "student001",
+                List.of("student"),
+                "student001",
+                "Matematica",
+                9,
+                "2026-04-10",
+                null
+        ))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(exception -> assertThat(((ResponseStatusException) exception).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+    }
 }

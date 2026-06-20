@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import TextPromptDialog from '../components/ui/TextPromptDialog'
 import { apiDownload, apiGet, apiPatch, apiPost } from '../services/apiService'
 import { loadViewState, saveViewState } from '../services/viewState'
@@ -78,6 +78,7 @@ export default function CatalogScreen({ accessToken, roles }) {
   const [exportingCatalog, setExportingCatalog] = useState(false)
   const [search, setSearch] = useState(initialViewState.search)
   const [page, setPage] = useState(initialViewState.page)
+  const catalogRequestRef = useRef(0)
 
   const canBrowseStudents = useMemo(
     () => roles.some((role) => ['professor', 'secretariat', 'director', 'sysadmin'].includes(role)),
@@ -139,28 +140,38 @@ export default function CatalogScreen({ accessToken, roles }) {
   }
 
   async function loadMyCatalog() {
+    const requestId = ++catalogRequestRef.current
     setLoading(true)
     setBanner(null)
     try {
       const data = await apiGet('/catalog/me', accessToken)
+      if (catalogRequestRef.current !== requestId) return
       applyCatalog(data)
     } catch (error) {
+      if (catalogRequestRef.current !== requestId) return
       setBanner({ type: 'error', text: String(error?.message || error) })
     } finally {
-      setLoading(false)
+      if (catalogRequestRef.current === requestId) {
+        setLoading(false)
+      }
     }
   }
 
   async function loadStudentCatalog(username) {
+    const requestId = ++catalogRequestRef.current
     setLoading(true)
     setBanner(null)
     try {
       const data = await apiGet(`/catalog/students/${username}`, accessToken)
+      if (catalogRequestRef.current !== requestId) return
       applyCatalog(data)
     } catch (error) {
+      if (catalogRequestRef.current !== requestId) return
       setBanner({ type: 'error', text: String(error?.message || error) })
     } finally {
-      setLoading(false)
+      if (catalogRequestRef.current === requestId) {
+        setLoading(false)
+      }
     }
   }
 
@@ -478,23 +489,31 @@ export default function CatalogScreen({ accessToken, roles }) {
         <div className="headerActions">
           {canBrowseStudents && (
             <>
-              <label className="label">Elev</label>
+              <label className="label" htmlFor="catalog-student-select">Elev</label>
               <select
+                id="catalog-student-select"
                 className="select"
                 value={selectedStudent}
                 onChange={(event) => setSelectedStudent(event.target.value)}
                 disabled={loading || students.length === 0}
               >
-                {students.map((item) => (
-                  <option key={item.username} value={item.username}>
-                    {studentLabel(item)}
+                {students.length === 0 ? (
+                  <option value="">
+                    {loading ? 'Se incarca elevii...' : 'Niciun elev disponibil'}
                   </option>
-                ))}
+                ) : (
+                  students.map((item) => (
+                    <option key={item.username} value={item.username}>
+                      {studentLabel(item)}
+                    </option>
+                  ))
+                )}
               </select>
             </>
           )}
           <input
             className="input"
+            aria-label="Cauta materie sau profesor"
             placeholder="Cauta materie sau profesor"
             value={search}
             onChange={(event) => setSearch(event.target.value)}

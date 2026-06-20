@@ -23,7 +23,7 @@ public class UserProfileSettingsEntity {
     private UserProfileEntity profile;
 
     @Column(name = "email_notifications_enabled", nullable = false)
-    private boolean emailNotificationsEnabled = true;
+    private boolean emailNotificationsEnabled = false;
 
     @Column(name = "in_app_notifications_enabled", nullable = false)
     private boolean inAppNotificationsEnabled = true;

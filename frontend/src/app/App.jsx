@@ -50,6 +50,7 @@ function App() {
   const [toasts, setToasts] = useState([])
   const seenNotificationIdsRef = useRef(new Set())
   const notificationsBootstrappedRef = useRef(false)
+  const isRefreshingNotificationsRef = useRef(false)
 
   const roles = useMemo(() => rolesFromToken(session?.accessToken), [session?.accessToken])
   const status = session?.accessToken ? 'autentificat' : 'neautentificat'
@@ -131,6 +132,11 @@ function App() {
       return
     }
 
+    if (isRefreshingNotificationsRef.current) {
+      return
+    }
+    isRefreshingNotificationsRef.current = true
+
     if (showLoading) {
       setNotificationsLoading(true)
     }
@@ -169,6 +175,7 @@ function App() {
       setNotificationsError('Nu s-au putut incarca notificarile acum.')
     } finally {
       setNotificationsLoading(false)
+      isRefreshingNotificationsRef.current = false
     }
   }
 
@@ -218,7 +225,9 @@ function App() {
       )
       setUnreadCount((current) => Math.max(0, current - 1))
       setToasts((current) => current.filter((item) => item.id !== notificationId))
+      setNotificationsError('')
     } catch {
+      setNotificationsError('Notificarea nu a putut fi marcata ca citita. Incearca din nou.')
     }
   }
 
@@ -235,7 +244,9 @@ function App() {
       )
       setUnreadCount(0)
       setToasts([])
+      setNotificationsError('')
     } catch {
+      setNotificationsError('Notificarile nu au putut fi marcate ca citite. Incearca din nou.')
     }
   }
 

@@ -3,6 +3,8 @@ package ro.timetable.notifications.service;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -29,6 +31,7 @@ public class NotificationService {
     ) {
     }
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(NotificationService.class);
     private static final int DEFAULT_LIMIT = 30;
     private static final int MAX_LIMIT = 100;
     private static final String DEFAULT_CATEGORY = "system";
@@ -128,6 +131,7 @@ public class NotificationService {
         UserProfileEntity profile = userProfileRepository.findByUsername(username)
                 .orElse(null);
         if (profile == null) {
+            LOGGER.warn("Skipping notification delivery: no profile found for username '{}'", username);
             return null;
         }
 
@@ -172,7 +176,7 @@ public class NotificationService {
     }
 
     private boolean allowsEmail(UserProfileSettingsEntity settings) {
-        return settings == null || settings.isEmailNotificationsEnabled();
+        return settings != null && settings.isEmailNotificationsEnabled();
     }
 
     private boolean allowsInApp(UserProfileSettingsEntity settings) {

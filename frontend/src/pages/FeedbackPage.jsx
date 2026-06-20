@@ -127,6 +127,7 @@ function FeedbackStatusPill({ status, label }) {
 export default function FeedbackScreen({ accessToken, roles = [] }) {
   const navigate = useNavigate()
   const { feedbackId } = useParams()
+  const numericFeedbackId = feedbackId && /^\d+$/.test(feedbackId) ? Number(feedbackId) : null
   const canReview = roles.some((role) => ['secretariat', 'director', 'sysadmin'].includes(role))
 
   const [listLoading, setListLoading] = useState(false)
@@ -185,13 +186,21 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
       return
     }
 
+    if (!numericFeedbackId) {
+      setActiveEntry(null)
+      setDetailError('Identificatorul sesizarii este invalid.')
+      setStatusDraft('UNOPENED')
+      setReplyDraft('')
+      return
+    }
+
     let ignore = false
 
     ;(async () => {
       setDetailLoading(true)
       setDetailError(null)
       try {
-        const data = await apiGet(`/feedback/${feedbackId}`, accessToken)
+        const data = await apiGet(`/feedback/${numericFeedbackId}`, accessToken)
         if (ignore) {
           return
         }
@@ -214,9 +223,9 @@ export default function FeedbackScreen({ accessToken, roles = [] }) {
     return () => {
       ignore = true
     }
-  }, [accessToken, feedbackId])
+  }, [accessToken, feedbackId, numericFeedbackId])
 
-  const selectedEntryId = feedbackId ? Number(feedbackId) : null
+  const selectedEntryId = numericFeedbackId
 
   useEffect(() => {
     if (!selectedEntryId || listLoading || entries.length === 0) {
