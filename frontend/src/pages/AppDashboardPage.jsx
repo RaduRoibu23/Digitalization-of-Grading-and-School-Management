@@ -83,7 +83,7 @@ function resolveLiveScheduleState(entries, now) {
 
 function MetricCard({ metric, index }) {
   return (
-    <article className={`dashboardMetricCard tone-${metric.tone || 'neutral'}`} style={{ '--card-index': index }}>
+    <article className={`dashboardMetricCard tone-${metric.tone || 'neutral'} anim-fade-up`} style={{ '--card-index': index }}>
       <div className="dashboardMetricLabel">{metric.label}</div>
       <div className="dashboardMetricValue">{metric.value}</div>
       <div className="dashboardMetricDetail">{metric.detail}</div>
@@ -282,7 +282,7 @@ export default function AppDashboardPage({ accessToken, roles = [] }) {
 
   return (
     <section className="contentCard dashboardHomePage">
-      <div className="dashboardHero">
+      <div className="dashboardHero anim-fade-up">
         <div>
           <div className="dashboardHeroKicker">{roleLabel}</div>
           <div className="title">{summary?.title || 'Panou principal'}</div>
@@ -316,7 +316,7 @@ export default function AppDashboardPage({ accessToken, roles = [] }) {
       ) : (
         <div className="dashboardHomeGrid">
           <div className="dashboardHomeMain">
-            <div className="dashboardMetricGrid">
+            <div className="dashboardMetricGrid anim-stagger">
               {metrics.map((metric, index) => (
                 <MetricCard key={metric.id || metric.label} metric={metric} index={index} />
               ))}

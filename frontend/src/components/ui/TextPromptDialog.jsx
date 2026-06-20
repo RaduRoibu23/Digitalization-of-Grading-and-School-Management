@@ -25,8 +25,8 @@ export default function TextPromptDialog({
   }
 
   return createPortal(
-    <div className="modalOverlay" role="presentation">
-      <div className="modalCard" role="dialog" aria-modal="true" aria-labelledby="text-prompt-title" tabIndex={-1} ref={dialogRef}>
+    <div className="modalOverlay anim-fade" role="presentation">
+      <div className="modalCard anim-pop" role="dialog" aria-modal="true" aria-labelledby="text-prompt-title" tabIndex={-1} ref={dialogRef}>
         <div className="modalTitle" id="text-prompt-title">{title}</div>
         <div className="modalText">{description}</div>
 

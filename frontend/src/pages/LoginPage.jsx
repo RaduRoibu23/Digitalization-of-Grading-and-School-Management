@@ -56,7 +56,7 @@ export default function LoginPage({ onLogin }) {
           variant="compact"
         />
 
-        <div className="loginCard authCard">
+        <div className="loginCard authCard anim-fade-up">
           <div className="authCardHeader">
             <div>
               <div className="title">Autentificare</div>

@@ -46,39 +46,41 @@
 }
 
 /* ----------------------------- DARK (default) ----------------------------- */
+/* "Midnight Aurora" — near-black violet base, electric violet + aurora cyan,
+   with a magenta pop. A deliberately bold, distinct dark identity. */
 :root,
 [data-theme='dark']{
   color-scheme: dark;
 
-  --ink-rgb: 226, 232, 244;       /* near-white foreground */
-  --shadow-rgb: 2, 5, 14;
-  --shadow-strength: 0.5;
+  --ink-rgb: 233, 232, 252;       /* cool near-white, faint violet hint */
+  --shadow-rgb: 0, 0, 0;
+  --shadow-strength: 0.62;
 
-  --accent-rgb: 129, 140, 248;    /* indigo 400 */
-  --accent-2-rgb: 45, 212, 191;   /* teal 400 */
-  --accent-strong: #a5b4fc;
-  --on-accent: #0a0e1a;
+  --accent-rgb: 139, 109, 255;    /* electric violet */
+  --accent-2-rgb: 34, 224, 224;   /* aurora cyan */
+  --accent-strong: #b39bff;
+  --on-accent: #07050f;
 
-  --danger-rgb: 251, 113, 133;
+  --danger-rgb: 255, 99, 132;
   --warning-rgb: 251, 191, 36;
-  --ok-rgb: 52, 211, 153;
+  --ok-rgb: 45, 226, 178;
 
-  --bg: #0a0e1a;
-  --bg-rgb: 10, 14, 26;
-  --bg-elev: #0e1426;
+  --bg: #060611;                  /* near-black with a violet undertone */
+  --bg-rgb: 6, 6, 17;
+  --bg-elev: #0d0b1d;
 
-  /* elevated panel base — drives every dark-navy surface, flips in light */
-  --elev-rgb: 13, 23, 38;
-  --surface-strong: rgba(7, 16, 25, 0.92);
-  --field-bg: rgba(0, 0, 0, 0.26);
-  --field-border: rgba(var(--ink-rgb), 0.14);
-  --code-bg: rgba(0, 0, 0, 0.28);
-  --scrim: rgba(2, 5, 12, 0.66);
+  /* elevated panel base — violet-tinted dark, flips to white in light */
+  --elev-rgb: 22, 19, 43;
+  --surface-strong: rgba(11, 9, 26, 0.92);
+  --field-bg: rgba(0, 0, 0, 0.32);
+  --field-border: rgba(var(--ink-rgb), 0.16);
+  --code-bg: rgba(0, 0, 0, 0.40);
+  --scrim: rgba(3, 2, 12, 0.74);
 
-  /* ambient page glows */
-  --glow-1: rgba(var(--accent-rgb), 0.20);
-  --glow-2: rgba(var(--accent-2-rgb), 0.16);
-  --glow-3: rgba(var(--warning-rgb), 0.07);
+  /* ambient aurora glows */
+  --glow-1: rgba(var(--accent-rgb), 0.30);
+  --glow-2: rgba(var(--accent-2-rgb), 0.20);
+  --glow-3: rgba(236, 72, 153, 0.14);   /* magenta pop */
 }
 
 /* ------------------------------- LIGHT ------------------------------- */
@@ -173,6 +175,57 @@
   --module-accent-2: #818cf8;
   --module-soft: rgba(244, 114, 182, 0.18);
   --module-soft-2: rgba(129, 140, 248, 0.16);
+}
+
+/* ---- dark-mode aurora module accents (light keeps the hues defined above) ---- */
+[data-theme='dark'] .appRoot,
+[data-theme='dark'] .appRoot[data-module='dashboard']{
+  --module-accent: #8b6dff;
+  --module-accent-2: #22e0e0;
+  --module-soft: rgba(139, 109, 255, 0.22);
+  --module-soft-2: rgba(34, 224, 224, 0.18);
+}
+
+[data-theme='dark'] .appRoot[data-module='catalog']{
+  --module-accent: #fbbf24;
+  --module-accent-2: #8b6dff;
+  --module-soft: rgba(251, 191, 36, 0.20);
+  --module-soft-2: rgba(139, 109, 255, 0.18);
+}
+
+[data-theme='dark'] .appRoot[data-module='documents']{
+  --module-accent: #22d3ee;
+  --module-accent-2: #8b6dff;
+  --module-soft: rgba(34, 211, 238, 0.22);
+  --module-soft-2: rgba(139, 109, 255, 0.18);
+}
+
+[data-theme='dark'] .appRoot[data-module='feedback']{
+  --module-accent: #fb5d8f;
+  --module-accent-2: #fbbf24;
+  --module-soft: rgba(251, 93, 143, 0.22);
+  --module-soft-2: rgba(251, 191, 36, 0.16);
+}
+
+[data-theme='dark'] .appRoot[data-module='profile']{
+  --module-accent: #a78bfa;
+  --module-accent-2: #22d3ee;
+  --module-soft: rgba(167, 139, 250, 0.22);
+  --module-soft-2: rgba(34, 211, 238, 0.18);
+}
+
+[data-theme='dark'] .appRoot[data-module='timetable']{
+  --module-accent: #34e0c4;
+  --module-accent-2: #8b6dff;
+  --module-soft: rgba(52, 224, 196, 0.20);
+  --module-soft-2: rgba(139, 109, 255, 0.18);
+}
+
+[data-theme='dark'] .appRoot[data-module='director']{
+  --module-accent: #f472b6;
+  --module-accent-2: #8b6dff;
+  --module-soft: rgba(244, 114, 182, 0.22);
+  --module-soft-2: rgba(139, 109, 255, 0.18);
 }
 
 .appRoot,

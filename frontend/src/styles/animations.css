@@ -1,0 +1,152 @@
+/* =====================================================================
+   AURORA MOTION  ·  a self-contained animation library
+   Vendored locally (no npm dependency) so it works in the Docker
+   `npm ci` build with zero lockfile risk. Provides ready-made entrance,
+   attention and hover/interaction animations for cards, modals, login,
+   popups and more. Add a class to any element to animate it.
+
+   Entrances:   .anim-fade-up .anim-fade .anim-fade-down
+                .anim-zoom-in .anim-slide-right .anim-slide-left
+                .anim-pop .anim-blur-in
+   Stagger:     wrap children in .anim-stagger (auto delays 1..8)
+                or use .anim-d1 .. .anim-d8 on individual elements
+   Attention:   .anim-float .anim-pulse .anim-glow .anim-shimmer (loops)
+   Hover:       .hover-lift .hover-glow .hover-pop .hover-tilt .hover-shine
+   ===================================================================== */
+
+:root{
+  --anim-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --anim-spring: cubic-bezier(0.34, 1.4, 0.5, 1);
+  --anim-dur: 0.6s;
+}
+
+/* ------------------------------- Keyframes ------------------------------- */
+@keyframes aurora-fade-up   { from { opacity: 0; transform: translate3d(0, 22px, 0); } to { opacity: 1; transform: none; } }
+@keyframes aurora-fade-down { from { opacity: 0; transform: translate3d(0, -22px, 0); } to { opacity: 1; transform: none; } }
+@keyframes aurora-fade      { from { opacity: 0; } to { opacity: 1; } }
+@keyframes aurora-zoom-in   { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
+@keyframes aurora-slide-right { from { opacity: 0; transform: translate3d(-32px, 0, 0); } to { opacity: 1; transform: none; } }
+@keyframes aurora-slide-left  { from { opacity: 0; transform: translate3d(32px, 0, 0); } to { opacity: 1; transform: none; } }
+@keyframes aurora-pop       { 0% { opacity: 0; transform: scale(0.85); } 60% { opacity: 1; transform: scale(1.03); } 100% { transform: scale(1); } }
+@keyframes aurora-blur-in   { from { opacity: 0; filter: blur(12px); transform: translate3d(0, 10px, 0); } to { opacity: 1; filter: blur(0); transform: none; } }
+
+@keyframes aurora-float     { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+@keyframes aurora-pulse     { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.04); } }
+@keyframes aurora-glow      { 0%, 100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.0); } 50% { box-shadow: 0 0 26px -6px rgba(var(--accent-rgb), 0.55); } }
+@keyframes aurora-shimmer   { from { background-position: -150% 0; } to { background-position: 250% 0; } }
+
+/* ------------------------------- Entrances ------------------------------- */
+.anim-fade-up,
+.anim-fade,
+.anim-fade-down,
+.anim-zoom-in,
+.anim-slide-right,
+.anim-slide-left,
+.anim-pop,
+.anim-blur-in{
+  animation-duration: var(--anim-dur);
+  animation-timing-function: var(--anim-ease);
+  animation-fill-mode: both;
+}
+
+.anim-fade-up    { animation-name: aurora-fade-up; }
+.anim-fade       { animation-name: aurora-fade; }
+.anim-fade-down  { animation-name: aurora-fade-down; }
+.anim-zoom-in    { animation-name: aurora-zoom-in; }
+.anim-slide-right{ animation-name: aurora-slide-right; }
+.anim-slide-left { animation-name: aurora-slide-left; }
+.anim-pop        { animation-name: aurora-pop; animation-timing-function: var(--anim-spring); }
+.anim-blur-in    { animation-name: aurora-blur-in; }
+
+/* ------------------------- Stagger / delay helpers ----------------------- */
+.anim-d1 { animation-delay: 0.06s; }
+.anim-d2 { animation-delay: 0.12s; }
+.anim-d3 { animation-delay: 0.18s; }
+.anim-d4 { animation-delay: 0.24s; }
+.anim-d5 { animation-delay: 0.30s; }
+.anim-d6 { animation-delay: 0.36s; }
+.anim-d7 { animation-delay: 0.42s; }
+.anim-d8 { animation-delay: 0.48s; }
+
+/* Auto-stagger direct children that carry an entrance class. */
+.anim-stagger > *  { animation-fill-mode: both; }
+.anim-stagger > *:nth-child(1) { animation-delay: 0.05s; }
+.anim-stagger > *:nth-child(2) { animation-delay: 0.11s; }
+.anim-stagger > *:nth-child(3) { animation-delay: 0.17s; }
+.anim-stagger > *:nth-child(4) { animation-delay: 0.23s; }
+.anim-stagger > *:nth-child(5) { animation-delay: 0.29s; }
+.anim-stagger > *:nth-child(6) { animation-delay: 0.35s; }
+.anim-stagger > *:nth-child(7) { animation-delay: 0.41s; }
+.anim-stagger > *:nth-child(8) { animation-delay: 0.47s; }
+.anim-stagger > *:nth-child(n+9) { animation-delay: 0.53s; }
+
+/* ------------------------------ Attention -------------------------------- */
+.anim-float   { animation: aurora-float 6s ease-in-out infinite; }
+.anim-pulse   { animation: aurora-pulse 2.6s ease-in-out infinite; }
+.anim-glow    { animation: aurora-glow 2.8s ease-in-out infinite; }
+.anim-shimmer{
+  background-image: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(var(--ink-rgb), 0.10) 50%,
+    transparent 70%
+  );
+  background-size: 200% 100%;
+  animation: aurora-shimmer 1.6s linear infinite;
+}
+
+/* --------------------------- Hover interactions -------------------------- */
+.hover-lift{
+  transition: transform var(--motion-base, 280ms) var(--anim-ease),
+    box-shadow var(--motion-base, 280ms) var(--anim-ease);
+  will-change: transform;
+}
+.hover-lift:hover{
+  transform: translateY(-4px);
+  box-shadow: 0 22px 46px -18px rgba(var(--shadow-rgb), 0.7);
+}
+
+.hover-glow{
+  transition: box-shadow var(--motion-base, 280ms) var(--anim-ease),
+    border-color var(--motion-base, 280ms) var(--anim-ease);
+}
+.hover-glow:hover{
+  box-shadow: 0 0 28px -6px rgba(var(--accent-rgb), 0.55);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.hover-pop{ transition: transform var(--motion-fast, 160ms) var(--anim-spring); }
+.hover-pop:hover{ transform: scale(1.04); }
+
+.hover-tilt{ transition: transform var(--motion-base, 280ms) var(--anim-ease); }
+.hover-tilt:hover{ transform: perspective(700px) rotateX(3deg) translateY(-3px); }
+
+/* Moving sheen across a surface on hover. */
+.hover-shine{ position: relative; overflow: hidden; }
+.hover-shine::after{
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    rgba(var(--ink-rgb), 0.14) 48%,
+    transparent 66%
+  );
+  transform: translateX(-120%);
+  transition: transform 0.7s var(--anim-ease);
+  pointer-events: none;
+}
+.hover-shine:hover::after{ transform: translateX(120%); }
+
+/* ----------------------- Respect reduced motion -------------------------- */
+@media (prefers-reduced-motion: reduce){
+  .anim-fade-up, .anim-fade, .anim-fade-down, .anim-zoom-in,
+  .anim-slide-right, .anim-slide-left, .anim-pop, .anim-blur-in,
+  .anim-float, .anim-pulse, .anim-glow, .anim-shimmer{
+    animation: none !important;
+  }
+  .hover-lift, .hover-glow, .hover-pop, .hover-tilt{ transition: none; }
+  .hover-lift:hover, .hover-pop:hover, .hover-tilt:hover{ transform: none; }
+  .hover-shine::after{ display: none; }
+}

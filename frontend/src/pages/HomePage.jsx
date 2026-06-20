@@ -111,7 +111,7 @@ export default function HomePage() {
         </div>
 
         <div className="landingCommandDeck">
-          <section className="landingCommandIntro">
+          <section className="landingCommandIntro anim-fade-up">
             <div className="landingTitle landingTitleWide">
               Bun venit! Mai jos gasesti descrierea profilelor pe care acest liceu le are.
             </div>
@@ -126,11 +126,11 @@ export default function HomePage() {
           </section>
 
           <section className="landingCommandLead">
-            <div className="landingHoverGrid" aria-label="Profilele liceului">
+            <div className="landingHoverGrid anim-stagger" aria-label="Profilele liceului">
               {profiles.map((feature) => (
                 <button
                   key={feature.id}
-                  className={`landingHoverCard accent-${feature.accent} ${activeFeature.id === feature.id ? 'active' : ''}`.trim()}
+                  className={`landingHoverCard accent-${feature.accent} anim-fade-up ${activeFeature.id === feature.id ? 'active' : ''}`.trim()}
                   type="button"
                   onMouseEnter={() => setActiveFeatureId(feature.id)}
                   onFocus={() => setActiveFeatureId(feature.id)}
@@ -143,7 +143,7 @@ export default function HomePage() {
             </div>
           </section>
 
-          <aside className={`landingInfoPanel accent-${activeFeature.accent}`.trim()}>
+          <aside className={`landingInfoPanel accent-${activeFeature.accent} anim-fade-up anim-d3`.trim()}>
             <div className="landingPanelTitle">{activeFeature.title}</div>
             <p className="landingPanelCopy">{activeFeature.summary}</p>
 
